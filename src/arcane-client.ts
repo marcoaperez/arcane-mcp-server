@@ -841,13 +841,21 @@ export class ArcaneClient {
   readonly volumeBackups: VolumeBackupsMethods;
   readonly volumeFiles: VolumeFilesMethods;
 
-  // No host parameter needed — routing to the Arcane backend is handled
-  // entirely by the Cloudflare VPC service binding configured in wrangler.jsonc.
-  // The fetcher overrides the transport; only the path portion of URLs matters.
-  constructor(apiKey: string, fetcher?: Fetcher) {
-    this.baseUrl = "http://placeholder/api";
-    this.apiKey = apiKey;
-    this._fetch = fetcher ? fetcher.fetch.bind(fetcher) : fetch;
+  // When a Cloudflare VPC Fetcher is provided, routing to the Arcane backend
+  // is handled by the service binding — only the path portion of URLs matters.
+  // When running locally (wrangler dev), pass a real baseUrl instead.
+  constructor(apiKey: string, fetcherOrBaseUrl?: Fetcher | string) {
+    if (typeof fetcherOrBaseUrl === "string") {
+      // Local / Docker mode: real base URL provided
+      this.baseUrl = fetcherOrBaseUrl.replace(/\/+$/, "") + "/api";
+      this.apiKey = apiKey;
+      this._fetch = (input, init) => fetch(input, init);
+    } else {
+      // Cloudflare Worker mode: VPC service binding
+      this.baseUrl = "http://placeholder/api";
+      this.apiKey = apiKey;
+      this._fetch = fetcherOrBaseUrl ? fetcherOrBaseUrl.fetch.bind(fetcherOrBaseUrl) : fetch;
+    }
     this.environments = new EnvironmentsMethods(this);
     this.stacks = new StacksMethods(this);
     this.containers = new ContainersMethods(this);

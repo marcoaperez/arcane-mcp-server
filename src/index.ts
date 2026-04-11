@@ -26,11 +26,17 @@ export class ArcaneAgent extends McpAgent<Env, Record<string, never>, Props> {
   });
 
   async init() {
-    console.log("[arcane-mcp] Connecting to Arcane via Cloudflare VPC service binding");
+    // Use ARCANE_BASE_URL for local/Docker mode, VPC_SERVICE for Cloudflare Workers
+    const baseUrl = (this.env as any).ARCANE_BASE_URL as string | undefined;
+    if (baseUrl) {
+      console.log(`[arcane-mcp] Connecting to Arcane at ${baseUrl}`);
+    } else {
+      console.log("[arcane-mcp] Connecting to Arcane via Cloudflare VPC service binding");
+    }
 
     const client = new ArcaneClient(
       this.env.ARCANE_API_KEY,
-      this.env.VPC_SERVICE,
+      baseUrl || this.env.VPC_SERVICE,
     );
 
     registerEnvironmentTools(this.server, client);
@@ -50,11 +56,41 @@ export class ArcaneAgent extends McpAgent<Env, Record<string, never>, Props> {
   }
 }
 
-export default new OAuthProvider({
-  apiHandler: ArcaneAgent.serve("/mcp"),
+// In local/Docker mode (ARCANE_BASE_URL set), serve MCP directly without OAuth.
+// In Cloudflare Workers mode, use the full OAuth provider.
+const mcpHandler = ArcaneAgent.serve("/mcp");
+const oauthHandler = new OAuthProvider({
+  apiHandler: mcpHandler,
   apiRoute: "/mcp",
   authorizeEndpoint: "/authorize",
   clientRegistrationEndpoint: "/register",
   defaultHandler: { fetch: handleAccessRequest as any },
   tokenEndpoint: "/token",
 });
+
+function validateLocalAuth(request: Request, env: Env): Response | null {
+  const token = (env as any).MCP_AUTH_TOKEN as string | undefined;
+  if (!token) return null; // No token configured = no auth required
+
+  const authHeader = request.headers.get("Authorization");
+  if (!authHeader || authHeader !== `Bearer ${token}`) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  return null; // Auth passed
+}
+
+export default {
+  fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    if ((env as any).ARCANE_BASE_URL) {
+      // Local mode: validate Bearer token, then serve MCP directly
+      const authError = validateLocalAuth(request, env);
+      if (authError) return authError;
+      return mcpHandler.fetch(request, env, ctx);
+    }
+    // Cloud mode: full OAuth flow
+    return oauthHandler.fetch(request, env, ctx);
+  },
+};

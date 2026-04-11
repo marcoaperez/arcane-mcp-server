@@ -1,0 +1,9 @@
+services:
+  arcane-mcp:
+    build: .
+    container_name: arcane-mcp-server
+    ports:
+      - "127.0.0.1:8788:8788"
+    volumes:
+      - ./.dev.vars:/app/.dev.vars:ro
+    restart: unless-stopped
