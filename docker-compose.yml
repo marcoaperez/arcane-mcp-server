@@ -3,7 +3,9 @@ services:
     build: .
     container_name: arcane-mcp-server
     ports:
-      - "127.0.0.1:8788:8788"
-    volumes:
-      - ./.dev.vars:/app/.dev.vars:ro
+      - "8788:8788"
+    environment:
+      ARCANE_API_KEY: ${ARCANE_API_KEY}
+      ARCANE_BASE_URL: ${ARCANE_BASE_URL}
+      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN}
     restart: unless-stopped
