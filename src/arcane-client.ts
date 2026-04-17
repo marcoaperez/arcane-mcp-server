@@ -430,7 +430,25 @@ class StacksMethods {
   }
 
   async pull(envId: string, stackId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("POST", `/environments/${envId}/projects/${stackId}/pull-project-images`);
+    // Endpoint /pull returns NDJSON (newline-delimited JSON) streaming docker pull progress.
+    // Use requestNdjson to parse the stream and summarize it as an ActionResponse.
+    const events = await this.client.requestNdjson<{ status?: string; error?: string; id?: string }>(
+      "POST",
+      `/environments/${envId}/projects/${stackId}/pull`
+    );
+    const errors = events.filter(e => e.error).map(e => e.error);
+    if (errors.length > 0) {
+      return { success: false, message: `Pull errors: ${errors.join("; ")}` };
+    }
+    const completed = events.some(e => e.status === "complete");
+    const summary = events
+      .filter(e => e.status && (e.status.startsWith("Status:") || e.status === "complete"))
+      .map(e => e.status)
+      .join(" | ");
+    return {
+      success: completed,
+      message: summary || `Pull finished (${events.length} events)`,
+    };
   }
 }
 
@@ -702,7 +720,25 @@ class ProjectAdditionalMethods {
   }
 
   async pullImages(envId: string, projectId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("POST", `/environments/${envId}/projects/${projectId}/pull`);
+    // Endpoint /pull returns NDJSON (newline-delimited JSON) streaming docker pull progress.
+    // Use requestNdjson to parse the stream and summarize it as an ActionResponse.
+    const events = await this.client.requestNdjson<{ status?: string; error?: string; id?: string }>(
+      "POST",
+      `/environments/${envId}/projects/${projectId}/pull`
+    );
+    const errors = events.filter(e => e.error).map(e => e.error);
+    if (errors.length > 0) {
+      return { success: false, message: `Pull errors: ${errors.join("; ")}` };
+    }
+    const completed = events.some(e => e.status === "complete");
+    const summary = events
+      .filter(e => e.status && (e.status.startsWith("Status:") || e.status === "complete"))
+      .map(e => e.status)
+      .join(" | ");
+    return {
+      success: completed,
+      message: summary || `Pull finished (${events.length} events)`,
+    };
   }
 
   async redeploy(envId: string, projectId: string): Promise<ActionResponse> {
@@ -905,5 +941,44 @@ export class ArcaneClient {
     }
 
     return response.json() as Promise<T>;
+  }
+
+  /**
+   * Like `request<T>`, but parses the response as NDJSON (newline-delimited JSON).
+   * Used for streaming endpoints like /pull that emit one JSON object per line.
+   * Returns an array with one entry per parsed line. Empty/blank lines are skipped.
+   */
+  async requestNdjson<T = unknown>(method: string, path: string, body?: unknown): Promise<T[]> {
+    const url = `${this.baseUrl}${path}`;
+    const response = await this._fetch(url, {
+      method,
+      headers: {
+        "X-API-Key": this.apiKey,
+        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+
+    if (!response.ok) {
+      let message = response.statusText;
+      try {
+        const err = (await response.json()) as { detail?: string };
+        if (err.detail) message = err.detail;
+      } catch {}
+      throw new ArcaneApiError(response.status, message);
+    }
+
+    const text = await response.text();
+    const events: T[] = [];
+    for (const line of text.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        events.push(JSON.parse(trimmed) as T);
+      } catch {
+        // Ignore unparseable lines (e.g. trailing partial chunks)
+      }
+    }
+    return events;
   }
 }

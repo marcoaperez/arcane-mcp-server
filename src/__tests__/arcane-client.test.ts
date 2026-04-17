@@ -299,18 +299,44 @@ describe("ArcaneClient", () => {
       );
     });
 
-    it(".pull(envId, stackId) - POST /environments/{envId}/projects/{stackId}/pull", async () => {
+    it(".pull(envId, stackId) - POST /environments/{envId}/projects/{stackId}/pull (NDJSON)", async () => {
+      // Endpoint /pull returns NDJSON (newline-delimited JSON), not a single JSON object.
+      const ndjsonBody = [
+        '{"status":"starting project image pull"}',
+        '{"status":"Pulling from adguard/adguardhome","id":"latest"}',
+        '{"status":"Status: Image is up to date for adguard/adguardhome:latest"}',
+        '{"status":"complete"}',
+      ].join("\n");
+
       mockFetch.mockResolvedValue({
         ok: true,
-        json: async () => ({ success: true, message: "Images pulled" }),
+        text: async () => ndjsonBody,
       } as Response);
 
-      await client.stacks.pull("env123", "stack1");
+      const result = await client.stacks.pull("env123", "stack1");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/projects/stack1/pull-project-images",
+        "http://localhost:3552/api/environments/env123/projects/stack1/pull",
         expect.objectContaining({ method: "POST" })
       );
+      expect(result.success).toBe(true);
+      expect(result.message).toContain("complete");
+    });
+
+    it(".pull(envId, stackId) - reports error when NDJSON contains errors", async () => {
+      const ndjsonBody = [
+        '{"status":"starting project image pull"}',
+        '{"error":"manifest not found"}',
+      ].join("\n");
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () => ndjsonBody,
+      } as Response);
+
+      const result = await client.stacks.pull("env123", "stack1");
+      expect(result.success).toBe(false);
+      expect(result.message).toContain("manifest not found");
     });
   });
 

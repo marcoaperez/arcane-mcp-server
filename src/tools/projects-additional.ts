@@ -46,8 +46,14 @@ export function registerProjectAdditionalTools(server: McpServer, client: Arcane
         const pId = await resolveStackId(client, envId, projectId, projectName);
         const project = await client.stacks.get(envId, pId);
         const result = await client.projectAdditional.pullImages(envId, pId);
+        if (result.success === false) {
+          return {
+            content: [{ type: "text", text: `Pull failed for project '${project.data.name}': ${result.message}` }],
+            isError: true,
+          };
+        }
         return {
-          content: [{ type: "text", text: `Images pulled successfully for project '${project.data.name}'` }],
+          content: [{ type: "text", text: `Images pulled successfully for project '${project.data.name}'. ${result.message}` }],
         };
       } catch (err) {
         return {
