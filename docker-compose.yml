@@ -8,4 +8,16 @@ services:
       ARCANE_API_KEY: ${ARCANE_API_KEY}
       ARCANE_BASE_URL: ${ARCANE_BASE_URL}
       MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN}
+    networks:
+      # Red propia (default) para que el MCP sea accesible desde la LAN
+      - default
+      # Red del contenedor de Arcane: permite resolver "arcane" como hostname
+      # y conectar directamente sin pasar por la IP del host. Configurar
+      # ARCANE_BASE_URL=http://arcane:3552 cuando se use esta red.
+      - arcane_default
     restart: unless-stopped
+
+networks:
+  default:
+  arcane_default:
+    external: true
