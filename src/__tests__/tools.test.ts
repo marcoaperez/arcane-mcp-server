@@ -263,7 +263,7 @@ describe("MCP Tools", () => {
       const handler = server.getHandler("arcane_stack_start");
       const result = await handler({ environmentId: "env1", stackName: "myapp" });
 
-      expect(result.content[0].text).toBe("Stack 'myapp' started successfully in environment 'env1'");
+      expect(result.content[0].text).toBe("Stack 'myapp' started successfully in environment 'env1'. Started");
     });
   });
 

@@ -151,8 +151,14 @@ export function registerStackTools(server: McpServer, client: ArcaneClient): voi
         const sId = await resolveStackId(client, envId, stackId, stackName);
         const stackNameValue = stackName || (await client.stacks.get(envId, sId)).data.name;
         const result = await client.stacks.start(envId, sId);
+        if (result.success === false) {
+          return {
+            content: [{ type: "text", text: `Failed to start stack '${stackNameValue}': ${result.message}` }],
+            isError: true,
+          };
+        }
         return {
-          content: [{ type: "text", text: `Stack '${stackNameValue}' started successfully in environment '${envId}'` }],
+          content: [{ type: "text", text: `Stack '${stackNameValue}' started successfully in environment '${envId}'. ${result.message}` }],
         };
       } catch (err) {
         return {

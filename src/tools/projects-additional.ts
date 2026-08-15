@@ -79,8 +79,14 @@ export function registerProjectAdditionalTools(server: McpServer, client: Arcane
         const pId = await resolveStackId(client, envId, projectId, projectName);
         const project = await client.stacks.get(envId, pId);
         const result = await client.projectAdditional.redeploy(envId, pId);
+        if (result.success === false) {
+          return {
+            content: [{ type: "text", text: `Failed to redeploy project '${project.data.name}': ${result.message}` }],
+            isError: true,
+          };
+        }
         return {
-          content: [{ type: "text", text: `Project '${project.data.name}' redeployed successfully` }],
+          content: [{ type: "text", text: `Project '${project.data.name}' redeployed successfully. ${result.message}` }],
         };
       } catch (err) {
         return {

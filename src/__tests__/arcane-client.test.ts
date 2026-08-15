@@ -9,7 +9,8 @@ describe("ArcaneClient", () => {
     mockFetch = vi.spyOn(globalThis, "fetch").mockImplementation(() => {
       throw new Error("fetch not mocked");
     });
-    client = new ArcaneClient("test-api-key");
+    // Local/Docker mode: a concrete base URL so request URLs are assertable.
+    client = new ArcaneClient("test-api-key", "http://localhost:3552");
   });
 
   afterEach(() => {
@@ -17,8 +18,13 @@ describe("ArcaneClient", () => {
   });
 
   describe("Constructor", () => {
-    it("sets baseUrl to http://placeholder/api", () => {
-      expect((client as any).baseUrl).toBe("http://placeholder/api");
+    it("sets baseUrl to http://placeholder/api in Cloudflare (VPC binding) mode", () => {
+      const cfClient = new ArcaneClient("test-api-key");
+      expect((cfClient as any).baseUrl).toBe("http://placeholder/api");
+    });
+
+    it("sets baseUrl from the provided host in local mode", () => {
+      expect((client as any).baseUrl).toBe("http://localhost:3552/api");
     });
 
     it("stores the API key", () => {
@@ -257,19 +263,8 @@ describe("ArcaneClient", () => {
       );
     });
 
-    it(".start(envId, stackId) - POST /environments/{envId}/projects/{stackId}/up", async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: async () => ({ success: true, message: "Started" }),
-      } as Response);
-
-      await client.stacks.start("env123", "stack1");
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/projects/stack1/up",
-        expect.objectContaining({ method: "POST" })
-      );
-    });
+    // NOTE: .start() (POST /up) streams NDJSON, not a single JSON object.
+    // It is covered by the dedicated "NDJSON /up and /redeploy streams" describe block below.
 
     it(".stop(envId, stackId) - POST /environments/{envId}/projects/{stackId}/down", async () => {
       mockFetch.mockResolvedValue({
@@ -337,6 +332,105 @@ describe("ArcaneClient", () => {
       const result = await client.stacks.pull("env123", "stack1");
       expect(result.success).toBe(false);
       expect(result.message).toContain("manifest not found");
+    });
+  });
+
+  describe("NDJSON /up and /redeploy streams", () => {
+    // Endpoints /up (stacks.start) and /redeploy stream `application/x-json-stream`
+    // (NDJSON), NOT a single JSON object. Parsing the whole body with response.json()
+    // throws "Unexpected non-whitespace character after JSON..." on the 2nd line.
+    // Real event shape captured from Arcane: {type,activityId}, {log}, {done:true}, {error}.
+    let localClient: ArcaneClient;
+
+    beforeEach(() => {
+      // Local/Docker mode so the request URL resolves to a concrete host.
+      localClient = new ArcaneClient("test-api-key", "http://localhost:3552");
+    });
+
+    const upStream = [
+      '{"type":"activity","activityId":"195296d1-f692-401e-b56f-0d6421c8bb9d"}',
+      '{"log":" Container ical-bridge Recreate "}',
+      '{"log":" Container ical-bridge Recreated "}',
+      '{"log":" Container ical-bridge Starting "}',
+      '{"log":" Container ical-bridge Started "}',
+      '{"log":" Container ical-bridge Waiting "}',
+      '{"log":" Container ical-bridge Healthy "}',
+      '{"done":true}',
+    ].join("\n");
+
+    it("start() does NOT throw on a multi-line NDJSON /up body (regression for JSON.parse crash)", async () => {
+      mockFetch.mockResolvedValue({ ok: true, text: async () => upStream } as Response);
+      await expect(localClient.stacks.start("env123", "stack1")).resolves.toBeDefined();
+    });
+
+    it("start() - POST /up parses NDJSON and returns an aggregated success", async () => {
+      mockFetch.mockResolvedValue({ ok: true, text: async () => upStream } as Response);
+
+      const result = await localClient.stacks.start("env123", "stack1");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/projects/stack1/up",
+        expect.objectContaining({ method: "POST" })
+      );
+      expect(result.success).toBe(true);
+      expect(result.message).toContain("Healthy");
+    });
+
+    it("start() reports failure when the /up stream contains an error event", async () => {
+      const errStream = [
+        '{"type":"activity","activityId":"x"}',
+        '{"log":" Container web Building "}',
+        '{"error":"failed to build: exit code 1"}',
+      ].join("\n");
+      mockFetch.mockResolvedValue({ ok: true, text: async () => errStream } as Response);
+
+      const result = await localClient.stacks.start("env123", "stack1");
+      expect(result.success).toBe(false);
+      expect(result.message).toContain("failed to build");
+    });
+
+    it("redeploy() - POST /redeploy parses NDJSON and returns success", async () => {
+      const redeployStream = [
+        '{"type":"activity","activityId":"9ae9f9d2-2503-4d22-9b0b-fcade4d3e155"}',
+        '{"log":" Container ical-bridge Running "}',
+        '{"log":" Container ical-bridge Healthy "}',
+        '{"done":true}',
+      ].join("\n");
+      mockFetch.mockResolvedValue({ ok: true, text: async () => redeployStream } as Response);
+
+      const result = await localClient.projectAdditional.redeploy("env123", "proj1");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/projects/proj1/redeploy",
+        expect.objectContaining({ method: "POST" })
+      );
+      expect(result.success).toBe(true);
+      expect(result.message).toContain("Healthy");
+    });
+
+    it("redeploy() reports failure when the /redeploy stream contains an error event", async () => {
+      const errStream = [
+        '{"type":"activity","activityId":"x"}',
+        '{"error":"no such image: ghcr.io/foo/bar:latest"}',
+      ].join("\n");
+      mockFetch.mockResolvedValue({ ok: true, text: async () => errStream } as Response);
+
+      const result = await localClient.projectAdditional.redeploy("env123", "proj1");
+      expect(result.success).toBe(false);
+      expect(result.message).toContain("no such image");
+    });
+
+    it("start() falls back to a single ActionResponse object if the endpoint does not stream", async () => {
+      // Defensive: OpenAPI declares /redeploy as application/json, and some Arcane
+      // versions may return a single {success,message} object instead of a stream.
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () => '{"success":true,"message":"Project started"}',
+      } as Response);
+
+      const result = await localClient.stacks.start("env123", "stack1");
+      expect(result.success).toBe(true);
+      expect(result.message).toContain("Project started");
     });
   });
 
@@ -688,7 +782,7 @@ describe("ArcaneClient", () => {
   });
 
   describe("system", () => {
-    it(".version(current?) - GET /version", async () => {
+    it(".version() - GET /app-version", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
         json: async () => ({ success: true, data: { version: "1.2.3" } }),
@@ -697,7 +791,7 @@ describe("ArcaneClient", () => {
       await client.system.version();
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/version",
+        "http://localhost:3552/api/app-version",
         expect.objectContaining({ method: "GET" })
       );
     });
