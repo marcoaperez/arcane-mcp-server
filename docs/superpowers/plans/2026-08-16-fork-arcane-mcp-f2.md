@@ -1055,7 +1055,7 @@ filtro, y ofrecer dos tools casi identicas induce fallos de seleccion."
     it(".updateSchedules(envId, cambios) - PUT con el cuerpo recibido", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: async () => ({ success: true, message: "Updated" }),
+        json: async () => ({ success: true, data: { autoHealInterval: "30s" } }),
       } as Response);
 
       await client.jobs.updateSchedules("env123", { autoHealInterval: "30s" });
@@ -1095,8 +1095,20 @@ class JobsMethods {
     return this.client.request<JobSchedulesConfig>("GET", `/environments/${envId}/job-schedules`);
   }
 
-  async updateSchedules(envId: string, cambios: JobSchedulesUpdate): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("PUT", `/environments/${envId}/job-schedules`, cambios);
+  /**
+   * OJO: NO devuelve ActionResponse. El spec declara BaseApiResponseJobscheduleConfig,
+   * es decir `{success, data: JobSchedulesConfig}`: devuelve la configuracion ya
+   * aplicada, y no hay campo `message` en ningun nivel.
+   */
+  async updateSchedules(
+    envId: string,
+    cambios: JobSchedulesUpdate
+  ): Promise<{ success: boolean; data: JobSchedulesConfig }> {
+    return this.client.request<{ success: boolean; data: JobSchedulesConfig }>(
+      "PUT",
+      `/environments/${envId}/job-schedules`,
+      cambios
+    );
   }
 }
 ```
@@ -1123,7 +1135,10 @@ Añadir el import `import { registerJobTools } from "../tools/jobs";` y:
         }),
         run: vi.fn().mockResolvedValue({ success: true, message: "Job started" }),
         getSchedules: vi.fn().mockResolvedValue({ autoHealInterval: "30s" }),
-        updateSchedules: vi.fn().mockResolvedValue({ success: true, message: "Updated" }),
+        updateSchedules: vi.fn().mockResolvedValue({
+          success: true,
+          data: { autoHealInterval: "45s", autoUpdateInterval: "24h" },
+        }),
       };
       return mockClient;
     };
@@ -1159,9 +1174,11 @@ Añadir el import `import { registerJobTools } from "../tools/jobs";` y:
       registerJobTools(server as any, mockClient);
 
       const handler = server.getHandler("arcane_job_schedules_update");
-      await handler({ environmentId: "env1", autoHealInterval: "45s" });
+      const result = await handler({ environmentId: "env1", autoHealInterval: "45s" });
 
       expect(mockClient.jobs.updateSchedules).toHaveBeenCalledWith("env1", { autoHealInterval: "45s" });
+      // La tool devuelve la configuracion aplicada que responde el servidor.
+      expect(result.content[0].text).toContain("45s");
     });
 
     it("arcane_job_schedules_get devuelve la configuracion", async () => {
@@ -1293,11 +1310,13 @@ export function registerJobTools(server: McpServer, client: ArcaneClient): void 
         const result = await client.jobs.updateSchedules(envId, cambios);
         if (result.success === false) {
           return {
-            content: [{ type: "text", text: `Error: ${result.message || "Update failed"}` }],
+            content: [{ type: "text", text: "Error: update failed" }],
             isError: true,
           };
         }
-        return { content: [{ type: "text", text: result.message || "Job schedules updated" }] };
+        // La respuesta trae la configuracion ya aplicada: devolverla es mas util
+        // que un texto fijo, y ademas confirma que los cambios cuajaron.
+        return { content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }] };
       } catch (err) {
         return {
           content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
