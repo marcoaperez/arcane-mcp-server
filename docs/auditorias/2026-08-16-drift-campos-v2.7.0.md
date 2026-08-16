@@ -244,7 +244,6 @@ porque ninguna tool los consume todavía:
 | Campo | Fase que lo necesita |
 |---|---|
 | `Project.updateInfo` | F3 — actualizaciones de imágenes |
-| `ImageSummary.updateInfo` (no aplica, no declarado) | — |
 | `ImageSummary.vulnerabilityScan` | F4 — vulnerability scanning |
 | `ImageSummary.usedBy` | F3 |
 | `Project.projectFiles`, `includeFiles`, `directoryFiles` | F5 — build |
