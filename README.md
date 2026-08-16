@@ -40,7 +40,7 @@ El fix de los endpoints NDJSON se ha ofrecido al upstream como PR autocontenido.
 
 <!-- BEGIN TOOLS -->
 
-Las **73** tools que expone el servidor, agrupadas por dominio. Esta tabla la
+Las **77** tools que expone el servidor, agrupadas por dominio. Esta tabla la
 genera `npm run gen-tools-table` a partir de `src/tools/`: las descripciones y los
 parámetros son los que registra el código, no una copia mantenida a mano.
 
@@ -196,6 +196,15 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 |---|---|---|
 | `arcane_event_list` | List audit events. Without environmentId returns events from all environments. | `environmentId?`, `severity?`, `type?`, `search?`, `limit?` |
 | `arcane_event_stats` | Get event counts by severity across all environments. | — |
+
+### Jobs (4)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_job_list` | List background jobs with their schedule, whether they are enabled, and whether they can be run manually. | `environmentId?`, `environmentName?` |
+| `arcane_job_run` | Run a background job immediately. Jobs with unmet prerequisites will not execute. | `environmentId?`, `environmentName?`, `jobId` |
+| `arcane_job_schedules_get` | Get the configured intervals for scheduled background jobs. | `environmentId?`, `environmentName?` |
+| `arcane_job_schedules_update` | Update one or more scheduled job intervals. Only the intervals provided are changed. | `environmentId?`, `environmentName?` |
 
 <!-- END TOOLS -->
 

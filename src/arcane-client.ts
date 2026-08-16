@@ -1099,6 +1099,39 @@ class EventsMethods {
   }
 }
 
+class JobsMethods {
+  constructor(private client: ArcaneClient) {}
+
+  /** Devuelve el sobre `{jobs, isAgent}` tal cual: NO es el paginado del resto de la API. */
+  async list(envId: string): Promise<JobListResponse> {
+    return this.client.request<JobListResponse>("GET", `/environments/${envId}/jobs`);
+  }
+
+  async run(envId: string, jobId: string): Promise<ActionResponse> {
+    return this.client.request<ActionResponse>("POST", `/environments/${envId}/jobs/${jobId}/run`);
+  }
+
+  async getSchedules(envId: string): Promise<JobSchedulesConfig> {
+    return this.client.request<JobSchedulesConfig>("GET", `/environments/${envId}/job-schedules`);
+  }
+
+  /**
+   * OJO: NO devuelve ActionResponse. El spec declara BaseApiResponseJobscheduleConfig,
+   * es decir `{success, data: JobSchedulesConfig}`: devuelve la configuracion ya
+   * aplicada, y no hay campo `message` en ningun nivel.
+   */
+  async updateSchedules(
+    envId: string,
+    cambios: JobSchedulesUpdate
+  ): Promise<{ success: boolean; data: JobSchedulesConfig }> {
+    return this.client.request<{ success: boolean; data: JobSchedulesConfig }>(
+      "PUT",
+      `/environments/${envId}/job-schedules`,
+      cambios
+    );
+  }
+}
+
 class GitRepositoriesMethods {
   constructor(private client: ArcaneClient) {}
 
@@ -1394,6 +1427,7 @@ export class ArcaneClient {
   readonly system: SystemMethods;
   readonly activities: ActivitiesMethods;
   readonly events: EventsMethods;
+  readonly jobs: JobsMethods;
   readonly gitRepositories: GitRepositoriesMethods;
   readonly gitOpsSyncs: GitOpsSyncsMethods;
   readonly projectAdditional: ProjectAdditionalMethods;
@@ -1426,6 +1460,7 @@ export class ArcaneClient {
     this.system = new SystemMethods(this);
     this.activities = new ActivitiesMethods(this);
     this.events = new EventsMethods(this);
+    this.jobs = new JobsMethods(this);
     this.gitRepositories = new GitRepositoriesMethods(this);
     this.gitOpsSyncs = new GitOpsSyncsMethods(this);
     this.projectAdditional = new ProjectAdditionalMethods(this);

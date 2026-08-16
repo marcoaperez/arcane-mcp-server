@@ -14,6 +14,7 @@ import { registerSystemTools } from "../tools/system";
 import { registerVolumeFileTools } from "../tools/volume-files";
 import { registerActivityTools } from "../tools/activities";
 import { registerEventTools } from "../tools/events";
+import { registerJobTools } from "../tools/jobs";
 
 type MockedFunction<T extends (...args: any[]) => any> = {
   (...args: Parameters<T>): ReturnType<T>;
@@ -615,6 +616,77 @@ describe("MCP Tools", () => {
 
       expect(mockClient.events.stats).toHaveBeenCalled();
       expect(result.content[0].text).toContain("3");
+    });
+  });
+
+  describe("job tools", () => {
+    const clienteConJobs = () => {
+      const mockClient = createMockClient() as any;
+      mockClient.jobs = {
+        list: vi.fn().mockResolvedValue({
+          isAgent: false,
+          jobs: [{ id: "auto-heal", name: "Auto Heal", canRunManually: true }],
+        }),
+        run: vi.fn().mockResolvedValue({ success: true, message: "Job started" }),
+        getSchedules: vi.fn().mockResolvedValue({ autoHealInterval: "30s" }),
+        // El spec declara BaseApiResponseJobscheduleConfig: {success, data: JobSchedulesConfig}.
+        // No hay campo `message`; el mock refleja la forma real de la API.
+        updateSchedules: vi.fn().mockResolvedValue({
+          success: true,
+          data: { autoHealInterval: "45s", autoUpdateInterval: "24h" },
+        }),
+      };
+      return mockClient;
+    };
+
+    it("arcane_job_list serializa el contenido de {jobs}, no el sobre", async () => {
+      const mockClient = clienteConJobs();
+      const server = createMockServer();
+      registerJobTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_job_list");
+      const result = await handler({ environmentId: "env1" });
+
+      expect(mockClient.jobs.list).toHaveBeenCalledWith("env1");
+      expect(result.content[0].text).toContain("auto-heal");
+    });
+
+    it("arcane_job_run devuelve isError con success:false", async () => {
+      const mockClient = clienteConJobs();
+      mockClient.jobs.run.mockResolvedValue({ success: false, message: "prerequisites not met" });
+      const server = createMockServer();
+      registerJobTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_job_run");
+      const result = await handler({ environmentId: "env1", jobId: "analytics-heartbeat" });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("prerequisites not met");
+    });
+
+    it("arcane_job_schedules_update envia solo los intervalos indicados y devuelve la config aplicada", async () => {
+      const mockClient = clienteConJobs();
+      const server = createMockServer();
+      registerJobTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_job_schedules_update");
+      const result = await handler({ environmentId: "env1", autoHealInterval: "45s" });
+
+      expect(mockClient.jobs.updateSchedules).toHaveBeenCalledWith("env1", { autoHealInterval: "45s" });
+      // La tool devuelve la configuracion aplicada que responde el servidor, no un texto fijo.
+      expect(result.content[0].text).toContain("45s");
+    });
+
+    it("arcane_job_schedules_get devuelve la configuracion", async () => {
+      const mockClient = clienteConJobs();
+      const server = createMockServer();
+      registerJobTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_job_schedules_get");
+      const result = await handler({ environmentId: "env1" });
+
+      expect(mockClient.jobs.getSchedules).toHaveBeenCalledWith("env1");
+      expect(result.content[0].text).toContain("30s");
     });
   });
 

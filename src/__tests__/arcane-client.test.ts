@@ -1001,6 +1001,72 @@ describe("ArcaneClient", () => {
     });
   });
 
+  describe("jobs", () => {
+    it(".list(envId) - GET /environments/{envId}/jobs con el sobre {jobs}", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ isAgent: false, jobs: [{ id: "auto-heal", name: "Auto Heal" }] }),
+      } as Response);
+
+      const resultado = await client.jobs.list("env123");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/jobs",
+        expect.objectContaining({ method: "GET" })
+      );
+      // El sobre NO es {data,pagination}: leerlo como paginado devolveria vacio.
+      expect(resultado.jobs?.[0].id).toBe("auto-heal");
+    });
+
+    it(".run(envId, jobId) - POST /environments/{envId}/jobs/{jobId}/run", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, message: "Job started" }),
+      } as Response);
+
+      await client.jobs.run("env123", "auto-heal");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/jobs/auto-heal/run",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+
+    it(".getSchedules(envId) - GET /environments/{envId}/job-schedules", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ autoHealInterval: "30s" }),
+      } as Response);
+
+      await client.jobs.getSchedules("env123");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/job-schedules",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".updateSchedules(envId, cambios) - PUT con el cuerpo recibido, devuelve {success,data}", async () => {
+      // El spec declara BaseApiResponseJobscheduleConfig: {success, data: JobSchedulesConfig}.
+      // No hay campo `message` en ningun nivel (verificado contra openapi.txt).
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { autoHealInterval: "30s" } }),
+      } as Response);
+
+      const resultado = await client.jobs.updateSchedules("env123", { autoHealInterval: "30s" });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/job-schedules",
+        expect.objectContaining({
+          method: "PUT",
+          body: JSON.stringify({ autoHealInterval: "30s" }),
+        })
+      );
+      expect(resultado.data.autoHealInterval).toBe("30s");
+    });
+  });
+
   describe("networks", () => {
     it(".list(envId) - GET /environments/{envId}/networks", async () => {
       mockFetch.mockResolvedValue({

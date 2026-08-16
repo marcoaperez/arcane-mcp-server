@@ -36,6 +36,7 @@ const GROUPS = [
   ["system.ts", "System"],
   ["activities.ts", "Activities"],
   ["events.ts", "Events"],
+  ["jobs.ts", "Jobs"],
 ];
 
 /** Extrae {name, desc, params} de cada `server.tool(name, desc, shape, handler)`. */
