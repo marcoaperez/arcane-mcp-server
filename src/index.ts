@@ -15,6 +15,7 @@ import { registerVolumeFileTools } from "./tools/volume-files";
 import { registerNetworkTools } from "./tools/networks";
 import { registerTemplateTools } from "./tools/templates";
 import { registerSystemTools } from "./tools/system";
+import { registerActivityTools } from "./tools/activities";
 import { registerGitRepositoryTools } from "./tools/git-repositories";
 import { registerGitOpsSyncTools } from "./tools/gitops-syncs";
 import { registerProjectAdditionalTools } from "./tools/projects-additional";
@@ -50,6 +51,7 @@ export class ArcaneAgent extends McpAgent<Env, Record<string, never>, Props> {
     registerNetworkTools(this.server, client);
     registerTemplateTools(this.server, client);
     registerSystemTools(this.server, client);
+    registerActivityTools(this.server, client);
     registerGitRepositoryTools(this.server, client);
     registerGitOpsSyncTools(this.server, client);
     registerProjectAdditionalTools(this.server, client);

@@ -12,6 +12,7 @@ import { registerNetworkTools } from "../tools/networks";
 import { registerTemplateTools } from "../tools/templates";
 import { registerSystemTools } from "../tools/system";
 import { registerVolumeFileTools } from "../tools/volume-files";
+import { registerActivityTools } from "../tools/activities";
 
 type MockedFunction<T extends (...args: any[]) => any> = {
   (...args: Parameters<T>): ReturnType<T>;
@@ -480,6 +481,63 @@ describe("MCP Tools", () => {
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("revision conflict");
+    });
+  });
+
+  describe("activity tools", () => {
+    const clienteConActivities = () => {
+      const mockClient = createMockClient() as any;
+      mockClient.activities = {
+        list: vi.fn().mockResolvedValue({ success: true, data: [], pagination: { totalItems: 0 } }),
+        get: vi.fn().mockResolvedValue({
+          success: true,
+          data: { activity: { id: "act1", status: "failed" }, messages: [] },
+        }),
+        cancel: vi.fn().mockResolvedValue({ success: true, message: "Cancelled" }),
+      };
+      return mockClient;
+    };
+
+    it("arcane_activity_list pasa los filtros al cliente", async () => {
+      const mockClient = clienteConActivities();
+      const server = createMockServer();
+      registerActivityTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_activity_list");
+      await handler({ environmentId: "env1", status: "failed", limit: 10 });
+
+      expect(mockClient.activities.list).toHaveBeenCalledWith("env1", {
+        search: undefined,
+        status: "failed",
+        type: undefined,
+        resourceType: undefined,
+        limit: 10,
+      });
+    });
+
+    it("arcane_activity_get resuelve un activityId", async () => {
+      const mockClient = clienteConActivities();
+      const server = createMockServer();
+      registerActivityTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_activity_get");
+      const result = await handler({ environmentId: "env1", activityId: "act1" });
+
+      expect(mockClient.activities.get).toHaveBeenCalledWith("env1", "act1");
+      expect(result.isError).toBeUndefined();
+    });
+
+    it("arcane_activity_cancel devuelve isError con success:false", async () => {
+      const mockClient = clienteConActivities();
+      mockClient.activities.cancel.mockResolvedValue({ success: false, message: "already finished" });
+      const server = createMockServer();
+      registerActivityTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_activity_cancel");
+      const result = await handler({ environmentId: "env1", activityId: "act1" });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("already finished");
     });
   });
 

@@ -903,6 +903,50 @@ describe("ArcaneClient", () => {
     });
   });
 
+  describe("activities", () => {
+    it(".list(envId, opts) - GET /environments/{envId}/activities con filtros", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: { totalItems: 0 } }),
+      } as Response);
+
+      await client.activities.list("env123", { status: "failed", limit: 10 });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/activities?status=failed&limit=10",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".get(envId, activityId) - GET /environments/{envId}/activities/{activityId}", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { activity: { id: "act1" }, messages: [] } }),
+      } as Response);
+
+      await client.activities.get("env123", "act1");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/activities/act1",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".cancel(envId, activityId) - POST /environments/{envId}/activities/{activityId}/cancel", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, message: "Cancelled" }),
+      } as Response);
+
+      await client.activities.cancel("env123", "act1");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/activities/act1/cancel",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+  });
+
   describe("networks", () => {
     it(".list(envId) - GET /environments/{envId}/networks", async () => {
       mockFetch.mockResolvedValue({

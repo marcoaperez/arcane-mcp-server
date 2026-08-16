@@ -1024,6 +1024,47 @@ class SystemMethods {
   }
 }
 
+export interface ActivityListOptions extends ListOptionsWithSort {
+  status?: string;
+  type?: string;
+  resourceType?: string;
+}
+
+class ActivitiesMethods {
+  constructor(private client: ArcaneClient) {}
+
+  async list(envId: string, opts?: ActivityListOptions): Promise<PaginatedResponse<Activity>> {
+    const params = new URLSearchParams();
+    if (opts?.search) params.set("search", opts.search);
+    if (opts?.status) params.set("status", opts.status);
+    if (opts?.type) params.set("type", opts.type);
+    if (opts?.resourceType) params.set("resourceType", opts.resourceType);
+    if (opts?.limit) params.set("limit", String(opts.limit));
+    const query = params.toString();
+    return this.client.request<PaginatedResponse<Activity>>(
+      "GET",
+      `/environments/${envId}/activities${query ? `?${query}` : ""}`
+    );
+  }
+
+  async get(envId: string, activityId: string): Promise<{ success: boolean; data: ActivityDetail }> {
+    return this.client.request<{ success: boolean; data: ActivityDetail }>(
+      "GET",
+      `/environments/${envId}/activities/${activityId}`
+    );
+  }
+
+  async cancel(envId: string, activityId: string, requestedBy?: string): Promise<ActionResponse> {
+    const params = new URLSearchParams();
+    if (requestedBy) params.set("requestedBy", requestedBy);
+    const query = params.toString();
+    return this.client.request<ActionResponse>(
+      "POST",
+      `/environments/${envId}/activities/${activityId}/cancel${query ? `?${query}` : ""}`
+    );
+  }
+}
+
 class GitRepositoriesMethods {
   constructor(private client: ArcaneClient) {}
 
@@ -1317,6 +1358,7 @@ export class ArcaneClient {
   readonly networks: NetworksMethods;
   readonly templates: TemplatesMethods;
   readonly system: SystemMethods;
+  readonly activities: ActivitiesMethods;
   readonly gitRepositories: GitRepositoriesMethods;
   readonly gitOpsSyncs: GitOpsSyncsMethods;
   readonly projectAdditional: ProjectAdditionalMethods;
@@ -1347,6 +1389,7 @@ export class ArcaneClient {
     this.networks = new NetworksMethods(this);
     this.templates = new TemplatesMethods(this);
     this.system = new SystemMethods(this);
+    this.activities = new ActivitiesMethods(this);
     this.gitRepositories = new GitRepositoriesMethods(this);
     this.gitOpsSyncs = new GitOpsSyncsMethods(this);
     this.projectAdditional = new ProjectAdditionalMethods(this);

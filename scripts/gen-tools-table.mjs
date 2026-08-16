@@ -34,6 +34,7 @@ const GROUPS = [
   ["git-repositories.ts", "Git repositories"],
   ["gitops-syncs.ts", "GitOps syncs"],
   ["system.ts", "System"],
+  ["activities.ts", "Activities"],
 ];
 
 /** Extrae {name, desc, params} de cada `server.tool(name, desc, shape, handler)`. */
