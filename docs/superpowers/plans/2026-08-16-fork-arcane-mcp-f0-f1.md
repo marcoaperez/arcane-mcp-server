@@ -631,18 +631,39 @@ function describe(spec) {
   };
 }
 
-const previous = existsSync(OUTPUT)
-  ? describe(JSON.parse(readFileSync(OUTPUT, "utf8")))
-  : null;
+let previous = null;
+if (existsSync(OUTPUT)) {
+  try {
+    previous = describe(JSON.parse(readFileSync(OUTPUT, "utf8")));
+  } catch (err) {
+    console.warn(
+      `AVISO: no se pudo leer el ${OUTPUT} existente (${err.message}). Se continúa igualmente porque se va a sobreescribir.`,
+    );
+  }
+}
 
 console.log(`Descargando ${url} ...`);
-const response = await fetch(url);
+let response;
+try {
+  response = await fetch(url);
+} catch (err) {
+  console.error(`ERROR: no se pudo conectar con ${url} (${err.message}).`);
+  process.exit(1);
+}
+
 if (!response.ok) {
   console.error(`ERROR: ${response.status} ${response.statusText}`);
   process.exit(1);
 }
 
-const spec = await response.json();
+let spec;
+try {
+  spec = await response.json();
+} catch (err) {
+  console.error(`ERROR: la respuesta de ${url} no es JSON válido (${err.message}).`);
+  process.exit(1);
+}
+
 if (!spec?.info?.version || !spec?.paths) {
   console.error("ERROR: la respuesta no parece un spec OpenAPI (falta info.version o paths).");
   process.exit(1);
@@ -680,19 +701,21 @@ Esperado:
 ```
 Descargando http://192.168.180.210:3552/api/openapi.json ...
 Antes:   v1.14.1 — 140 paths, 324 schemas
-Ahora:   v2.7.0 — 268 paths, ... schemas
+Ahora:   2.7.0 — 268 paths, 628 schemas
 Escrito en openapi.txt.
 ```
 
-Si `Ahora` no dice `v2.7.0`, **para y avisa**: la instancia ha cambiado de versión y las cifras de este plan dejan de aplicar.
+Nota de formato: el spec v1 declaraba la versión con prefijo (`v1.14.1`); el v2 la declara **sin** prefijo (`2.7.0`). No es un error. Lo que confirma la identidad del spec es el número de paths.
+
+Si `Ahora` no dice `2.7.0` **con 268 paths**, **para y avisa**: la instancia ha cambiado de versión y las cifras de este plan dejan de aplicar.
 
 - [ ] **Step 5: Verificar el fichero escrito de forma independiente**
 
 ```bash
-node -e "const s=require('./openapi.txt'); console.log(s.info.version, Object.keys(s.paths).length)"
+node -e "const s=JSON.parse(require('fs').readFileSync('openapi.txt','utf8')); console.log(s.info.version, Object.keys(s.paths).length)"
 ```
 
-Esperado: `v2.7.0 268`.
+Esperado: `2.7.0 268`.
 
 - [ ] **Step 6: Confirmar que nada del código se rompe**
 
@@ -852,7 +875,7 @@ if (process.argv.includes("--json")) {
 node scripts/audit-schema-drift.mjs
 ```
 
-Esperado: una tabla Markdown encabezada por `Spec: Arcane API v2.7.0 (268 paths)`, con del orden de **65 desalineaciones** y `VersionInfo` marcado como `INTERFAZ-AUSENTE`.
+Esperado: una tabla Markdown encabezada por `Spec: Arcane API 2.7.0 (268 paths)`, con del orden de **65 desalineaciones** y `VersionInfo` marcado como `INTERFAZ-AUSENTE`.
 
 Hallazgos que deben aparecer sí o sí (comprobados al redactar el plan):
 
@@ -874,7 +897,7 @@ Si `INTERFAZ-AUSENTE` no aparece para `VersionInfo`, es que ya existe la interfa
 Es el campo concreto que rompió a RS (`container_list` devolvía nombres `undefined`) y del que depende `resolveContainerId` en [`src/tools/resolve.ts:82`](../../../src/tools/resolve.ts).
 
 ```bash
-node -e "const s=require('./openapi.txt'); const c=s.components.schemas.ContainerSummary; console.log('names en props:', 'names' in c.properties, '| requerido:', c.required.includes('names'))"
+node -e "const s=JSON.parse(require('fs').readFileSync('openapi.txt','utf8')); const c=s.components.schemas.ContainerSummary; console.log('names en props:', 'names' in c.properties, '| requerido:', c.required.includes('names'))"
 ```
 
 Esperado: `names en props: true | requerido: true`. Si diera `false`, `arcane_container_*` con `containerName` está roto en producción y hay que escalarlo antes de seguir.
@@ -1330,13 +1353,13 @@ node scripts/audit-schema-drift.mjs
 `openapi.txt` es la fuente de verdad, no el código de otros forks.
 
 ```bash
-node -e "const s=require('./openapi.txt'); console.log(Object.keys(s.paths).filter(p=>p.includes('<dominio>')))"
+node -e "const s=JSON.parse(require('fs').readFileSync('openapi.txt','utf8')); console.log(Object.keys(s.paths).filter(p=>p.includes('<dominio>')))"
 ```
 
 Para ver el schema de respuesta de un path concreto:
 
 ```bash
-node -e "const s=require('./openapi.txt'); console.log(JSON.stringify(s.paths['<path>'], null, 2))"
+node -e "const s=JSON.parse(require('fs').readFileSync('openapi.txt','utf8')); console.log(JSON.stringify(s.paths['<path>'], null, 2))"
 ```
 
 **Detección de endpoints NDJSON:** si la respuesta `200` declara `content` vacío

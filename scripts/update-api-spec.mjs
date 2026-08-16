@@ -23,18 +23,39 @@ function describe(spec) {
   };
 }
 
-const previous = existsSync(OUTPUT)
-  ? describe(JSON.parse(readFileSync(OUTPUT, "utf8")))
-  : null;
+let previous = null;
+if (existsSync(OUTPUT)) {
+  try {
+    previous = describe(JSON.parse(readFileSync(OUTPUT, "utf8")));
+  } catch (err) {
+    console.warn(
+      `AVISO: no se pudo leer el ${OUTPUT} existente (${err.message}). Se continúa igualmente porque se va a sobreescribir.`,
+    );
+  }
+}
 
 console.log(`Descargando ${url} ...`);
-const response = await fetch(url);
+let response;
+try {
+  response = await fetch(url);
+} catch (err) {
+  console.error(`ERROR: no se pudo conectar con ${url} (${err.message}).`);
+  process.exit(1);
+}
+
 if (!response.ok) {
   console.error(`ERROR: ${response.status} ${response.statusText}`);
   process.exit(1);
 }
 
-const spec = await response.json();
+let spec;
+try {
+  spec = await response.json();
+} catch (err) {
+  console.error(`ERROR: la respuesta de ${url} no es JSON válido (${err.message}).`);
+  process.exit(1);
+}
+
 if (!spec?.info?.version || !spec?.paths) {
   console.error("ERROR: la respuesta no parece un spec OpenAPI (falta info.version o paths).");
   process.exit(1);
