@@ -329,6 +329,65 @@ function summarizeComposeStream(events: ComposeStreamEvent[], action: string): A
   };
 }
 
+/**
+ * One line of the NDJSON stream emitted by the /pull endpoints (docker pull
+ * progress, `application/x-json-stream`). Unlike the compose streams (/up,
+ * /redeploy), which emit an explicit `{"done":true}` terminal marker, docker-pull
+ * streams have no observed terminal success sentinel.
+ */
+export interface PullStreamEvent {
+  status?: string;
+  error?: string;
+  id?: string;
+  success?: boolean;
+  message?: string;
+}
+
+/**
+ * Aggregate an NDJSON docker-pull stream into a single ActionResponse.
+ *
+ * Task 10: a `{"status":"complete"}` sentinel was assumed as the success
+ * criterion in the original code, but it has never been observed against a
+ * real server (confirmed live against Arcane v2.7.0 — a 2-event pull stream
+ * with no errors was reported as `success:false` purely because the sentinel
+ * never arrived). In docker-pull semantics, absence of an error IS the
+ * success signal, so this mirrors summarizeComposeStream()'s priority order
+ * (errors first, then the single-object fallback) but treats "no errors" as
+ * the normal-case success rather than requiring a sentinel.
+ */
+function summarizePullStream(events: PullStreamEvent[], action: string): ActionResponse {
+  const errors = events.filter(e => e.error).map(e => e.error as string);
+  if (errors.length > 0) {
+    return { success: false, message: `${action} failed: ${errors.join("; ")}` };
+  }
+
+  // Defensive fallback: a non-streaming response (single ActionResponse object).
+  // requestNdjson yields it as one event — pass it through unchanged.
+  if (events.length === 1 && typeof events[0]?.success === "boolean") {
+    return { success: events[0].success as boolean, message: events[0].message ?? `${action} finished` };
+  }
+
+  // No error events observed: in docker-pull semantics that IS success.
+  // Surface real event info in the message (status lines, tagged with their
+  // layer id when present) rather than degrading to a bare count.
+  const statusLines = events
+    .filter(e => typeof e.status === "string" && e.status.length > 0)
+    .map(e => (e.id ? `${e.id}: ${e.status}` : (e.status as string)));
+
+  let message: string;
+  if (statusLines.length > 0) {
+    // Keep the message readable: the tail of the stream is the most relevant part.
+    message = statusLines.slice(-5).join(" | ");
+  } else {
+    const ids = [...new Set(events.filter(e => typeof e.id === "string").map(e => e.id as string))];
+    message = ids.length > 0
+      ? `${action} finished for: ${ids.join(", ")}`
+      : `${action} finished (${events.length} events)`;
+  }
+
+  return { success: true, message };
+}
+
 export interface ListOptions {
   search?: string;
   limit?: number;
@@ -566,23 +625,11 @@ class StacksMethods {
   async pull(envId: string, stackId: string): Promise<ActionResponse> {
     // Endpoint /pull returns NDJSON (newline-delimited JSON) streaming docker pull progress.
     // Use requestNdjson to parse the stream and summarize it as an ActionResponse.
-    const events = await this.client.requestNdjson<{ status?: string; error?: string; id?: string }>(
+    const events = await this.client.requestNdjson<PullStreamEvent>(
       "POST",
       `/environments/${envId}/projects/${stackId}/pull`
     );
-    const errors = events.filter(e => e.error).map(e => e.error);
-    if (errors.length > 0) {
-      return { success: false, message: `Pull errors: ${errors.join("; ")}` };
-    }
-    const completed = events.some(e => e.status === "complete");
-    const summary = events
-      .filter(e => e.status && (e.status.startsWith("Status:") || e.status === "complete"))
-      .map(e => e.status)
-      .join(" | ");
-    return {
-      success: completed,
-      message: summary || `Pull finished (${events.length} events)`,
-    };
+    return summarizePullStream(events, "Pull");
   }
 }
 
@@ -845,23 +892,11 @@ class ProjectAdditionalMethods {
   async pullImages(envId: string, projectId: string): Promise<ActionResponse> {
     // Endpoint /pull returns NDJSON (newline-delimited JSON) streaming docker pull progress.
     // Use requestNdjson to parse the stream and summarize it as an ActionResponse.
-    const events = await this.client.requestNdjson<{ status?: string; error?: string; id?: string }>(
+    const events = await this.client.requestNdjson<PullStreamEvent>(
       "POST",
       `/environments/${envId}/projects/${projectId}/pull`
     );
-    const errors = events.filter(e => e.error).map(e => e.error);
-    if (errors.length > 0) {
-      return { success: false, message: `Pull errors: ${errors.join("; ")}` };
-    }
-    const completed = events.some(e => e.status === "complete");
-    const summary = events
-      .filter(e => e.status && (e.status.startsWith("Status:") || e.status === "complete"))
-      .map(e => e.status)
-      .join(" | ");
-    return {
-      success: completed,
-      message: summary || `Pull finished (${events.length} events)`,
-    };
+    return summarizePullStream(events, "Pull");
   }
 
   async redeploy(envId: string, projectId: string): Promise<ActionResponse> {

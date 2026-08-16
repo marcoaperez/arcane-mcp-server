@@ -335,6 +335,105 @@ describe("ArcaneClient", () => {
     });
   });
 
+  describe("pull success criterion (Task 10 regression: absence of error is success)", () => {
+    // Live evidence (2026-08-16, Arcane v2.7.0, env "0", stack "ical-bridge"):
+    // a 2-event pull stream with no errors and no {"status":"complete"} sentinel
+    // was reported as `success:false` ("Pull failed for stack 'ical-bridge':
+    // Pull finished (2 events)") because the old code required that sentinel,
+    // which has never been observed against a real server.
+    const realisticNoSentinelStream = [
+      '{"status":"Pulling from taiko/ical-bridge","id":"latest"}',
+      '{"status":"Image is up to date for taiko/ical-bridge:latest"}',
+    ].join("\n");
+
+    const errorStream = [
+      '{"status":"starting project image pull"}',
+      '{"error":"manifest for ghcr.io/foo/bar:latest not found"}',
+    ].join("\n");
+
+    const singleObjectFallback = '{"success":true,"message":"Images pulled"}';
+
+    const statusLineStream = [
+      '{"status":"Pulling fs layer","id":"a1b2c3"}',
+      '{"status":"Downloading","id":"a1b2c3"}',
+      '{"status":"Status: Downloaded newer image for myapp/web:latest"}',
+    ].join("\n");
+
+    describe("stacks.pull", () => {
+      it("Test 1 (regression): a stream with no errors and no complete sentinel reports success:true", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => realisticNoSentinelStream } as Response);
+
+        const result = await client.stacks.pull("env123", "stack1");
+
+        expect(result.success).toBe(true);
+      });
+
+      it("Test 2: a stream with an error event reports success:false with the error text", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => errorStream } as Response);
+
+        const result = await client.stacks.pull("env123", "stack1");
+
+        expect(result.success).toBe(false);
+        expect(result.message).toContain("manifest for ghcr.io/foo/bar:latest not found");
+      });
+
+      it("Test 3: single-object ActionResponse fallback is returned unchanged", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => singleObjectFallback } as Response);
+
+        const result = await client.stacks.pull("env123", "stack1");
+
+        expect(result).toEqual({ success: true, message: "Images pulled" });
+      });
+
+      it("Test 4: a normal pull stream produces a message with real event info, not just a count", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => statusLineStream } as Response);
+
+        const result = await client.stacks.pull("env123", "stack1");
+
+        expect(result.success).toBe(true);
+        expect(result.message).not.toMatch(/^Pull finished \(\d+ events\)$/);
+        expect(result.message).toContain("Downloaded newer image for myapp/web:latest");
+      });
+    });
+
+    describe("projectAdditional.pullImages", () => {
+      it("Test 1 (regression): a stream with no errors and no complete sentinel reports success:true", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => realisticNoSentinelStream } as Response);
+
+        const result = await client.projectAdditional.pullImages("env123", "proj1");
+
+        expect(result.success).toBe(true);
+      });
+
+      it("Test 2: a stream with an error event reports success:false with the error text", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => errorStream } as Response);
+
+        const result = await client.projectAdditional.pullImages("env123", "proj1");
+
+        expect(result.success).toBe(false);
+        expect(result.message).toContain("manifest for ghcr.io/foo/bar:latest not found");
+      });
+
+      it("Test 3: single-object ActionResponse fallback is returned unchanged", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => singleObjectFallback } as Response);
+
+        const result = await client.projectAdditional.pullImages("env123", "proj1");
+
+        expect(result).toEqual({ success: true, message: "Images pulled" });
+      });
+
+      it("Test 4: a normal pull stream produces a message with real event info, not just a count", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => statusLineStream } as Response);
+
+        const result = await client.projectAdditional.pullImages("env123", "proj1");
+
+        expect(result.success).toBe(true);
+        expect(result.message).not.toMatch(/^Pull finished \(\d+ events\)$/);
+        expect(result.message).toContain("Downloaded newer image for myapp/web:latest");
+      });
+    });
+  });
+
   describe("NDJSON /up and /redeploy streams", () => {
     // Endpoints /up (stacks.start) and /redeploy stream `application/x-json-stream`
     // (NDJSON), NOT a single JSON object. Parsing the whole body with response.json()
