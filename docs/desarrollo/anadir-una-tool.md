@@ -155,50 +155,20 @@ npm run type-check
 - Añade la fila a la tabla de tools del `README.md`.
 - Commit en rama. **Nunca commits sueltos en `main`.**
 - Push a `origin` y a `github`.
-- El merge a `main` es deliberado. GitOps sincroniza los ficheros al host **y sí
-  intenta redesplegar**, pero ese redeploy **falla en este proyecto**, así que en la
-  práctica hay que lanzar el rebuild a mano.
+- El merge a `main` es deliberado. **Desde el 2026-08-16 el despliegue es automático:**
+  GitOps sincroniza los ficheros al host y redespliega solo. El intervalo de sync por
+  defecto es de 5 minutos, así que basta con esperar.
 
-  El error que devuelve, visible en `lastSyncError` con `arcane_gitops_sync_get_status`:
-
-  ```
-  redeploy failed: failed to prepare project images for deploy:
-  node:22-bookworm-slim: failed to resolve source metadata for
-  docker.io/library/node:22-bookworm-slim: no active sessions
-  ```
-
-  No es un problema de red: `registry-1.docker.io` responde desde el host. El build
-  que lanza Arcane no dispone de sesión de BuildKit para resolver la imagen base del
-  `Dockerfile`, y esa imagen tampoco está entre las locales. Un `docker compose up -d
-  --build` lanzado a mano sí funciona.
-
-  Consecuencia práctica: **un `lastSyncStatus` distinto de `success` no bloquea nada,
-  pero tampoco despliega**. Revísalo, y reconstruye tú.
-
-- ⚠️ **El orden importa: espera a que GitOps haya sincronizado tu commit ANTES de
-  reconstruir.** El rebuild construye desde `/opt/stacks/arcane-mcp` tal como esté
-  en ese instante. Si lo lanzas antes del sync, obtienes una imagen nueva con
-  código viejo — todo parece correcto y no lo está. Comprueba primero que el
-  commit desplegado es el tuyo:
-
-  ```bash
-  ssh VM-Control 'cd /opt/stacks/arcane-mcp && git log -1 --format=%H 2>/dev/null || stat -c "%y" src/index.ts'
-  ```
-
-  O consulta `lastSyncCommit` con `arcane_gitops_sync_get_status`. El intervalo de
-  sync por defecto es de 5 minutos, así que puede tardar. Solo entonces:
-
-  ```bash
-  ssh VM-Control 'cd /opt/stacks/arcane-mcp && docker compose up -d --build'
-  ```
-
-  Caso real (2026-08-16): un rebuild lanzado a las 09:35 construyó código que
-  GitOps no escribió hasta las 09:56. La imagen era nueva, el contenido no, y el
-  contenedor arrancó sin errores sirviendo la versión anterior.
+  Hasta esa fecha el redeploy fallaba siempre con `no active sessions` al resolver la
+  imagen base, y cada despliegue exigía un `docker compose up -d --build` a mano. La
+  causa era un bug del módulo `go.getarcane.app/builds` v0.3.0 que usa Arcane: la
+  sesión de BuildKit se cerraba antes de resolver los metadatos de la imagen base.
+  Se corrigió actualizando Arcane a **v2.8.0**, que trae el módulo v0.3.1. Ver
+  [la auditoría de la actualización](../auditorias/2026-08-16-actualizacion-arcane-2.8.0.md).
 
 - Verifica el despliegue **mirando dentro del contenedor**, no el estado del sync.
-  Un `lastSyncStatus: success` con la imagen vieja es el modo de fallo silencioso
-  de este proyecto:
+  Sigue siendo la capa correcta: un `lastSyncStatus: success` con la imagen vieja fue
+  el modo de fallo silencioso de este proyecto durante toda F0/F1.
 
   ```bash
   ssh VM-Control 'docker exec arcane-mcp-server sh -c "grep -c <algo-nuevo> /app/src/tools/<fichero>.ts"'
