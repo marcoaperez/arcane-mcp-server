@@ -6,9 +6,16 @@
 
 ## Contexto
 
-Los *paths* del fork ya estaban validados (37/37 contra v2.7.0). Lo que no lo estaba
-son los *shapes*: el fallo que degradó a RandomSynergy17/Arcane-MCP-Server fue de
-campos (`names`, contadores, `driver`), no de rutas. Esta auditoría los mide.
+Los *paths* del fork ya estaban validados contra v2.7.0. Lo que no lo estaba son los
+*shapes*: el fallo que degradó a RandomSynergy17/Arcane-MCP-Server fue de campos
+(`names`, contadores, `driver`), no de rutas. Esta auditoría los mide.
+
+> **Nota sobre la cobertura de rutas (2026-08-16).** El spec de diseño hablaba de
+> "37/37 rutas válidas". La medición real es **58/58**: el cliente usa 58 combinaciones
+> método+ruta distintas y todas existen en el spec v2.7.0, sin ausencias. La cifra
+> anterior se había quedado corta. Reproducible extrayendo los pares
+> `("MÉTODO", \`/ruta\`)` de `src/arcane-client.ts`, normalizando los parámetros de
+> plantilla a `{}` y contrastándolos contra las claves de `paths` de `openapi.txt`.
 
 La auditoría cubre **14 interfaces de payload**: `Environment`, `Project`,
 `ContainerSummary`, `ImageSummary`, `Volume`, `NetworkSummary`, `NetworkInspect`,

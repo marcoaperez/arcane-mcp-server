@@ -1,5 +1,18 @@
 # Arcane Docker MCP Server
 
+> **Fork mantenido activamente por [Taiko Solutions](https://taikosolutions.com).**
+> Verificado contra **Arcane v2.7.0**: las **58** combinaciones método+ruta que usa el
+> cliente existen en el spec de la instancia, sin ausencias. Origen del fork:
+> [`cougz/arcane-mcp-server`](https://github.com/cougz/arcane-mcp-server), inactivo
+> desde marzo de 2026.
+>
+> | | |
+> |---|---|
+> | **Compatibilidad** | Arcane v2.x (probado contra v2.7.0) |
+> | **Spec de referencia** | [`openapi.txt`](openapi.txt) — descargado de la instancia con `npm run update-api-spec` |
+> | **Tools** | 68 |
+> | **Documentación** | [`docs/`](docs/README.md) |
+
 A Model Context Protocol (MCP) server for managing Docker environments through [Arcane](https://getarcane.app/), deployed on Cloudflare Workers.
 
 This MCP server provides Claude Desktop and other MCP clients with tools to manage Docker containers, images, volumes, networks, and Docker Compose stacks via Arcane's REST API.
@@ -9,6 +22,19 @@ This MCP server provides Claude Desktop and other MCP clients with tools to mana
 Arcane is a Docker management platform that provides a unified API for managing multiple Docker environments. This MCP server exposes Arcane's functionality as MCP tools, allowing you to interact with your Docker infrastructure through natural language conversations with Claude.
 
 Built on Cloudflare Workers using the official Cloudflare `agents` package, this server provides a scalable, globally distributed way to manage your Docker resources.
+
+## En qué diverge este fork del upstream
+
+| Área | `cougz/arcane-mcp-server` | Este fork |
+|---|---|---|
+| Endpoints NDJSON (`/pull`, `/up`, `/redeploy`) | Rotos: parsean el cuerpo con `response.json()` y revientan con `Unexpected non-whitespace character after JSON` en la segunda línea del stream | `requestNdjson()` + agregación a `ActionResponse`, con los errores del stream propagados a la tool |
+| Path de `arcane_stack_pull` | `/pull-project-images`, inexistente en Arcane v2.x → 404 | `/pull`, según el spec v2.7.0 |
+| Compatibilidad de shapes | Escrito contra Arcane v1.x | Interfaces alineadas con v2.7.0 y auditadas por `scripts/audit-schema-drift.mjs` |
+| Despliegue | Solo Cloudflare Workers | Cloudflare Workers **o** contenedor Docker autoalojado (`docker-compose.yml` + `wrangler.local.jsonc`) |
+| Cliente | `baseUrl` fijo hacia el binding VPC | Modo dual: binding VPC en Workers, URL real en local/Docker |
+| Verificación | Sin runner de tests funcional | 91 tests unitarios + suite e2e contra una instancia Arcane real |
+
+El fix de los endpoints NDJSON se ha ofrecido al upstream como PR autocontenido.
 
 ## Available Tools
 
@@ -114,6 +140,38 @@ Connect the inspector to `http://localhost:8788/mcp` to verify:
 - `arcane_stack_list` with `environmentName` (not ID) works via name resolution
 - `arcane_container_logs` returns log content
 - Invalid tool inputs return proper error responses
+
+### Comandos
+
+| Comando | Para qué |
+|---|---|
+| `bun install` | Instalar dependencias (el `Dockerfile` usa el mismo gestor) |
+| `npm test` | Suite unitaria — sin red ni credenciales |
+| `npm run test:e2e` | Verificación contra una instancia Arcane real (requiere `ARCANE_BASE_URL` y `ARCANE_API_KEY`) |
+| `npm run type-check` | Comprobación de tipos |
+| `npm run update-api-spec` | Refrescar `openapi.txt` desde la instancia |
+| `node scripts/audit-schema-drift.mjs` | Auditar el drift entre las interfaces TS y el spec |
+
+### Despliegue
+
+Este fork se despliega como contenedor Docker mediante GitOps de Arcane, con
+`autoSync` sobre `main`. El sync escribe los ficheros nuevos en
+`/opt/stacks/arcane-mcp`, pero **no reconstruye la imagen**: como `docker-compose.yml`
+usa `build: .` sin volumen, el código va horneado dentro y un `compose up -d` sin
+`--build` no recoge nada. Desplegar requiere un rebuild explícito:
+
+```bash
+ssh VM-Control 'cd /opt/stacks/arcane-mcp && docker compose up -d --build'
+```
+
+Un `lastSyncStatus: success` **no** significa que el código nuevo esté sirviendo.
+Verifica siempre mirando dentro del contenedor. Todo el trabajo va en ramas y los
+merges a `main` son deliberados y verificados.
+
+Para desplegar en Cloudflare Workers en su lugar, usa `npm run deploy`
+(`wrangler.jsonc`, con binding de servicio VPC hacia Arcane).
+
+Para contribuir, lee [cómo añadir una tool](docs/desarrollo/anadir-una-tool.md).
 
 ## Connecting Claude Desktop via mcp-remote
 

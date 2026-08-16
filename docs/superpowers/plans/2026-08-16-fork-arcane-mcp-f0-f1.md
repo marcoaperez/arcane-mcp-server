@@ -6,7 +6,7 @@
 
 **Goal:** Dejar el fork `arcane-mcp` en estado verificable (suite de tests en verde, fix NDJSON en producción, spec de API al día, drift de campos medido y corregido) y visiblemente mantenido (README de fork, PR quirúrgico al upstream).
 
-**Architecture:** Todo el trabajo ocurre en ramas; `main` auto-despliega por GitOps y solo se toca en tres merges deliberados y verificados. El runner de tests se repara sustituyendo el pool de Cloudflare Workers por el pool `node` por defecto (ningún test necesita runtime de Workers), lo que desbloquea la verificación de todo lo demás. La auditoría de drift se automatiza con un script que compara las interfaces TypeScript de `src/arcane-client.ts` contra los schemas del `openapi.txt` usando el compilador de TypeScript.
+**Architecture:** Todo el trabajo ocurre en ramas; `main` se sincroniza por GitOps pero requiere un rebuild explícito para desplegar, y solo se toca en tres merges deliberados y verificados. El runner de tests se repara sustituyendo el pool de Cloudflare Workers por el pool `node` por defecto (ningún test necesita runtime de Workers), lo que desbloquea la verificación de todo lo demás. La auditoría de drift se automatiza con un script que compara las interfaces TypeScript de `src/arcane-client.ts` contra los schemas del `openapi.txt` usando el compilador de TypeScript.
 
 **Tech Stack:** TypeScript 5.9.3 · Cloudflare Workers (`wrangler` 4.x) · `@modelcontextprotocol/sdk` · `zod` 4 · `vitest` 4 · `bun` (gestor de dependencias, igual que el `Dockerfile`) · Arcane API v2.7.0
 
@@ -16,7 +16,17 @@
 
 Estas reglas aplican a **todas** las tareas:
 
-1. **`main` auto-despliega.** El proyecto está gestionado por GitOps de Arcane con `autoSync=True` sobre `main`. Cualquier push a `main` reconstruye y reinicia el contenedor de producción. Nunca hacer commits sueltos en `main`; solo merges deliberados en los tres puntos que marca este plan (final de Tarea 3, Tarea 6 y Tarea 8).
+1. **`main` sincroniza por GitOps, pero NO despliega solo.** ⚠️ *Corregido durante la ejecución (2026-08-16): la redacción original de esta restricción era falsa.* El proyecto está gestionado por GitOps de Arcane con `autoSync=True` sobre `main`, y el sync **sí** escribe los ficheros nuevos en `/opt/stacks/arcane-mcp` del host `VM-Control`. Pero `docker-compose.yml` usa `build: .` sin volumen, así que el código se hornea en la imagen: un `compose up -d` sin `--build` ve la imagen existente y no hace nada. **Desplegar requiere un rebuild explícito:**
+
+   ```bash
+   ssh VM-Control 'cd /opt/stacks/arcane-mcp && docker compose up -d --build'
+   ```
+
+   Evidencia: tras mergear el fix NDJSON, GitOps registró `lastSyncCommit` correcto y `lastSyncStatus: success`, pero el contenedor seguía sirviendo código de dos meses antes (5 ocurrencias de `requestNdjson` dentro del contenedor frente a 8 en el disco sincronizado) y la tool seguía fallando. Solo el rebuild manual lo arregló.
+
+   Consecuencia práctica: empujar a `main` es **menos** peligroso de lo que asumía el plan original. Aun así, nunca hacer commits sueltos en `main`; solo merges deliberados en los tres puntos que marca este plan (final de Tarea 3, Tarea 6 y Tarea 8), porque el rebuild puede dispararse en cualquier momento.
+
+   **Verificar siempre el despliegue mirando dentro del contenedor, no el estado del sync.** El sync en verde no significa código nuevo en producción.
 2. **Todo el trabajo va en ramas.** Nombres de rama exactos indicados en cada tarea.
 3. **Fuente de verdad = el spec en vivo v2.7.0**, descargado de `http://192.168.180.210:3552/api/openapi.json`. Nunca el código de `RandomSynergy17/Arcane-MCP-Server` (apunta a Arcane v1.17.0).
 4. **Regla dura de verificación:** ninguna tool nueva o modificada sin (a) test unitario con `fetch` mockeado **y** (b) comprobación contra la instancia v2.7.0 real. Las mutantes, solo sobre stacks idempotentes (`ical-bridge`).
@@ -1643,9 +1653,27 @@ npm run type-check
 - Añade la fila a la tabla de tools del `README.md`.
 - Commit en rama. **Nunca commits sueltos en `main`.**
 - Push a `origin` y a `github`.
-- El merge a `main` es deliberado: `main` tiene `autoSync=True` y despliega
-  automáticamente. Tras el merge, verifica que el contenedor se ha reiniciado y
-  vuelve a pasar los e2e contra producción.
+- El merge a `main` es deliberado. GitOps sincroniza los ficheros al host, pero
+  **no reconstruye la imagen**: hay que lanzar el rebuild a mano.
+
+  ```bash
+  ssh VM-Control 'cd /opt/stacks/arcane-mcp && docker compose up -d --build'
+  ```
+
+- Verifica el despliegue **mirando dentro del contenedor**, no el estado del sync.
+  Un `lastSyncStatus: success` con la imagen vieja es el modo de fallo silencioso
+  de este proyecto:
+
+  ```bash
+  ssh VM-Control 'docker exec arcane-mcp-server sh -c "grep -c <algo-nuevo> /app/src/tools/<fichero>.ts"'
+  ```
+
+  Después, ejercita la tool contra la instancia real y comprueba el comportamiento
+  nuevo, no solo que no falle.
+
+- **Las acciones que recrean contenedores pueden agotar el timeout del cliente MCP
+  en la primera llamada** y funcionar en la segunda. No lo interpretes como un fallo
+  de la tool sin reintentar.
 ````
 
 - [ ] **Step 3: Crear el índice de documentación**
@@ -1732,7 +1760,8 @@ Justo debajo del título `# Arcane Docker MCP Server`, antes del primer párrafo
 
 ```markdown
 > **Fork mantenido activamente por [Taiko Solutions](https://taikosolutions.com).**
-> Verificado contra **Arcane v2.7.0** (37/37 rutas válidas). Origen del fork:
+> Verificado contra **Arcane v2.7.0**: las **58** combinaciones método+ruta que usa el
+> cliente existen en el spec de la instancia, sin ausencias. Origen del fork:
 > [`cougz/arcane-mcp-server`](https://github.com/cougz/arcane-mcp-server), inactivo
 > desde marzo de 2026.
 >
@@ -1782,8 +1811,18 @@ Añadir tras la sección `## Local Development Setup`:
 ### Despliegue
 
 Este fork se despliega como contenedor Docker mediante GitOps de Arcane, con
-`autoSync` sobre `main`: **un push a `main` reconstruye y reinicia producción.**
-Todo el trabajo va en ramas y los merges a `main` son deliberados y verificados.
+`autoSync` sobre `main`. El sync escribe los ficheros nuevos en
+`/opt/stacks/arcane-mcp`, pero **no reconstruye la imagen**: como `docker-compose.yml`
+usa `build: .` sin volumen, el código va horneado dentro y un `compose up -d` sin
+`--build` no recoge nada. Desplegar requiere un rebuild explícito:
+
+```bash
+ssh VM-Control 'cd /opt/stacks/arcane-mcp && docker compose up -d --build'
+```
+
+Un `lastSyncStatus: success` **no** significa que el código nuevo esté sirviendo.
+Verifica siempre mirando dentro del contenedor. Todo el trabajo va en ramas y los
+merges a `main` son deliberados y verificados.
 
 Para desplegar en Cloudflare Workers en su lugar, usa `npm run deploy`
 (`wrangler.jsonc`, con binding de servicio VPC hacia Arcane).
@@ -1806,7 +1845,7 @@ Ajusta la cifra de la tabla de la cabecera al número real de tools registradas.
 npm test && npm run type-check
 ```
 
-Esperado: `Tests 89 passed (89)` y type-check limpio.
+Esperado: `Tests 91 passed (91)` y type-check limpio. (La Tarea 6 añadió tests de `VersionInfo`, `arcane_template_create` y `arcane_template_update` a los 88 de partida.)
 
 - [ ] **Step 6: Commit**
 
@@ -1816,7 +1855,8 @@ git commit -m "docs(readme): declarar el fork como mantenido y compatible con Ar
 
 Añade cabecera de fork con compatibilidad verificada (v2.7.0), tabla de
 divergencias respecto a cougz/arcane-mcp-server, comandos de desarrollo
-y verificación, y la advertencia de que main auto-despliega por GitOps."
+y verificación, y la advertencia de que GitOps sincroniza pero no
+reconstruye: desplegar exige un rebuild explícito."
 ```
 
 - [ ] **Step 7: Publicar la rama**
@@ -2190,7 +2230,7 @@ Esperado: árbol limpio y el último commit es el MERGE 3 de la Tarea 8. La rama
 | F1.1 · README de fork mantenido | 8 |
 | F1.2 · PR quirúrgico a `cougz` (`/up`, `/redeploy` y `/pull`) | 9 — incluye además el path roto de `stacks.pull`, declarado explícitamente en el PR |
 | F1.3 · Publicación en GitHub | ✅ ya hecho (2026-08-16), sin tarea |
-| Riesgo · `main` auto-despliega | Constraint global #1; tres merges controlados (Tareas 3, 6, 8) |
+| Riesgo · despliegue de `main` | Constraint global #1 (corregido en ejecución: GitOps sincroniza pero no reconstruye); tres merges controlados (Tareas 3, 6, 8) |
 | Riesgo · Drift de campos antes de construir encima | Tareas 5 y 6, antes de cualquier tool nueva |
 | Riesgo · Sin runner no hay verificación | Tarea 1, primera del plan |
 | Riesgo · El spec live cambia al actualizar Arcane | Tarea 4 (script) + recordatorio de reauditar en la Tarea 7 |
