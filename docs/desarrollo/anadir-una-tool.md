@@ -158,9 +158,26 @@ npm run type-check
 - El merge a `main` es deliberado. GitOps sincroniza los ficheros al host, pero
   **no reconstruye la imagen**: hay que lanzar el rebuild a mano.
 
+- ⚠️ **El orden importa: espera a que GitOps haya sincronizado tu commit ANTES de
+  reconstruir.** El rebuild construye desde `/opt/stacks/arcane-mcp` tal como esté
+  en ese instante. Si lo lanzas antes del sync, obtienes una imagen nueva con
+  código viejo — todo parece correcto y no lo está. Comprueba primero que el
+  commit desplegado es el tuyo:
+
+  ```bash
+  ssh VM-Control 'cd /opt/stacks/arcane-mcp && git log -1 --format=%H 2>/dev/null || stat -c "%y" src/index.ts'
+  ```
+
+  O consulta `lastSyncCommit` con `arcane_gitops_sync_get_status`. El intervalo de
+  sync por defecto es de 5 minutos, así que puede tardar. Solo entonces:
+
   ```bash
   ssh VM-Control 'cd /opt/stacks/arcane-mcp && docker compose up -d --build'
   ```
+
+  Caso real (2026-08-16): un rebuild lanzado a las 09:35 construyó código que
+  GitOps no escribió hasta las 09:56. La imagen era nueva, el contenido no, y el
+  contenedor arrancó sin errores sirviendo la versión anterior.
 
 - Verifica el despliegue **mirando dentro del contenedor**, no el estado del sync.
   Un `lastSyncStatus: success` con la imagen vieja es el modo de fallo silencioso
