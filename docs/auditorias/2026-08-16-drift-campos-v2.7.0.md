@@ -10,6 +10,15 @@ Los *paths* del fork ya estaban validados (37/37 contra v2.7.0). Lo que no lo es
 son los *shapes*: el fallo que degradó a RandomSynergy17/Arcane-MCP-Server fue de
 campos (`names`, contadores, `driver`), no de rutas. Esta auditoría los mide.
 
+La auditoría cubre **14 interfaces de payload**: `Environment`, `Project`,
+`ContainerSummary`, `ImageSummary`, `Volume`, `NetworkSummary`, `NetworkInspect`,
+`Pagination`, `VersionInfo`, `ContainerDetails`, `GitRepository`, `GitOpsSync`,
+`Template` y `VolumeBackup`. Son los tipos que representan **respuestas** de la API
+(lo que Arcane nos devuelve). Quedan fuera deliberadamente los `*Create`/`*Update`
+(p. ej. `ContainerCreateOptions`, `ProjectUpdate`): esos son cuerpos de petición que
+construimos nosotros, no payloads que la API nos entregue, así que no tiene sentido
+compararlos contra un schema de respuesta.
+
 ## Leyenda de estados
 
 | Estado | Significado | Gravedad |
@@ -20,6 +29,7 @@ campos (`names`, contadores, `driver`), no de rutas. Esta auditoría los mide.
 | `OBLIGATORIO-PERO-OPCIONAL` | Declarado sin `?` pese a ser opcional | Media |
 | `FALTA-EN-TS-OPCIONAL` | Campo nuevo opcional del spec no declarado | Baja |
 | `INTERFAZ-AUSENTE` | El tipo se declara inline en vez de como interfaz auditable | Media |
+| `SCHEMA-AUSENTE` | El schema declarado en el `MAP` no existe en el spec | Media |
 
 ## Resultado
 
@@ -93,8 +103,66 @@ Spec: Arcane API 2.7.0 (268 paths)
 | `NetworkInspect` | `NetworkInspect` | `peers` | FALTA-EN-TS-OPCIONAL |
 | `NetworkInspect` | `NetworkInspect` | `services` | FALTA-EN-TS-OPCIONAL |
 | `VersionInfo` | `VersionInfo` | `*` | INTERFAZ-AUSENTE |
+| `ContainerDetails` | `ContainerDetails` | `labels` | OBLIGATORIO-PERO-OPCIONAL |
+| `ContainerDetails` | `ContainerDetails` | `activityId` | FALTA-EN-TS-OPCIONAL |
+| `ContainerDetails` | `ContainerDetails` | `composeInfo` | FALTA-EN-TS-OPCIONAL |
+| `ContainerDetails` | `ContainerDetails` | `iconDarkUrl` | FALTA-EN-TS-OPCIONAL |
+| `ContainerDetails` | `ContainerDetails` | `iconLightUrl` | FALTA-EN-TS-OPCIONAL |
+| `ContainerDetails` | `ContainerDetails` | `redeployDisabled` | FALTA-EN-TS-OPCIONAL |
+| `GitRepository` | `GitopsGitRepository` | `createdAt` | OPCIONAL-PERO-REQUERIDO |
+| `GitRepository` | `GitopsGitRepository` | `updatedAt` | OPCIONAL-PERO-REQUERIDO |
+| `GitRepository` | `GitopsGitRepository` | `sshHostKeyVerification` | FALTA-EN-TS-OPCIONAL |
+| `GitOpsSync` | `GitopsGitOpsSync` | `projectName` | OPCIONAL-PERO-REQUERIDO |
+| `GitOpsSync` | `GitopsGitOpsSync` | `syncInterval` | OPCIONAL-PERO-REQUERIDO |
+| `GitOpsSync` | `GitopsGitOpsSync` | `status` | SOBRA-EN-TS |
+| `GitOpsSync` | `GitopsGitOpsSync` | `createdAt` | OPCIONAL-PERO-REQUERIDO |
+| `GitOpsSync` | `GitopsGitOpsSync` | `updatedAt` | OPCIONAL-PERO-REQUERIDO |
+| `GitOpsSync` | `GitopsGitOpsSync` | `environmentId` | FALTA-EN-TS-REQUERIDO |
+| `GitOpsSync` | `GitopsGitOpsSync` | `lastSyncCommit` | FALTA-EN-TS-OPCIONAL |
+| `GitOpsSync` | `GitopsGitOpsSync` | `lastSyncError` | FALTA-EN-TS-OPCIONAL |
+| `GitOpsSync` | `GitopsGitOpsSync` | `lastSyncStatus` | FALTA-EN-TS-OPCIONAL |
+| `GitOpsSync` | `GitopsGitOpsSync` | `maxSyncBinarySize` | FALTA-EN-TS-REQUERIDO |
+| `GitOpsSync` | `GitopsGitOpsSync` | `maxSyncFiles` | FALTA-EN-TS-REQUERIDO |
+| `GitOpsSync` | `GitopsGitOpsSync` | `maxSyncTotalSize` | FALTA-EN-TS-REQUERIDO |
+| `GitOpsSync` | `GitopsGitOpsSync` | `preDeployEnv` | FALTA-EN-TS-OPCIONAL |
+| `GitOpsSync` | `GitopsGitOpsSync` | `preDeployExtraMounts` | FALTA-EN-TS-OPCIONAL |
+| `GitOpsSync` | `GitopsGitOpsSync` | `preDeployLastRunAt` | FALTA-EN-TS-OPCIONAL |
+| `GitOpsSync` | `GitopsGitOpsSync` | `preDeployLastRunOutput` | FALTA-EN-TS-OPCIONAL |
+| `GitOpsSync` | `GitopsGitOpsSync` | `preDeployLastRunStatus` | FALTA-EN-TS-OPCIONAL |
+| `GitOpsSync` | `GitopsGitOpsSync` | `preDeployNetworkMode` | FALTA-EN-TS-REQUERIDO |
+| `GitOpsSync` | `GitopsGitOpsSync` | `preDeployRunnerImage` | FALTA-EN-TS-OPCIONAL |
+| `GitOpsSync` | `GitopsGitOpsSync` | `preDeployScriptPath` | FALTA-EN-TS-OPCIONAL |
+| `GitOpsSync` | `GitopsGitOpsSync` | `preDeployTimeoutSec` | FALTA-EN-TS-REQUERIDO |
+| `GitOpsSync` | `GitopsGitOpsSync` | `projectId` | FALTA-EN-TS-OPCIONAL |
+| `GitOpsSync` | `GitopsGitOpsSync` | `repository` | FALTA-EN-TS-OPCIONAL |
+| `GitOpsSync` | `GitopsGitOpsSync` | `syncDirectory` | FALTA-EN-TS-REQUERIDO |
+| `GitOpsSync` | `GitopsGitOpsSync` | `syncedFiles` | FALTA-EN-TS-OPCIONAL |
+| `GitOpsSync` | `GitopsGitOpsSync` | `targetType` | FALTA-EN-TS-REQUERIDO |
+| `Template` | `TemplateTemplate` | `description` | OPCIONAL-PERO-REQUERIDO |
+| `Template` | `TemplateTemplate` | `composeContent` | SOBRA-EN-TS |
+| `Template` | `TemplateTemplate` | `category` | SOBRA-EN-TS |
+| `Template` | `TemplateTemplate` | `tags` | SOBRA-EN-TS |
+| `Template` | `TemplateTemplate` | `iconUrl` | SOBRA-EN-TS |
+| `Template` | `TemplateTemplate` | `createdAt` | SOBRA-EN-TS |
+| `Template` | `TemplateTemplate` | `updatedAt` | SOBRA-EN-TS |
+| `Template` | `TemplateTemplate` | `content` | FALTA-EN-TS-REQUERIDO |
+| `Template` | `TemplateTemplate` | `isCustom` | FALTA-EN-TS-REQUERIDO |
+| `Template` | `TemplateTemplate` | `isRemote` | FALTA-EN-TS-REQUERIDO |
+| `Template` | `TemplateTemplate` | `metadata` | FALTA-EN-TS-OPCIONAL |
+| `Template` | `TemplateTemplate` | `registry` | FALTA-EN-TS-OPCIONAL |
+| `Template` | `TemplateTemplate` | `registryId` | FALTA-EN-TS-OPCIONAL |
+| `VolumeBackup` | `VolumeBackup` | `filename` | SOBRA-EN-TS |
+| `VolumeBackup` | `VolumeBackup` | `size` | OPCIONAL-PERO-REQUERIDO |
+| `VolumeBackup` | `VolumeBackup` | `activityId` | FALTA-EN-TS-OPCIONAL |
+| `VolumeBackup` | `VolumeBackup` | `updatedAt` | FALTA-EN-TS-OPCIONAL |
 
-Total: 66 desalineaciones.
+Total: 118 desalineaciones.
+
+Nota: el bug más notable de esta ampliación es `Template`. La interfaz TS declara
+`composeContent`, `category`, `tags`, `iconUrl`, `createdAt` y `updatedAt`, y
+**ninguno de esos campos existe** en `TemplateTemplate`; además le faltan `content`
+(el campo real y obligatorio del schema), `isCustom` e `isRemote`. Cualquier código
+que lea `Template.content` está leyendo `undefined`.
 
 ## Reproducir
 

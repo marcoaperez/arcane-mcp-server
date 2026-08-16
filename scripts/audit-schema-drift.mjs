@@ -22,6 +22,11 @@ const MAP = {
   NetworkInspect: "NetworkInspect",
   Pagination: "BasePaginationResponse",
   VersionInfo: "VersionInfo",
+  ContainerDetails: "ContainerDetails",
+  GitRepository: "GitopsGitRepository",
+  GitOpsSync: "GitopsGitOpsSync",
+  Template: "TemplateTemplate",
+  VolumeBackup: "VolumeBackup",
 };
 
 function tsInterfaceProps(file) {

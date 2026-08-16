@@ -794,6 +794,11 @@ const MAP = {
   NetworkInspect: "NetworkInspect",
   Pagination: "BasePaginationResponse",
   VersionInfo: "VersionInfo",
+  ContainerDetails: "ContainerDetails",
+  GitRepository: "GitopsGitRepository",
+  GitOpsSync: "GitopsGitOpsSync",
+  Template: "TemplateTemplate",
+  VolumeBackup: "VolumeBackup",
 };
 
 function tsInterfaceProps(file) {
@@ -875,7 +880,7 @@ if (process.argv.includes("--json")) {
 node scripts/audit-schema-drift.mjs
 ```
 
-Esperado: una tabla Markdown encabezada por `Spec: Arcane API 2.7.0 (268 paths)`, con del orden de **65 desalineaciones** y `VersionInfo` marcado como `INTERFAZ-AUSENTE`.
+Esperado: una tabla Markdown encabezada por `Spec: Arcane API 2.7.0 (268 paths)`, con del orden de **118 desalineaciones** (55 graves, sin contar `FALTA-EN-TS-OPCIONAL`) y `VersionInfo` marcado como `INTERFAZ-AUSENTE`.
 
 Hallazgos que deben aparecer sí o sí (comprobados al redactar el plan):
 
