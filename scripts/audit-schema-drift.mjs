@@ -32,6 +32,8 @@ const MAP = {
   Activity: "ActivityActivity",
   ActivityDetail: "ActivityDetail",
   ActivityMessage: "ActivityMessage",
+  ActivityStartedBy: "ActivityStartedBy",
+  JobPrerequisite: "JobscheduleJobPrerequisite",
   Event: "EventEvent",
   EventSeverityCounts: "EventSeverityCounts",
   JobStatus: "JobscheduleJobStatus",

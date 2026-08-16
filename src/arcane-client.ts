@@ -680,7 +680,8 @@ export interface SystemPruneRequest {
   buildCache?: SystemPruneResourceOptions;
   containers?: SystemPruneResourceOptions;
   images?: SystemPruneResourceOptions;
-  networks?: { mode: string };
+  networks?: SystemPruneResourceOptions;
+  /** `SystemPruneVolumesOptions` es el unico que NO admite `until` en el spec. */
   volumes?: { mode: string };
 }
 
