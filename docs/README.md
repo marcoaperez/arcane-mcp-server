@@ -31,6 +31,8 @@ enlaza desde aquí.
 - [Spec F2 (2026-08-16)](superpowers/specs/2026-08-16-fork-arcane-mcp-f2-design.md)
   — observabilidad y núcleo del host: 13 tools de activities, events, jobs y system.
   Fija además el criterio de exposición que rige de F2 a F5.
+- [Plan F2 (2026-08-16)](superpowers/plans/2026-08-16-fork-arcane-mcp-f2.md)
+  — 7 tareas con ciclo TDD paso a paso, de los cimientos del cliente al cierre de fase.
 - [Plan F0 + F1 (2026-08-16)](superpowers/plans/2026-08-16-fork-arcane-mcp-f0-f1.md)
 
 ## Operación
