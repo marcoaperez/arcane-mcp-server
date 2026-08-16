@@ -9,6 +9,12 @@ enlaza desde aquí.
   para F2–F5: localizar el endpoint en el spec, tipar, implementar, registrar,
   verificar (unitario + e2e) y publicar.
 
+## Balances de fase
+
+- [F0 (cimientos) + F1 (visibilidad) — 2026-08-16](balances/2026-08-16-f0-f1.md)
+  — qué se entregó, los tres hallazgos que no estaban en el plan, los datos heredados
+  que resultaron falsos, y qué queda pendiente antes de F2.
+
 ## Auditorías
 
 - [Drift de campos vs Arcane v2.7.0 (2026-08-16)](auditorias/2026-08-16-drift-campos-v2.7.0.md)
@@ -29,4 +35,5 @@ enlaza desde aquí.
 | `npm run test:e2e` | Verificación contra la instancia Arcane real |
 | `npm run type-check` | Comprobación de tipos |
 | `npm run update-api-spec` | Refresca `openapi.txt` desde la instancia |
+| `npm run gen-tools-table` | Regenera la tabla de tools del `README.md` desde `src/tools/` (`-- --check` falla si está desactualizada) |
 | `node scripts/audit-schema-drift.mjs` | Audita el drift de campos |
