@@ -493,7 +493,17 @@ describe("MCP Tools", () => {
           success: true,
           data: { activity: { id: "act1", status: "failed" }, messages: [] },
         }),
-        cancel: vi.fn().mockResolvedValue({ success: true, message: "Cancelled" }),
+        cancel: vi.fn().mockResolvedValue({
+          success: true,
+          data: {
+            id: "act1",
+            status: "cancelled",
+            type: "deploy",
+            environmentId: "env1",
+            startedAt: "2026-08-16T10:00:00Z",
+            createdAt: "2026-08-16T10:00:00Z",
+          },
+        }),
       };
       return mockClient;
     };
@@ -529,7 +539,18 @@ describe("MCP Tools", () => {
 
     it("arcane_activity_cancel devuelve isError con success:false", async () => {
       const mockClient = clienteConActivities();
-      mockClient.activities.cancel.mockResolvedValue({ success: false, message: "already finished" });
+      mockClient.activities.cancel.mockResolvedValue({
+        success: false,
+        data: {
+          id: "act1",
+          status: "success",
+          error: "already finished",
+          type: "deploy",
+          environmentId: "env1",
+          startedAt: "2026-08-16T10:00:00Z",
+          createdAt: "2026-08-16T10:00:00Z",
+        },
+      });
       const server = createMockServer();
       registerActivityTools(server as any, mockClient);
 
@@ -538,6 +559,18 @@ describe("MCP Tools", () => {
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("already finished");
+    });
+
+    it("arcane_activity_cancel refleja el estado real de la activity al tener exito", async () => {
+      const mockClient = clienteConActivities();
+      const server = createMockServer();
+      registerActivityTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_activity_cancel");
+      const result = await handler({ environmentId: "env1", activityId: "act1" });
+
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0].text).toContain("cancelled");
     });
   });
 

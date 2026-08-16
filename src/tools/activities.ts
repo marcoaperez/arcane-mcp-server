@@ -67,11 +67,14 @@ export function registerActivityTools(server: McpServer, client: ArcaneClient): 
         const result = await client.activities.cancel(envId, activityId, requestedBy);
         if (result.success === false) {
           return {
-            content: [{ type: "text", text: `Error: ${result.message || "Cancel failed"}` }],
+            content: [{ type: "text", text: `Error: ${result.data?.error || "Cancel failed"}` }],
             isError: true,
           };
         }
-        return { content: [{ type: "text", text: result.message || "Activity cancelled" }] };
+        // El mensaje sale del estado real de la activity, no de un `message` inexistente.
+        return {
+          content: [{ type: "text", text: `Activity ${activityId} is now '${result.data.status}'` }],
+        };
       } catch (err) {
         return {
           content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],

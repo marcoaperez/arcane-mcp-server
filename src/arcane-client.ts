@@ -1054,11 +1054,19 @@ class ActivitiesMethods {
     );
   }
 
-  async cancel(envId: string, activityId: string, requestedBy?: string): Promise<ActionResponse> {
+  /**
+   * OJO: NO devuelve ActionResponse. El spec declara BaseApiResponseActivityActivity,
+   * es decir `{success, data: Activity}`: no hay campo `message` en ningun nivel.
+   */
+  async cancel(
+    envId: string,
+    activityId: string,
+    requestedBy?: string
+  ): Promise<{ success: boolean; data: Activity }> {
     const params = new URLSearchParams();
     if (requestedBy) params.set("requestedBy", requestedBy);
     const query = params.toString();
-    return this.client.request<ActionResponse>(
+    return this.client.request<{ success: boolean; data: Activity }>(
       "POST",
       `/environments/${envId}/activities/${activityId}/cancel${query ? `?${query}` : ""}`
     );

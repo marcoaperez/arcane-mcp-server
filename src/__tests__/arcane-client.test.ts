@@ -935,7 +935,17 @@ describe("ArcaneClient", () => {
     it(".cancel(envId, activityId) - POST /environments/{envId}/activities/{activityId}/cancel", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: async () => ({ success: true, message: "Cancelled" }),
+        json: async () => ({
+          success: true,
+          data: {
+            id: "act1",
+            status: "cancelled",
+            type: "deploy",
+            environmentId: "env1",
+            startedAt: "2026-08-16T10:00:00Z",
+            createdAt: "2026-08-16T10:00:00Z",
+          },
+        }),
       } as Response);
 
       await client.activities.cancel("env123", "act1");
