@@ -631,18 +631,39 @@ function describe(spec) {
   };
 }
 
-const previous = existsSync(OUTPUT)
-  ? describe(JSON.parse(readFileSync(OUTPUT, "utf8")))
-  : null;
+let previous = null;
+if (existsSync(OUTPUT)) {
+  try {
+    previous = describe(JSON.parse(readFileSync(OUTPUT, "utf8")));
+  } catch (err) {
+    console.warn(
+      `AVISO: no se pudo leer el ${OUTPUT} existente (${err.message}). Se continúa igualmente porque se va a sobreescribir.`,
+    );
+  }
+}
 
 console.log(`Descargando ${url} ...`);
-const response = await fetch(url);
+let response;
+try {
+  response = await fetch(url);
+} catch (err) {
+  console.error(`ERROR: no se pudo conectar con ${url} (${err.message}).`);
+  process.exit(1);
+}
+
 if (!response.ok) {
   console.error(`ERROR: ${response.status} ${response.statusText}`);
   process.exit(1);
 }
 
-const spec = await response.json();
+let spec;
+try {
+  spec = await response.json();
+} catch (err) {
+  console.error(`ERROR: la respuesta de ${url} no es JSON válido (${err.message}).`);
+  process.exit(1);
+}
+
 if (!spec?.info?.version || !spec?.paths) {
   console.error("ERROR: la respuesta no parece un spec OpenAPI (falta info.version o paths).");
   process.exit(1);
@@ -680,19 +701,21 @@ Esperado:
 ```
 Descargando http://192.168.180.210:3552/api/openapi.json ...
 Antes:   v1.14.1 — 140 paths, 324 schemas
-Ahora:   v2.7.0 — 268 paths, ... schemas
+Ahora:   2.7.0 — 268 paths, 628 schemas
 Escrito en openapi.txt.
 ```
 
-Si `Ahora` no dice `v2.7.0`, **para y avisa**: la instancia ha cambiado de versión y las cifras de este plan dejan de aplicar.
+Nota de formato: el spec v1 declaraba la versión con prefijo (`v1.14.1`); el v2 la declara **sin** prefijo (`2.7.0`). No es un error. Lo que confirma la identidad del spec es el número de paths.
+
+Si `Ahora` no dice `2.7.0` **con 268 paths**, **para y avisa**: la instancia ha cambiado de versión y las cifras de este plan dejan de aplicar.
 
 - [ ] **Step 5: Verificar el fichero escrito de forma independiente**
 
 ```bash
-node -e "const s=require('./openapi.txt'); console.log(s.info.version, Object.keys(s.paths).length)"
+node -e "const s=JSON.parse(require('fs').readFileSync('openapi.txt','utf8')); console.log(s.info.version, Object.keys(s.paths).length)"
 ```
 
-Esperado: `v2.7.0 268`.
+Esperado: `2.7.0 268`.
 
 - [ ] **Step 6: Confirmar que nada del código se rompe**
 
@@ -771,6 +794,11 @@ const MAP = {
   NetworkInspect: "NetworkInspect",
   Pagination: "BasePaginationResponse",
   VersionInfo: "VersionInfo",
+  ContainerDetails: "ContainerDetails",
+  GitRepository: "GitopsGitRepository",
+  GitOpsSync: "GitopsGitOpsSync",
+  Template: "TemplateTemplate",
+  VolumeBackup: "VolumeBackup",
 };
 
 function tsInterfaceProps(file) {
@@ -852,7 +880,7 @@ if (process.argv.includes("--json")) {
 node scripts/audit-schema-drift.mjs
 ```
 
-Esperado: una tabla Markdown encabezada por `Spec: Arcane API v2.7.0 (268 paths)`, con del orden de **65 desalineaciones** y `VersionInfo` marcado como `INTERFAZ-AUSENTE`.
+Esperado: una tabla Markdown encabezada por `Spec: Arcane API 2.7.0 (268 paths)`, con del orden de **118 desalineaciones** (55 graves, sin contar `FALTA-EN-TS-OPCIONAL`) y `VersionInfo` marcado como `INTERFAZ-AUSENTE`.
 
 Hallazgos que deben aparecer sí o sí (comprobados al redactar el plan):
 
@@ -874,7 +902,7 @@ Si `INTERFAZ-AUSENTE` no aparece para `VersionInfo`, es que ya existe la interfa
 Es el campo concreto que rompió a RS (`container_list` devolvía nombres `undefined`) y del que depende `resolveContainerId` en [`src/tools/resolve.ts:82`](../../../src/tools/resolve.ts).
 
 ```bash
-node -e "const s=require('./openapi.txt'); const c=s.components.schemas.ContainerSummary; console.log('names en props:', 'names' in c.properties, '| requerido:', c.required.includes('names'))"
+node -e "const s=JSON.parse(require('fs').readFileSync('openapi.txt','utf8')); const c=s.components.schemas.ContainerSummary; console.log('names en props:', 'names' in c.properties, '| requerido:', c.required.includes('names'))"
 ```
 
 Esperado: `names en props: true | requerido: true`. Si diera `false`, `arcane_container_*` con `containerName` está roto en producción y hay que escalarlo antes de seguir.
@@ -950,8 +978,22 @@ degradó a RS fue de campos, no de rutas."
 
 **Criterio de alcance:** se corrigen **todos** los hallazgos salvo los `FALTA-EN-TS-OPCIONAL` que pertenecen a dominios de F2–F5 (`vulnerabilityScan`, `updateInfo`, `projectFiles`, `includeFiles`, `runtimeServices`, `services`, `directoryFiles`). Añadirlos ahora sería declarar tipos que ninguna tool consume: eso es F2–F5. Todo lo que se deja fuera se anota en el informe.
 
+> **Alcance ampliado (decisión del usuario, 2026-08-16).** La auditoría de la Tarea 5 se
+> amplió de 9 a **14 interfaces de payload**: **118 hallazgos, 55 graves** (todo lo que no
+> sea `FALTA-EN-TS-OPCIONAL`), frente a los 66/27 que preveía el plan original. Las cinco
+> interfaces añadidas — `ContainerDetails`, `GitRepository`, `GitOpsSync`, `Template`,
+> `VolumeBackup` — **también se corrigen en esta tarea**.
+>
+> El caso más grave es `Template`, y es un bug real ya confirmado contra el spec:
+> `GET /templates` devuelve `TemplateTemplate`, pero nuestra interfaz declara
+> `composeContent`, `category`, `tags`, `iconUrl`, `createdAt` y `updatedAt` — **ninguno
+> existe** — y le faltan `content` (el campo real, obligatorio), `isCustom` e `isRemote`.
+> Las tools `arcane_template_*` leen `undefined` donde creen tener datos. Es la misma
+> familia de fallo que degradó al proyecto alternativo que se descartó.
+
 **Files:**
-- Modify: `src/arcane-client.ts` (interfaces `Environment`, `Project`, `ContainerSummary`, `ImageSummary`, `Volume`, `NetworkSummary`, `NetworkInspect`; extraer `VersionInfo`)
+- Modify: `src/arcane-client.ts` (interfaces `Environment`, `Project`, `ContainerSummary`, `ImageSummary`, `Volume`, `NetworkSummary`, `NetworkInspect`, `ContainerDetails`, `GitRepository`, `GitOpsSync`, `Template`, `VolumeBackup`; extraer `VersionInfo`)
+- Modify: `src/tools/templates.ts` (los handlers que leen o envían `composeContent`)
 - Modify: `src/__tests__/arcane-client.test.ts` (test de `VersionInfo`)
 - Modify: `docs/auditorias/2026-08-16-drift-campos-v2.7.0.md` (sección de resolución)
 
@@ -1137,6 +1179,136 @@ Aplica exactamente lo que diga el informe para estas cuatro interfaces:
 - Añade los `FALTA-EN-TS-OPCIONAL` que **no** pertenezcan a dominios de F2–F5 — típicamente `iconDarkUrl?: string`, `iconLightUrl?: string`, `redeployDisabled?: boolean`, `relativePath?: string`, `overrideContent?: string`, `overrideFileName?: string`, `isDiscovered?: boolean`.
 - **No** añadas `updateInfo`, `vulnerabilityScan`, `usedBy`, `projectFiles`, `includeFiles`, `runtimeServices`, `services` ni `directoryFiles`: son dominios de F2–F5.
 
+- [ ] **Step 8b: Corregir `Template` — el bug más grave, y su onda expansiva**
+
+Esta es la única corrección de esta tarea que cambia **comportamiento**, no solo tipos: la interfaz actual no describe el mismo recurso que devuelve la API.
+
+Sustituye `Template` por lo que declara `TemplateTemplate` en el spec:
+
+```ts
+export interface Template {
+  id: string;
+  name: string;
+  description: string;
+  content: string;
+  isCustom: boolean;
+  isRemote: boolean;
+  envContent?: string;
+  metadata?: any;
+  registry?: any;
+  registryId?: string;
+}
+```
+
+Desaparecen `composeContent`, `category`, `tags`, `iconUrl`, `createdAt` y `updatedAt`: **ninguno existe** en v2.7.0. El contenido del compose vive en `content`.
+
+`TemplateCreate` y `TemplateUpdate` también están mal. El spec declara `TemplateCreateRequest` y `TemplateUpdateRequest` con **los mismos cuatro campos, todos obligatorios**:
+
+```ts
+export interface TemplateCreate {
+  name: string;
+  description: string;
+  content: string;
+  envContent: string;
+}
+
+export interface TemplateUpdate {
+  name: string;
+  description: string;
+  content: string;
+  envContent: string;
+}
+```
+
+Esto rompe la firma de las tools: `arcane_template_create` envía hoy `composeContent` y trata `description` y `envContent` como opcionales, así que **no puede funcionar contra v2.7.0**. En [`src/tools/templates.ts`](../../../src/tools/templates.ts) hay que:
+
+- Renombrar el parámetro zod `composeContent` → `content` en `arcane_template_create` (línea ~54) y en `arcane_template_update` (línea ~81), actualizando su `.describe()`.
+- Hacer `description` y `envContent` obligatorios (`z.string()`, sin `.optional()`) en ambas tools, porque el spec los exige.
+- **Eliminar** los parámetros `category` y `tags` (líneas ~57-58 y ~84-85): no existen en la API y hoy se envían al vacío.
+- Actualizar la tabla de tools del `README.md` si menciona esos parámetros.
+
+Escribe primero un test que falle en `src/__tests__/tools.test.ts` comprobando que `arcane_template_create` envía `content` y no `composeContent`, y solo después cambia el código.
+
+- [ ] **Step 8c: Corregir `ContainerDetails`, `GitRepository`, `GitOpsSync` y `VolumeBackup`**
+
+Las cuatro interfaces restantes de la ampliación. Estos son cambios de tipos, sin onda expansiva en las tools.
+
+```ts
+export interface ContainerDetails {
+  id: string;
+  name: string;
+  image: string;
+  imageId: string;
+  created: string;
+  state: any;
+  config: any;
+  hostConfig: any;
+  networkSettings: any;
+  ports: any[] | null;
+  mounts: any[] | null;
+  labels?: Record<string, string>;
+  activityId?: string;
+  composeInfo?: any;
+  iconDarkUrl?: string;
+  iconLightUrl?: string;
+  redeployDisabled?: boolean;
+}
+
+export interface GitRepository {
+  id: string;
+  name: string;
+  url: string;
+  authType: string;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  description?: string;
+  sshHostKeyVerification?: string;
+  username?: string;
+}
+
+export interface GitOpsSync {
+  id: string;
+  name: string;
+  environmentId: string;
+  repositoryId: string;
+  projectName: string;
+  branch: string;
+  composePath: string;
+  targetType: string;
+  autoSync: boolean;
+  syncInterval: number;
+  syncDirectory: boolean;
+  maxSyncFiles: number;
+  maxSyncBinarySize: number;
+  maxSyncTotalSize: number;
+  preDeployNetworkMode: string;
+  preDeployTimeoutSec: number;
+  createdAt: string;
+  updatedAt: string;
+  lastSyncAt?: string;
+  lastSyncCommit?: string;
+  lastSyncError?: string;
+  lastSyncStatus?: string;
+  projectId?: string;
+  repository?: any;
+  syncedFiles?: string;
+}
+
+export interface VolumeBackup {
+  id: string;
+  volumeName: string;
+  size: number;
+  createdAt: string;
+  activityId?: string;
+  updatedAt?: string;
+}
+```
+
+Notas sobre lo que **desaparece**: `GitOpsSync.status` no existe (el estado vive en `lastSyncStatus`); `VolumeBackup.filename` no existe. Los campos `preDeploy*` restantes (`preDeployEnv`, `preDeployExtraMounts`, `preDeployLastRun*`, `preDeployRunnerImage`, `preDeployScriptPath`) son `FALTA-EN-TS-OPCIONAL` de un dominio que ninguna tool consume: **no los añadas**, anótalos como diferidos.
+
+Si el type-check falla en `src/tools/gitops-syncs.ts` o `src/tools/volume-backups.ts` porque un handler leía un campo que ya no existe, **arregla el handler**: ese fallo es el bug que buscábamos.
+
 - [ ] **Step 9: Verificar que la auditoría ya solo reporta lo diferido**
 
 ```bash
@@ -1160,9 +1332,9 @@ Esperado: `graves restantes: 0`.
 npm test && npm run type-check
 ```
 
-Esperado: `Tests 89 passed (89)` y type-check limpio.
+Esperado: **90 tests en verde** (88 de partida + el de `VersionInfo` del Step 1 + el de `arcane_template_create` del Step 8b) y type-check limpio. Si añadiste más tests de los previstos, la cifra sube — lo que no puede pasar es que baje o que alguno falle.
 
-Si el type-check falla en `src/tools/*.ts`, es porque algún handler leía un campo que ya no existe (p. ej. `network.internal`). **Eso es exactamente el bug que buscábamos**: arregla el handler, no revivas el campo.
+Si el type-check falla en `src/tools/*.ts`, es porque algún handler leía un campo que ya no existe (p. ej. `network.internal`, `template.composeContent`, `sync.status`). **Eso es exactamente el bug que buscábamos**: arregla el handler, no revivas el campo.
 
 - [ ] **Step 11: Verificar los shapes corregidos contra la instancia real**
 
@@ -1200,6 +1372,13 @@ Corregidos en `src/arcane-client.ts` todos los hallazgos de gravedad alta y medi
 - `Environment`, `Project`, `ContainerSummary`, `ImageSummary`: ajustada la opcionalidad
   y añadidos los campos obligatorios ausentes.
 - `VersionInfo`: extraída como interfaz exportada (antes era un tipo inline no auditable).
+- `Template`, `TemplateCreate`, `TemplateUpdate`: reescritas contra `TemplateTemplate` /
+  `TemplateCreateRequest` / `TemplateUpdateRequest`. Eliminados `composeContent`,
+  `category`, `tags`, `iconUrl`, `createdAt` y `updatedAt` (no existen en v2.7.0);
+  el compose vive en `content`. **Único cambio de comportamiento de la tarea**:
+  `arcane_template_create` y `arcane_template_update` no podían funcionar contra v2.7.0.
+- `ContainerDetails`, `GitRepository`, `GitOpsSync`, `VolumeBackup`: alineadas. Eliminados
+  `GitOpsSync.status` (el estado vive en `lastSyncStatus`) y `VolumeBackup.filename`.
 
 ### Diferido a F2–F5 (intencionadamente)
 
@@ -1213,6 +1392,7 @@ porque ninguna tool los consume todavía:
 | `ImageSummary.usedBy` | F3 |
 | `ProjectDetails.projectFiles`, `includeFiles`, `directoryFiles` | F5 — build |
 | `ProjectDetails.runtimeServices`, `services` | F2 — system |
+| `GitOpsSync.preDeployEnv`, `preDeployExtraMounts`, `preDeployLastRun*`, `preDeployRunnerImage`, `preDeployScriptPath` | dominio pre-deploy de GitOps, sin tool que lo consuma |
 
 Al abordar cada fase, volver a ejecutar `node scripts/audit-schema-drift.mjs` y
 declarar los campos correspondientes.
@@ -1330,13 +1510,13 @@ node scripts/audit-schema-drift.mjs
 `openapi.txt` es la fuente de verdad, no el código de otros forks.
 
 ```bash
-node -e "const s=require('./openapi.txt'); console.log(Object.keys(s.paths).filter(p=>p.includes('<dominio>')))"
+node -e "const s=JSON.parse(require('fs').readFileSync('openapi.txt','utf8')); console.log(Object.keys(s.paths).filter(p=>p.includes('<dominio>')))"
 ```
 
 Para ver el schema de respuesta de un path concreto:
 
 ```bash
-node -e "const s=require('./openapi.txt'); console.log(JSON.stringify(s.paths['<path>'], null, 2))"
+node -e "const s=JSON.parse(require('fs').readFileSync('openapi.txt','utf8')); console.log(JSON.stringify(s.paths['<path>'], null, 2))"
 ```
 
 **Detección de endpoints NDJSON:** si la respuesta `200` declara `content` vacío

@@ -7,12 +7,24 @@ export class ArcaneApiError extends Error {
 
 export interface Environment {
   id: string;
-  name: string;
+  name?: string;
   apiUrl: string;
   status: string;
   enabled: boolean;
   isEdge: boolean;
   apiKey?: string;
+  connected?: boolean;
+  connectedAt?: string;
+  edgeAgentInstance?: string;
+  edgeCapabilities?: any;
+  edgeMTLSCertificate?: string;
+  edgeSecurityMode?: string;
+  edgeSessionId?: string;
+  edgeTransport?: string;
+  lastEdgeTransport?: string;
+  lastHeartbeat?: string;
+  lastPollAt?: string;
+  lastSeen?: string;
 }
 
 export interface EnvironmentCreate {
@@ -43,15 +55,28 @@ export interface Project {
   runningCount: number;
   createdAt: string;
   updatedAt: string;
+  isArchived: boolean;
   composeContent?: string;
   envContent?: string;
   dirName?: string;
   gitRepositoryURL?: string;
   gitOpsManagedBy?: string;
-  iconUrl?: string;
   lastSyncCommit?: string;
   statusReason?: string;
   urls?: string[] | null;
+  activityId?: string;
+  archivedAt?: string;
+  composeFileName?: string;
+  fileTreeRevision?: string;
+  fileTreeTruncated?: boolean;
+  hasBuildDirective?: boolean;
+  iconDarkUrl?: string;
+  iconLightUrl?: string;
+  isDiscovered?: boolean;
+  overrideContent?: string;
+  overrideFileName?: string;
+  redeployDisabled?: boolean;
+  relativePath?: string;
 }
 
 export interface ProjectCreate {
@@ -81,6 +106,9 @@ export interface ContainerSummary {
   networkSettings: any;
   mounts: any[] | null;
   updateInfo?: any;
+  iconDarkUrl?: string;
+  iconLightUrl?: string;
+  redeployDisabled?: boolean;
 }
 
 export interface ContainerDetails {
@@ -95,7 +123,12 @@ export interface ContainerDetails {
   networkSettings: any;
   ports: any[] | null;
   mounts: any[] | null;
-  labels: Record<string, string>;
+  labels?: Record<string, string>;
+  activityId?: string;
+  composeInfo?: any;
+  iconDarkUrl?: string;
+  iconLightUrl?: string;
+  redeployDisabled?: boolean;
 }
 
 export interface ImageSummary {
@@ -122,12 +155,19 @@ export interface ImagePruneReport {
 }
 
 export interface Volume {
+  id: string;
   name: string;
   driver: string;
   mountpoint: string;
-  createdAt?: string;
-  size?: number;
+  scope: string;
+  createdAt: string;
+  size: number;
+  inUse: boolean;
+  containers: string[] | null;
+  labels: Record<string, string>;
+  options: Record<string, string>;
   usageData?: any;
+  activityId?: string;
 }
 
 export interface VolumePruneReport {
@@ -140,11 +180,11 @@ export interface NetworkSummary {
   name: string;
   driver: string;
   scope: string;
-  created?: string;
-  internal: boolean;
-  attachable: boolean;
-  ingress: boolean;
-  ipam?: any;
+  created: string;
+  inUse: boolean;
+  isDefault: boolean;
+  labels: Record<string, string>;
+  options: Record<string, string>;
 }
 
 export interface NetworkInspect {
@@ -152,14 +192,21 @@ export interface NetworkInspect {
   name: string;
   driver: string;
   scope: string;
+  created: string;
   internal: boolean;
   attachable: boolean;
   ingress: boolean;
+  configOnly: boolean;
+  configFrom: any;
+  enableIPv4: boolean;
+  enableIPv6: boolean;
   ipam: any;
   containers: any;
+  containersList: any;
   options: any;
   labels: Record<string, string>;
-  created?: string;
+  peers?: any;
+  services?: any;
 }
 
 export interface NetworkPruneReport {
@@ -169,32 +216,28 @@ export interface NetworkPruneReport {
 export interface Template {
   id: string;
   name: string;
-  description?: string;
-  composeContent?: string;
+  description: string;
+  content: string;
+  isCustom: boolean;
+  isRemote: boolean;
   envContent?: string;
-  category?: string;
-  tags?: string[];
-  iconUrl?: string;
-  createdAt?: string;
-  updatedAt?: string;
+  metadata?: any;
+  registry?: any;
+  registryId?: string;
 }
 
 export interface TemplateCreate {
   name: string;
-  composeContent: string;
-  envContent?: string;
-  description?: string;
-  category?: string;
-  tags?: string[];
+  description: string;
+  content: string;
+  envContent: string;
 }
 
 export interface TemplateUpdate {
-  name?: string;
-  composeContent?: string;
-  envContent?: string;
-  description?: string;
-  category?: string;
-  tags?: string[];
+  name: string;
+  description: string;
+  content: string;
+  envContent: string;
 }
 
 export interface Pagination {
@@ -214,6 +257,29 @@ export interface PaginatedResponse<T> {
 export interface ActionResponse {
   success: boolean;
   message: string;
+}
+
+/**
+ * Respuesta de GET /app-version. Endpoint público: no requiere API key.
+ *
+ * `nodeVersion` y `svelteKitVersion` no estaban en el código propuesto por el brief
+ * de la Tarea 6, pero `openapi.txt` (fuente de verdad) los marca `required` en
+ * `VersionInfo` — se añaden aquí para que la interfaz quede alineada de verdad.
+ * Ver la sección de discrepancias del informe de la tarea.
+ */
+export interface VersionInfo {
+  currentVersion: string;
+  displayVersion: string;
+  goVersion: string;
+  nodeVersion: string;
+  svelteKitVersion: string;
+  revision: string;
+  shortRevision: string;
+  isSemverVersion: boolean;
+  updateAvailable: boolean;
+  buildTime?: string;
+  newestVersion?: string;
+  releaseUrl?: string;
 }
 
 /**
@@ -279,11 +345,12 @@ export interface GitRepository {
   name: string;
   url: string;
   authType: string;
-  description?: string;
   enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  description?: string;
+  sshHostKeyVerification?: string;
   username?: string;
-  createdAt?: string;
-  updatedAt?: string;
 }
 
 export interface GitRepositoryCreate {
@@ -326,16 +393,29 @@ export interface GitFileNode {
 export interface GitOpsSync {
   id: string;
   name: string;
+  environmentId: string;
   repositoryId: string;
+  projectName: string;
   branch: string;
   composePath: string;
-  projectName?: string;
+  targetType: string;
   autoSync: boolean;
-  syncInterval?: number;
+  syncInterval: number;
+  syncDirectory: boolean;
+  maxSyncFiles: number;
+  maxSyncBinarySize: number;
+  maxSyncTotalSize: number;
+  preDeployNetworkMode: string;
+  preDeployTimeoutSec: number;
+  createdAt: string;
+  updatedAt: string;
   lastSyncAt?: string;
-  status?: string;
-  createdAt?: string;
-  updatedAt?: string;
+  lastSyncCommit?: string;
+  lastSyncError?: string;
+  lastSyncStatus?: string;
+  projectId?: string;
+  repository?: any;
+  syncedFiles?: string;
 }
 
 export interface GitOpsSyncCreate {
@@ -369,9 +449,10 @@ export interface GitOpsSyncStatus {
 export interface VolumeBackup {
   id: string;
   volumeName: string;
-  filename: string;
-  size?: number;
+  size: number;
   createdAt: string;
+  activityId?: string;
+  updatedAt?: string;
 }
 
 export interface VolumeFileNode {
@@ -629,19 +710,8 @@ class TemplatesMethods {
 class SystemMethods {
   constructor(private client: ArcaneClient) {}
 
-  async version(): Promise<{
-    currentVersion: string;
-    displayVersion: string;
-    goVersion: string;
-    buildTime?: string;
-    revision: string;
-    shortRevision: string;
-    isSemverVersion: boolean;
-    updateAvailable: boolean;
-    newestVersion?: string;
-    releaseUrl?: string;
-  }> {
-    return this.client.request("GET", "/app-version");
+  async version(): Promise<VersionInfo> {
+    return this.client.request<VersionInfo>("GET", "/app-version");
   }
 }
 

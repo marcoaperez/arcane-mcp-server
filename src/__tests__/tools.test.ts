@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ArcaneApiError } from "../arcane-client";
 import type { ArcaneClient, ListOptions } from "../arcane-client";
@@ -451,6 +452,91 @@ describe("MCP Tools", () => {
 
       expect(mockClient.templates.list).toHaveBeenCalledWith({ search: "wordpress", limit: 50 });
       expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
+    });
+
+    it("arcane_template_create envía content (no composeContent) y exige description/envContent, sin category ni tags", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+
+      registerTemplateTools(server as any, mockClient);
+
+      const call = (server.tool as any).mock.calls.find((c: any[]) => c[0] === "arcane_template_create");
+      const schemaShape = call[2];
+
+      // v2.7.0 exige name, description, content y envContent, todos obligatorios.
+      const schema = z.object(schemaShape);
+      const parsed = schema.parse({
+        name: "wordpress",
+        description: "WordPress stack",
+        content: "version: '3'\nservices:\n  wordpress:\n    image: wordpress",
+        envContent: "WORDPRESS_DB_HOST=db",
+      });
+      expect(parsed).toMatchObject({ content: expect.any(String) });
+
+      // composeContent, category y tags no existen en TemplateCreateRequest v2.7.0.
+      expect(schemaShape.composeContent).toBeUndefined();
+      expect(schemaShape.category).toBeUndefined();
+      expect(schemaShape.tags).toBeUndefined();
+
+      (mockClient.templates.create as any).mockResolvedValue({
+        success: true,
+        data: { id: "t1", name: "wordpress", description: "WordPress stack", content: "...", isCustom: true, isRemote: false },
+      });
+
+      const handler = server.getHandler("arcane_template_create");
+      await handler(parsed);
+
+      const sentDto = (mockClient.templates.create as any).mock.calls[0][0];
+      expect(sentDto).toHaveProperty("content");
+      expect(sentDto).not.toHaveProperty("composeContent");
+    });
+
+    it("arcane_template_update envía content (no composeContent) y exige name/description/content/envContent, sin category ni tags", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+
+      registerTemplateTools(server as any, mockClient);
+
+      const call = (server.tool as any).mock.calls.find((c: any[]) => c[0] === "arcane_template_update");
+      const schemaShape = call[2];
+
+      // v2.7.0 exige name, description, content y envContent, todos obligatorios:
+      // PUT /templates/{id} reemplaza el template completo, no lo parchea.
+      const schema = z.object(schemaShape);
+      const validArgs = {
+        templateId: "t1",
+        name: "wordpress",
+        description: "WordPress stack",
+        content: "version: '3'\nservices:\n  wordpress:\n    image: wordpress",
+        envContent: "WORDPRESS_DB_HOST=db",
+      };
+      const parsed = schema.parse(validArgs);
+      expect(parsed).toMatchObject({ content: expect.any(String) });
+
+      // content, description y envContent son obligatorios: omitir cualquiera debe romper el parse.
+      const { content, ...withoutContent } = validArgs;
+      expect(() => schema.parse(withoutContent)).toThrow();
+      const { description, ...withoutDescription } = validArgs;
+      expect(() => schema.parse(withoutDescription)).toThrow();
+      const { envContent, ...withoutEnvContent } = validArgs;
+      expect(() => schema.parse(withoutEnvContent)).toThrow();
+
+      // composeContent, category y tags no existen en TemplateUpdateRequest v2.7.0.
+      expect(schemaShape.composeContent).toBeUndefined();
+      expect(schemaShape.category).toBeUndefined();
+      expect(schemaShape.tags).toBeUndefined();
+
+      (mockClient.templates.update as any).mockResolvedValue({
+        success: true,
+        data: { id: "t1", name: "wordpress", description: "WordPress stack", content: "...", isCustom: true, isRemote: false },
+      });
+
+      const handler = server.getHandler("arcane_template_update");
+      await handler(parsed);
+
+      const sentDto = (mockClient.templates.update as any).mock.calls[0][1];
+      expect(sentDto).toHaveProperty("content");
+      expect(sentDto).not.toHaveProperty("composeContent");
     });
   });
 

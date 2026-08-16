@@ -10,7 +10,8 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "vitest run --config vitest.e2e.config.ts"
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "update-api-spec": "node scripts/update-api-spec.mjs"
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "^0.2.3",

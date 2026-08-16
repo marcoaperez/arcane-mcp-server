@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { ArcaneClient, ArcaneApiError } from "../arcane-client";
+import { ArcaneClient, ArcaneApiError, type VersionInfo } from "../arcane-client";
 
 describe("ArcaneClient", () => {
   let client: ArcaneClient;
@@ -736,7 +736,7 @@ describe("ArcaneClient", () => {
         json: async () => ({ success: true, data: { id: "tpl1", name: "My Template" } }),
       } as Response);
 
-      const dto = { name: "My Template", composeContent: "version: '3'" };
+      const dto = { name: "My Template", description: "A template", content: "version: '3'", envContent: "" };
       await client.templates.create(dto);
 
       expect(mockFetch).toHaveBeenCalledWith(
@@ -754,7 +754,7 @@ describe("ArcaneClient", () => {
         json: async () => ({ success: true, data: { id: "tpl1", name: "Updated" } }),
       } as Response);
 
-      const dto = { name: "Updated" };
+      const dto = { name: "Updated", description: "Updated template", content: "version: '3'", envContent: "" };
       await client.templates.update("tpl1", dto);
 
       expect(mockFetch).toHaveBeenCalledWith(
@@ -794,6 +794,28 @@ describe("ArcaneClient", () => {
         "http://localhost:3552/api/app-version",
         expect.objectContaining({ method: "GET" })
       );
+    });
+
+    it(".version() devuelve un VersionInfo tipado con currentVersion", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          currentVersion: "v2.7.0",
+          displayVersion: "v2.7.0",
+          goVersion: "go1.26.5",
+          nodeVersion: "v22.11.0",
+          svelteKitVersion: "2.9.0",
+          revision: "a4a84fe5",
+          shortRevision: "a4a84fe5",
+          isSemverVersion: true,
+          updateAvailable: true,
+        }),
+      } as Response);
+
+      const info: VersionInfo = await client.system.version();
+
+      expect(info.currentVersion).toBe("v2.7.0");
+      expect(info.updateAvailable).toBe(true);
     });
   });
 });
