@@ -1,7 +1,8 @@
 # Arcane Docker MCP Server
 
 > **Fork mantenido activamente por [Taiko Solutions](https://taikosolutions.com).**
-> Verificado contra **Arcane v2.7.0** (37/37 rutas válidas). Origen del fork:
+> Verificado contra **Arcane v2.7.0**: las **58** combinaciones método+ruta que usa el
+> cliente existen en el spec de la instancia, sin ausencias. Origen del fork:
 > [`cougz/arcane-mcp-server`](https://github.com/cougz/arcane-mcp-server), inactivo
 > desde marzo de 2026.
 >
