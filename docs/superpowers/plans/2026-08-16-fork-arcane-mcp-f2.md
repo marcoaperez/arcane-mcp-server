@@ -1717,23 +1717,28 @@ describe("observabilidad (e2e, Arcane 2.8.0)", () => {
   it("activities.get resuelve un activityId real y trae sus mensajes", async () => {
     const lista = await client.activities.list(envId, { limit: 1 });
     const primera = (lista.data ?? [])[0];
-    if (!primera) return; // instancia sin actividad registrada
+    // Sin datos el test falla, no se salta: un e2e verde tiene que significar
+    // que la tool funciona, no que no habia nada que probar.
+    expect(primera).toBeDefined();
 
     const detalle = await client.activities.get(envId, primera.id);
     expect(detalle.data.activity.id).toBe(primera.id);
     expect(detalle.data).toHaveProperty("messages");
   });
 
-  it("activities.cancel sobre una activity ya terminada no lanza", async () => {
-    // Se toma una activity terminada: cancelarla es un no-op controlado.
+  it("activities.cancel sobre una activity terminada devuelve un ActionResponse", async () => {
+    // Sujeto: una activity ya terminada, donde cancelar es un no-op controlado.
     // Cancelar una en curso no es determinista (terminan en segundos), asi que
-    // aqui se verifica el enrutado y el manejo de la respuesta, y las dos ramas
-    // (exito y success:false) quedan cubiertas por el test unitario.
+    // lo que se verifica aqui es que la ruta EXISTE y responde con la forma
+    // esperada: si el endpoint no existiera, request() lanzaria ArcaneApiError.
+    // Las dos ramas de veredicto (exito y success:false) las cubre el unitario.
     const lista = await client.activities.list(envId, { limit: 1, status: "success" });
     const terminada = (lista.data ?? [])[0];
-    if (!terminada) return;
+    expect(terminada).toBeDefined();
 
     const r = await client.activities.cancel(envId, terminada.id, "e2e");
+    expect(r).toHaveProperty("success");
+    expect(r).toHaveProperty("message");
     expect(typeof r.success).toBe("boolean");
   });
 
@@ -1766,9 +1771,12 @@ describe("observabilidad (e2e, Arcane 2.8.0)", () => {
     const inocuo = (lista.jobs ?? []).find(
       (j) => j.canRunManually && (j.prerequisites ?? []).some((p) => !p.isMet),
     );
-    if (!inocuo) return; // sin candidato inocuo, no se ejercita
+    // Si no hay candidato inocuo el test falla: significa que la premisa de
+    // seguridad del e2e ya no se cumple y hay que revisarla, no ignorarla.
+    expect(inocuo).toBeDefined();
 
-    const r = await client.jobs.run(envId, inocuo.id);
+    const r = await client.jobs.run(envId, inocuo!.id);
+    expect(r).toHaveProperty("message");
     expect(typeof r.success).toBe("boolean");
   });
 
