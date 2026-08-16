@@ -338,6 +338,7 @@ function summarizeComposeStream(events: ComposeStreamEvent[], action: string): A
 export interface PullStreamEvent {
   status?: string;
   error?: string;
+  errorDetail?: { message?: string };
   id?: string;
   success?: boolean;
   message?: string;
@@ -355,8 +356,24 @@ export interface PullStreamEvent {
  * (errors first, then the single-object fallback) but treats "no errors" as
  * the normal-case success rather than requiring a sentinel.
  */
+/**
+ * Extract the error text from a pull event, whichever shape it arrived in.
+ * openapi.txt declares /pull's 200 response with no `content`, so the stream
+ * shape isn't specified: Arcane may report a failed layer via the plain
+ * `error` string, or via `errorDetail` (an object, typically
+ * `{"message":"..."}`). When both are present with the same text, `error`
+ * wins so the text isn't duplicated in the aggregated message.
+ */
+function extractPullError(e: PullStreamEvent): string | undefined {
+  if (typeof e.error === "string" && e.error.length > 0) return e.error;
+  if (e.errorDetail && typeof e.errorDetail.message === "string" && e.errorDetail.message.length > 0) {
+    return e.errorDetail.message;
+  }
+  return undefined;
+}
+
 function summarizePullStream(events: PullStreamEvent[], action: string): ActionResponse {
-  const errors = events.filter(e => e.error).map(e => e.error as string);
+  const errors = events.map(extractPullError).filter((e): e is string => typeof e === "string");
   if (errors.length > 0) {
     return { success: false, message: `${action} failed: ${errors.join("; ")}` };
   }
@@ -367,6 +384,16 @@ function summarizePullStream(events: PullStreamEvent[], action: string): ActionR
     return { success: events[0].success as boolean, message: events[0].message ?? `${action} finished` };
   }
 
+  // An empty stream is not evidence of success. "Absence of error" only reads
+  // as success when there's a stream to have observed errors in: a real
+  // docker-pull stream always emits at least one status line, even when
+  // there's nothing new to pull. Zero events is indistinguishable from a
+  // truncated or otherwise anomalous response, so this does NOT default to
+  // success the way an errorless multi-event stream does.
+  if (events.length === 0) {
+    return { success: false, message: `${action} returned no events; cannot confirm success` };
+  }
+
   // No error events observed: in docker-pull semantics that IS success.
   // Surface real event info in the message (status lines, tagged with their
   // layer id when present) rather than degrading to a bare count.
@@ -374,10 +401,17 @@ function summarizePullStream(events: PullStreamEvent[], action: string): ActionR
     .filter(e => typeof e.status === "string" && e.status.length > 0)
     .map(e => (e.id ? `${e.id}: ${e.status}` : (e.status as string)));
 
+  // Docker repeats identical status text for many progress ticks per layer
+  // (e.g. "Downloading", "Extracting" — only the byte counters we don't
+  // capture change between ticks). Collapse consecutive duplicates before
+  // taking the tail, so the message doesn't degrade into the same line
+  // repeated 5 times.
+  const dedupedStatusLines = statusLines.filter((line, i) => line !== statusLines[i - 1]);
+
   let message: string;
-  if (statusLines.length > 0) {
+  if (dedupedStatusLines.length > 0) {
     // Keep the message readable: the tail of the stream is the most relevant part.
-    message = statusLines.slice(-5).join(" | ");
+    message = dedupedStatusLines.slice(-5).join(" | ");
   } else {
     const ids = [...new Set(events.filter(e => typeof e.id === "string").map(e => e.id as string))];
     message = ids.length > 0
