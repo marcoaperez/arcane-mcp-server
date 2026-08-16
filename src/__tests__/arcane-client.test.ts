@@ -335,6 +335,224 @@ describe("ArcaneClient", () => {
     });
   });
 
+  describe("pull success criterion (Task 10 regression: absence of error is success)", () => {
+    // Live evidence (2026-08-16, Arcane v2.7.0, env "0", stack "ical-bridge"):
+    // a 2-event pull stream with no errors and no {"status":"complete"} sentinel
+    // was reported as `success:false` ("Pull failed for stack 'ical-bridge':
+    // Pull finished (2 events)") because the old code required that sentinel,
+    // which has never been observed against a real server.
+    const realisticNoSentinelStream = [
+      '{"status":"Pulling from taiko/ical-bridge","id":"latest"}',
+      '{"status":"Image is up to date for taiko/ical-bridge:latest"}',
+    ].join("\n");
+
+    const errorStream = [
+      '{"status":"starting project image pull"}',
+      '{"error":"manifest for ghcr.io/foo/bar:latest not found"}',
+    ].join("\n");
+
+    const singleObjectFallback = '{"success":true,"message":"Images pulled"}';
+
+    const statusLineStream = [
+      '{"status":"Pulling fs layer","id":"a1b2c3"}',
+      '{"status":"Downloading","id":"a1b2c3"}',
+      '{"status":"Status: Downloaded newer image for myapp/web:latest"}',
+    ].join("\n");
+
+    // openapi.txt declares /pull's 200 response with no `content`, so the stream
+    // shape isn't specified anywhere. Arcane may report a failed layer via
+    // `errorDetail` (an object, typically `{"message":"..."}`) instead of the
+    // plain `error` string. Only checking `e.error` lets this fall through to
+    // the "no errors observed" branch and report success:true on a broken pull.
+    const errorDetailOnlyStream = [
+      '{"status":"Pulling from foo/bar"}',
+      '{"errorDetail":{"message":"manifest for ghcr.io/foo/bar:latest not found"}}',
+    ].join("\n");
+
+    // Same event carries both forms with identical text: the extracted error
+    // message must not be duplicated.
+    const bothErrorFormsSameTextStream = [
+      '{"error":"pull access denied","errorDetail":{"message":"pull access denied"}}',
+    ].join("\n");
+
+    const emptyStream = "";
+
+    // Realistic docker-pull progress: two layers pulled with repeated identical
+    // progress ticks ("Downloading"/"Extracting" repeated per layer while the
+    // byte counters that aren't captured here change), ending on a burst of
+    // identical "Extracting" ticks for the slower layer.
+    const repetitiveMultiLayerStream = [
+      '{"status":"Pulling fs layer","id":"a1"}',
+      '{"status":"Pulling fs layer","id":"b2"}',
+      '{"status":"Downloading","id":"a1"}',
+      '{"status":"Downloading","id":"b2"}',
+      '{"status":"Downloading","id":"a1"}',
+      '{"status":"Downloading","id":"b2"}',
+      '{"status":"Downloading","id":"a1"}',
+      '{"status":"Verifying Checksum","id":"a1"}',
+      '{"status":"Download complete","id":"a1"}',
+      '{"status":"Downloading","id":"b2"}',
+      '{"status":"Verifying Checksum","id":"b2"}',
+      '{"status":"Download complete","id":"b2"}',
+      '{"status":"Extracting","id":"a1"}',
+      '{"status":"Extracting","id":"b2"}',
+      '{"status":"Extracting","id":"b2"}',
+      '{"status":"Extracting","id":"b2"}',
+      '{"status":"Extracting","id":"b2"}',
+      '{"status":"Extracting","id":"b2"}',
+    ].join("\n");
+
+    describe("stacks.pull", () => {
+      it("Test 1 (regression): a stream with no errors and no complete sentinel reports success:true", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => realisticNoSentinelStream } as Response);
+
+        const result = await client.stacks.pull("env123", "stack1");
+
+        expect(result.success).toBe(true);
+      });
+
+      it("Test 2: a stream with an error event reports success:false with the error text", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => errorStream } as Response);
+
+        const result = await client.stacks.pull("env123", "stack1");
+
+        expect(result.success).toBe(false);
+        expect(result.message).toContain("manifest for ghcr.io/foo/bar:latest not found");
+      });
+
+      it("Test 3: single-object ActionResponse fallback is returned unchanged", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => singleObjectFallback } as Response);
+
+        const result = await client.stacks.pull("env123", "stack1");
+
+        expect(result).toEqual({ success: true, message: "Images pulled" });
+      });
+
+      it("Test 4: a normal pull stream produces a message with real event info, not just a count", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => statusLineStream } as Response);
+
+        const result = await client.stacks.pull("env123", "stack1");
+
+        expect(result.success).toBe(true);
+        expect(result.message).not.toMatch(/^Pull finished \(\d+ events\)$/);
+        expect(result.message).toContain("Downloaded newer image for myapp/web:latest");
+      });
+
+      it("Test 5 (regression): an error reported only via errorDetail (no plain `error` field) reports success:false", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => errorDetailOnlyStream } as Response);
+
+        const result = await client.stacks.pull("env123", "stack1");
+
+        expect(result.success).toBe(false);
+        expect(result.message).toContain("manifest for ghcr.io/foo/bar:latest not found");
+      });
+
+      it("Test 6: an event carrying both `error` and `errorDetail` with identical text does not duplicate it", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => bothErrorFormsSameTextStream } as Response);
+
+        const result = await client.stacks.pull("env123", "stack1");
+
+        expect(result.success).toBe(false);
+        expect(result.message).toBe("Pull failed: pull access denied");
+      });
+
+      it("Test 7: an empty stream (0 events) cannot confirm success, so it reports success:false", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => emptyStream } as Response);
+
+        const result = await client.stacks.pull("env123", "stack1");
+
+        expect(result.success).toBe(false);
+        expect(result.message).toBe("Pull returned no events; cannot confirm success");
+      });
+
+      it("Test 8: repeated identical status lines across layers are collapsed, not echoed 5x", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => repetitiveMultiLayerStream } as Response);
+
+        const result = await client.stacks.pull("env123", "stack1");
+
+        expect(result.success).toBe(true);
+        expect(result.message).toBe(
+          "b2: Downloading | b2: Verifying Checksum | b2: Download complete | a1: Extracting | b2: Extracting"
+        );
+      });
+    });
+
+    describe("projectAdditional.pullImages", () => {
+      it("Test 1 (regression): a stream with no errors and no complete sentinel reports success:true", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => realisticNoSentinelStream } as Response);
+
+        const result = await client.projectAdditional.pullImages("env123", "proj1");
+
+        expect(result.success).toBe(true);
+      });
+
+      it("Test 2: a stream with an error event reports success:false with the error text", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => errorStream } as Response);
+
+        const result = await client.projectAdditional.pullImages("env123", "proj1");
+
+        expect(result.success).toBe(false);
+        expect(result.message).toContain("manifest for ghcr.io/foo/bar:latest not found");
+      });
+
+      it("Test 3: single-object ActionResponse fallback is returned unchanged", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => singleObjectFallback } as Response);
+
+        const result = await client.projectAdditional.pullImages("env123", "proj1");
+
+        expect(result).toEqual({ success: true, message: "Images pulled" });
+      });
+
+      it("Test 4: a normal pull stream produces a message with real event info, not just a count", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => statusLineStream } as Response);
+
+        const result = await client.projectAdditional.pullImages("env123", "proj1");
+
+        expect(result.success).toBe(true);
+        expect(result.message).not.toMatch(/^Pull finished \(\d+ events\)$/);
+        expect(result.message).toContain("Downloaded newer image for myapp/web:latest");
+      });
+
+      it("Test 5 (regression): an error reported only via errorDetail (no plain `error` field) reports success:false", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => errorDetailOnlyStream } as Response);
+
+        const result = await client.projectAdditional.pullImages("env123", "proj1");
+
+        expect(result.success).toBe(false);
+        expect(result.message).toContain("manifest for ghcr.io/foo/bar:latest not found");
+      });
+
+      it("Test 6: an event carrying both `error` and `errorDetail` with identical text does not duplicate it", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => bothErrorFormsSameTextStream } as Response);
+
+        const result = await client.projectAdditional.pullImages("env123", "proj1");
+
+        expect(result.success).toBe(false);
+        expect(result.message).toBe("Pull failed: pull access denied");
+      });
+
+      it("Test 7: an empty stream (0 events) cannot confirm success, so it reports success:false", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => emptyStream } as Response);
+
+        const result = await client.projectAdditional.pullImages("env123", "proj1");
+
+        expect(result.success).toBe(false);
+        expect(result.message).toBe("Pull returned no events; cannot confirm success");
+      });
+
+      it("Test 8: repeated identical status lines across layers are collapsed, not echoed 5x", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => repetitiveMultiLayerStream } as Response);
+
+        const result = await client.projectAdditional.pullImages("env123", "proj1");
+
+        expect(result.success).toBe(true);
+        expect(result.message).toBe(
+          "b2: Downloading | b2: Verifying Checksum | b2: Download complete | a1: Extracting | b2: Extracting"
+        );
+      });
+    });
+  });
+
   describe("NDJSON /up and /redeploy streams", () => {
     // Endpoints /up (stacks.start) and /redeploy stream `application/x-json-stream`
     // (NDJSON), NOT a single JSON object. Parsing the whole body with response.json()
