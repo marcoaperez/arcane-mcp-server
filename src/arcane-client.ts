@@ -1073,6 +1073,32 @@ class ActivitiesMethods {
   }
 }
 
+export interface EventListOptions extends ListOptionsWithSort {
+  /** Si viene, la consulta va a la ruta por entorno en vez de a la global. */
+  environmentId?: string;
+  severity?: string;
+  type?: string;
+}
+
+class EventsMethods {
+  constructor(private client: ArcaneClient) {}
+
+  async list(opts?: EventListOptions): Promise<PaginatedResponse<Event>> {
+    const params = new URLSearchParams();
+    if (opts?.search) params.set("search", opts.search);
+    if (opts?.severity) params.set("severity", opts.severity);
+    if (opts?.type) params.set("type", opts.type);
+    if (opts?.limit) params.set("limit", String(opts.limit));
+    const query = params.toString();
+    const base = opts?.environmentId ? `/events/environment/${opts.environmentId}` : "/events";
+    return this.client.request<PaginatedResponse<Event>>("GET", `${base}${query ? `?${query}` : ""}`);
+  }
+
+  async stats(): Promise<{ success: boolean; data: EventSeverityCounts }> {
+    return this.client.request<{ success: boolean; data: EventSeverityCounts }>("GET", "/events/stats");
+  }
+}
+
 class GitRepositoriesMethods {
   constructor(private client: ArcaneClient) {}
 
@@ -1367,6 +1393,7 @@ export class ArcaneClient {
   readonly templates: TemplatesMethods;
   readonly system: SystemMethods;
   readonly activities: ActivitiesMethods;
+  readonly events: EventsMethods;
   readonly gitRepositories: GitRepositoriesMethods;
   readonly gitOpsSyncs: GitOpsSyncsMethods;
   readonly projectAdditional: ProjectAdditionalMethods;
@@ -1398,6 +1425,7 @@ export class ArcaneClient {
     this.templates = new TemplatesMethods(this);
     this.system = new SystemMethods(this);
     this.activities = new ActivitiesMethods(this);
+    this.events = new EventsMethods(this);
     this.gitRepositories = new GitRepositoriesMethods(this);
     this.gitOpsSyncs = new GitOpsSyncsMethods(this);
     this.projectAdditional = new ProjectAdditionalMethods(this);

@@ -40,7 +40,7 @@ El fix de los endpoints NDJSON se ha ofrecido al upstream como PR autocontenido.
 
 <!-- BEGIN TOOLS -->
 
-Las **71** tools que expone el servidor, agrupadas por dominio. Esta tabla la
+Las **73** tools que expone el servidor, agrupadas por dominio. Esta tabla la
 genera `npm run gen-tools-table` a partir de `src/tools/`: las descripciones y los
 parámetros son los que registra el código, no una copia mantenida a mano.
 
@@ -189,6 +189,13 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | `arcane_activity_list` | List background activities (deployments, pulls, scans) with optional filters. | `environmentId?`, `environmentName?`, `status?`, `type?`, `resourceType?`, `search?`, `limit?` |
 | `arcane_activity_get` | Get a background activity with its full message log. Use this to resolve the activityId returned by deploy, redeploy and pull operations. | `environmentId?`, `environmentName?`, `activityId` |
 | `arcane_activity_cancel` | Cancel a running background activity. | `environmentId?`, `environmentName?`, `activityId`, `requestedBy?` |
+
+### Events (2)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_event_list` | List audit events. Without environmentId returns events from all environments. | `environmentId?`, `severity?`, `type?`, `search?`, `limit?` |
+| `arcane_event_stats` | Get event counts by severity across all environments. | — |
 
 <!-- END TOOLS -->
 

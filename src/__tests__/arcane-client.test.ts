@@ -957,6 +957,50 @@ describe("ArcaneClient", () => {
     });
   });
 
+  describe("events", () => {
+    it(".list() sin environmentId - GET /events", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: { totalItems: 0 } }),
+      } as Response);
+
+      await client.events.list({ severity: "error", limit: 5 });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/events?severity=error&limit=5",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".list() con environmentId - GET /events/environment/{envId}", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: { totalItems: 0 } }),
+      } as Response);
+
+      await client.events.list({ environmentId: "env123", limit: 5 });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/events/environment/env123?limit=5",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".stats() - GET /events/stats", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { total: 0, info: 0, success: 0, warning: 0, error: 0 } }),
+      } as Response);
+
+      await client.events.stats();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/events/stats",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+  });
+
   describe("networks", () => {
     it(".list(envId) - GET /environments/{envId}/networks", async () => {
       mockFetch.mockResolvedValue({

@@ -13,6 +13,7 @@ import { registerTemplateTools } from "../tools/templates";
 import { registerSystemTools } from "../tools/system";
 import { registerVolumeFileTools } from "../tools/volume-files";
 import { registerActivityTools } from "../tools/activities";
+import { registerEventTools } from "../tools/events";
 
 type MockedFunction<T extends (...args: any[]) => any> = {
   (...args: Parameters<T>): ReturnType<T>;
@@ -571,6 +572,49 @@ describe("MCP Tools", () => {
 
       expect(result.isError).toBeUndefined();
       expect(result.content[0].text).toContain("cancelled");
+    });
+  });
+
+  describe("event tools", () => {
+    const clienteConEvents = () => {
+      const mockClient = createMockClient() as any;
+      mockClient.events = {
+        list: vi.fn().mockResolvedValue({ success: true, data: [], pagination: { totalItems: 0 } }),
+        stats: vi.fn().mockResolvedValue({
+          success: true,
+          data: { total: 3, info: 1, success: 1, warning: 0, error: 1 },
+        }),
+      };
+      return mockClient;
+    };
+
+    it("arcane_event_list pasa environmentId como filtro, sin resolverlo", async () => {
+      const mockClient = clienteConEvents();
+      const server = createMockServer();
+      registerEventTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_event_list");
+      await handler({ environmentId: "env1", severity: "error" });
+
+      expect(mockClient.events.list).toHaveBeenCalledWith({
+        environmentId: "env1",
+        severity: "error",
+        type: undefined,
+        search: undefined,
+        limit: undefined,
+      });
+    });
+
+    it("arcane_event_stats devuelve los recuentos", async () => {
+      const mockClient = clienteConEvents();
+      const server = createMockServer();
+      registerEventTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_event_stats");
+      const result = await handler({});
+
+      expect(mockClient.events.stats).toHaveBeenCalled();
+      expect(result.content[0].text).toContain("3");
     });
   });
 
