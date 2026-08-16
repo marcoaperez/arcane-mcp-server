@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
-    "update-api-spec": "node scripts/update-api-spec.mjs"
+    "update-api-spec": "node scripts/update-api-spec.mjs",
+    "gen-tools-table": "node scripts/gen-tools-table.mjs"
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "^0.2.3",

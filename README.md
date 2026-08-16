@@ -32,52 +32,157 @@ Built on Cloudflare Workers using the official Cloudflare `agents` package, this
 | Compatibilidad de shapes | Escrito contra Arcane v1.x | Interfaces alineadas con v2.7.0 y auditadas por `scripts/audit-schema-drift.mjs` |
 | Despliegue | Solo Cloudflare Workers | Cloudflare Workers **o** contenedor Docker autoalojado (`docker-compose.yml` + `wrangler.local.jsonc`) |
 | Cliente | `baseUrl` fijo hacia el binding VPC | Modo dual: binding VPC en Workers, URL real en local/Docker |
-| Verificación | Sin runner de tests funcional | 91 tests unitarios + suite e2e contra una instancia Arcane real |
+| Verificación | Sin runner de tests funcional | 107 tests unitarios + suite e2e contra una instancia Arcane real |
 
 El fix de los endpoints NDJSON se ha ofrecido al upstream como PR autocontenido.
 
 ## Available Tools
 
-| Tool Name | Description | Required Inputs |
-|-----------|-------------|-----------------|
-| `arcane_environment_list` | List all Docker environments managed by Arcane | `search?`, `limit?` |
-| `arcane_environment_get` | Get details of a specific environment | `environmentId?`, `environmentName?` |
-| `arcane_environment_create` | Create a new Docker environment | `name`, `apiUrl`, `accessToken?`, `enabled?`, `isEdge?` |
-| `arcane_environment_update` | Update an existing environment | `environmentId?`/`environmentName?`, `name?`, `apiUrl?`, etc. |
-| `arcane_environment_delete` | Delete a Docker environment | `environmentId?`/`environmentName?` |
-| `arcane_stack_list` | List Docker Compose stacks in an environment | `environmentId?`/`environmentName?`, `search?` |
-| `arcane_stack_get` | Get details of a specific stack | `environmentId?`/`environmentName?`, `stackId?`/`stackName?` |
-| `arcane_stack_deploy` | Deploy a new Docker Compose stack | `environmentId?`/`environmentName?`, `name`, `composeContent` |
-| `arcane_stack_update` | Update an existing stack | `environmentId?`/`environmentName?`, `stackId?`/`stackName?` |
-| `arcane_stack_start` | Start a Docker Compose stack | `environmentId?`/`environmentName?`, `stackId?`/`stackName?` |
-| `arcane_stack_stop` | Stop a Docker Compose stack | `environmentId?`/`environmentName?`, `stackId?`/`stackName?` |
-| `arcane_stack_restart` | Restart a Docker Compose stack | `environmentId?`/`environmentName?`, `stackId?`/`stackName?` |
-| `arcane_stack_pull` | Pull images for a stack | `environmentId?`/`environmentName?`, `stackId?`/`stackName?` |
-| `arcane_stack_delete` | Delete a Docker Compose stack | `environmentId?`/`environmentName?`, `stackId?`/`stackName?` |
-| `arcane_container_list` | List all containers in an environment | `environmentId?`/`environmentName?` |
-| `arcane_container_get` | Get details of a specific container | `environmentId?`/`environmentName?`, `containerId?`/`containerName?` |
-| `arcane_container_start` | Start a container | `environmentId?`/`environmentName?`, `containerId?`/`containerName?` |
-| `arcane_container_stop` | Stop a container | `environmentId?`/`environmentName?`, `containerId?`/`containerName?` |
-| `arcane_container_restart` | Restart a container | `environmentId?`/`environmentName?`, `containerId?`/`containerName?` |
-| `arcane_container_kill` | Force kill a container | `environmentId?`/`environmentName?`, `containerId?`/`containerName?` |
-| `arcane_image_list` | List all Docker images in an environment | `environmentId?`/`environmentName?` |
-| `arcane_image_pull` | Pull a Docker image | `environmentId?`/`environmentName?`, `imageName` |
-| `arcane_image_remove` | Remove a Docker image | `environmentId?`/`environmentName?`, `imageId` |
-| `arcane_image_prune` | Remove unused Docker images | `environmentId?`/`environmentName?` |
-| `arcane_volume_list` | List all Docker volumes in an environment | `environmentId?`/`environmentName?` |
-| `arcane_volume_inspect` | Get details of a specific volume | `environmentId?`/`environmentName?`, `volumeName` |
-| `arcane_volume_remove` | Remove a Docker volume | `environmentId?`/`environmentName?`, `volumeName` |
-| `arcane_volume_prune` | Remove unused Docker volumes | `environmentId?`/`environmentName?` |
-| `arcane_network_list` | List all Docker networks in an environment | `environmentId?`/`environmentName?` |
-| `arcane_network_inspect` | Get details of a specific network | `environmentId?`/`environmentName?`, `networkId` |
-| `arcane_network_remove` | Remove a Docker network | `environmentId?`/`environmentName?`, `networkId` |
-| `arcane_network_prune` | Remove unused Docker networks | `environmentId?`/`environmentName?` |
-| `arcane_template_list` | List all Docker Compose templates | `search?`, `limit?` |
-| `arcane_template_get` | Get details of a specific template | `templateId` |
-| `arcane_template_create` | Create a new template | `name`, `description`, `content`, `envContent` |
-| `arcane_template_update` | Update an existing template (full replace) | `templateId`, `name`, `description`, `content`, `envContent` |
-| `arcane_template_delete` | Delete a template | `templateId` |
-| `arcane_version` | Get the Arcane server version | - |
+<!-- BEGIN TOOLS -->
+
+Las **68** tools que expone el servidor, agrupadas por dominio. Esta tabla la
+genera `npm run gen-tools-table` a partir de `src/tools/`: las descripciones y los
+parámetros son los que registra el código, no una copia mantenida a mano.
+
+### Environments (5)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_environment_list` | List all Docker environments managed by Arcane. Returns environment IDs, names, and connection status. | `search?`, `limit?` |
+| `arcane_environment_get` | Get details of a specific Docker environment by ID or name. | `environmentId?`, `environmentName?` |
+| `arcane_environment_create` | Create a new Docker environment in Arcane. | `name`, `apiUrl`, `accessToken?`, `bootstrapToken?`, `enabled?`, `isEdge?`, `useApiKey?` |
+| `arcane_environment_update` | Update an existing Docker environment. | `environmentId?`, `environmentName?`, `name?`, `apiUrl?`, `accessToken?`, `bootstrapToken?`, `enabled?`, `regenerateApiKey?` |
+| `arcane_environment_delete` | Delete a Docker environment from Arcane. | `environmentId?`, `environmentName?` |
+
+### Compose stacks (9)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_stack_list` | List all Docker Compose stacks (projects) in an environment. | `environmentId?`, `environmentName?`, `search?`, `limit?` |
+| `arcane_stack_get` | Get details of a specific Docker Compose stack by ID or name. | `environmentId?`, `environmentName?`, `stackId?`, `stackName?` |
+| `arcane_stack_deploy` | Deploy a new Docker Compose stack to an environment. | `environmentId?`, `environmentName?`, `name`, `composeContent`, `envContent?` |
+| `arcane_stack_update` | Update an existing Docker Compose stack. | `environmentId?`, `environmentName?`, `stackId?`, `stackName?`, `name?`, `composeContent?`, `envContent?` |
+| `arcane_stack_delete` | Delete a Docker Compose stack from an environment. | `environmentId?`, `environmentName?`, `stackId?`, `stackName?` |
+| `arcane_stack_start` | Start a Docker Compose stack. | `environmentId?`, `environmentName?`, `stackId?`, `stackName?` |
+| `arcane_stack_stop` | Stop a Docker Compose stack. | `environmentId?`, `environmentName?`, `stackId?`, `stackName?` |
+| `arcane_stack_restart` | Restart a Docker Compose stack. | `environmentId?`, `environmentName?`, `stackId?`, `stackName?` |
+| `arcane_stack_pull` | Pull images for a Docker Compose stack. | `environmentId?`, `environmentName?`, `stackId?`, `stackName?` |
+
+### Project lifecycle (4)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_project_down` | Stop and remove containers, networks created by the project (preserves volumes). | `environmentId?`, `environmentName?`, `projectId?`, `projectName?` |
+| `arcane_project_pull_images` | Pull images for a project without starting containers. | `environmentId?`, `environmentName?`, `projectId?`, `projectName?` |
+| `arcane_project_redeploy` | Redeploy a project - stops and recreates all containers. | `environmentId?`, `environmentName?`, `projectId?`, `projectName?` |
+| `arcane_project_destroy` | Stop and remove containers, networks, and optionally volumes and files for a project. | `environmentId?`, `environmentName?`, `projectId?`, `projectName?`, `removeFiles?`, `removeVolumes?` |
+
+### Containers (6)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_container_list` | List all Docker containers in an environment. | `environmentId?`, `environmentName?` |
+| `arcane_container_get` | Get details of a specific Docker container by ID or name. | `environmentId?`, `environmentName?`, `containerId?`, `containerName?` |
+| `arcane_container_start` | Start a Docker container. | `environmentId?`, `environmentName?`, `containerId?`, `containerName?` |
+| `arcane_container_stop` | Stop a Docker container. | `environmentId?`, `environmentName?`, `containerId?`, `containerName?` |
+| `arcane_container_restart` | Restart a Docker container. | `environmentId?`, `environmentName?`, `containerId?`, `containerName?` |
+| `arcane_container_kill` | Force kill a Docker container. | `environmentId?`, `environmentName?`, `containerId?`, `containerName?` |
+
+### Containers — advanced (3)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_container_create` | Create and start a new Docker container. | `environmentId?`, `environmentName?`, `name`, `image`, `cmd?`, `env?`, `ports?`, `volumes?`, `networks?`, `restartPolicy?`, `detach?` |
+| `arcane_container_delete` | Delete a Docker container. | `environmentId?`, `environmentName?`, `containerId?`, `containerName?`, `force?`, `volumes?` |
+| `arcane_container_update` | Update a Docker container configuration. | `environmentId?`, `environmentName?`, `containerId?`, `containerName?` |
+
+### Images (4)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_image_list` | List all Docker images in an environment. | `environmentId?`, `environmentName?` |
+| `arcane_image_pull` | Pull a Docker image in an environment. | `environmentId?`, `environmentName?`, `imageName` |
+| `arcane_image_remove` | Remove a Docker image from an environment. | `environmentId?`, `environmentName?`, `imageId` |
+| `arcane_image_prune` | Remove unused Docker images from an environment. | `environmentId?`, `environmentName?` |
+
+### Volumes (4)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_volume_list` | List all Docker volumes in an environment. | `environmentId?`, `environmentName?` |
+| `arcane_volume_inspect` | Get details of a specific Docker volume. | `environmentId?`, `environmentName?`, `volumeName` |
+| `arcane_volume_remove` | Remove a Docker volume from an environment. | `environmentId?`, `environmentName?`, `volumeName` |
+| `arcane_volume_prune` | Remove unused Docker volumes from an environment. | `environmentId?`, `environmentName?` |
+
+### Volume backups (5)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_volume_backup_create` | Create a backup of a Docker volume. | `environmentId?`, `environmentName?`, `volumeName` |
+| `arcane_volume_backup_list` | List all backups for a Docker volume. | `environmentId?`, `environmentName?`, `volumeName`, `search?`, `sort?`, `order?`, `start?`, `limit?` |
+| `arcane_volume_backup_delete` | Delete a volume backup. | `environmentId?`, `environmentName?`, `backupId` |
+| `arcane_volume_backup_download` | Download a volume backup. Returns download URL or instructions. | `environmentId?`, `environmentName?`, `backupId` |
+| `arcane_volume_backup_restore` | Restore a volume from a backup. | `environmentId?`, `environmentName?`, `volumeName`, `backupId` |
+
+### Volume files (2)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_volume_browse` | Browse files and directories in a Docker volume. | `environmentId?`, `environmentName?`, `volumeName`, `path?` |
+| `arcane_volume_upload_file` | Upload a file to a Docker volume. | `environmentId?`, `environmentName?`, `volumeName`, `filename`, `content`, `path?` |
+
+### Networks (4)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_network_list` | List all Docker networks in an environment. | `environmentId?`, `environmentName?` |
+| `arcane_network_inspect` | Get details of a specific Docker network. | `environmentId?`, `environmentName?`, `networkId` |
+| `arcane_network_remove` | Remove a Docker network from an environment. | `environmentId?`, `environmentName?`, `networkId` |
+| `arcane_network_prune` | Remove unused Docker networks from an environment. | `environmentId?`, `environmentName?` |
+
+### Templates (5)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_template_list` | List all Docker Compose templates. | `search?`, `limit?` |
+| `arcane_template_get` | Get details of a specific template. | `templateId` |
+| `arcane_template_create` | Create a new Docker Compose template. | `name`, `description`, `content`, `envContent` |
+| `arcane_template_update` | Update an existing template. The API replaces the whole template, so all fields are required. | `templateId`, `name`, `description`, `content`, `envContent` |
+| `arcane_template_delete` | Delete a template. | `templateId` |
+
+### Git repositories (8)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_git_repository_list` | List all git repositories configured in Arcane. Returns repository IDs, names, URLs, and authentication details. | `search?`, `sort?`, `order?`, `start?`, `limit?` |
+| `arcane_git_repository_get` | Get details of a specific git repository by ID. | `id` |
+| `arcane_git_repository_create` | Create a new git repository in Arcane. | `name`, `url`, `authType`, `description?`, `enabled?`, `username?`, `token?`, `sshKey?`, `sshHostKeyVerification?` |
+| `arcane_git_repository_update` | Update an existing git repository. | `id`, `name?`, `url?`, `authType?`, `description?`, `enabled?`, `username?`, `token?`, `sshKey?`, `sshHostKeyVerification?` |
+| `arcane_git_repository_delete` | Delete a git repository from Arcane. | `id` |
+| `arcane_git_repository_list_branches` | List all branches in a git repository. | `id` |
+| `arcane_git_repository_browse_files` | Browse files in a git repository. | `id`, `branch?`, `path?` |
+| `arcane_git_repository_test` | Test connection to a git repository. | `id`, `branch?` |
+
+### GitOps syncs (8)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_gitops_sync_list` | List all GitOps syncs in an environment. GitOps syncs automatically deploy stacks from git repositories. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?` |
+| `arcane_gitops_sync_get` | Get details of a specific GitOps sync by ID or name. | `environmentId?`, `environmentName?`, `syncId?`, `syncName?` |
+| `arcane_gitops_sync_create` | Create a GitOps sync configuration for automatic deployment from a git repository. | `environmentId?`, `environmentName?`, `name`, `repositoryId`, `branch`, `composePath`, `projectName?`, `autoSync?`, `syncInterval?` |
+| `arcane_gitops_sync_update` | Update an existing GitOps sync. | `environmentId?`, `environmentName?`, `syncId?`, `syncName?`, `name?`, `repositoryId?`, `branch?`, `composePath?`, `projectName?`, `autoSync?`, `syncInterval?` |
+| `arcane_gitops_sync_delete` | Delete a GitOps sync from an environment. | `environmentId?`, `environmentName?`, `syncId?`, `syncName?` |
+| `arcane_gitops_sync_browse_files` | Browse files in a GitOps sync repository. | `environmentId?`, `environmentName?`, `syncId?`, `syncName?`, `path?` |
+| `arcane_gitops_sync_get_status` | Get the current sync status of a GitOps sync. | `environmentId?`, `environmentName?`, `syncId?`, `syncName?` |
+| `arcane_gitops_sync_perform_sync` | Manually trigger a sync for a GitOps sync. | `environmentId?`, `environmentName?`, `syncId?`, `syncName?` |
+
+### System (1)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_version` | Get the Arcane server version information. | — |
+
+<!-- END TOOLS -->
 
 **Note:** For tools that accept both `*Id` and `*Name` parameters (e.g., `environmentId` vs `environmentName`), you only need to provide one. The server will automatically resolve names to IDs via API calls.
 
