@@ -155,8 +155,25 @@ npm run type-check
 - Añade la fila a la tabla de tools del `README.md`.
 - Commit en rama. **Nunca commits sueltos en `main`.**
 - Push a `origin` y a `github`.
-- El merge a `main` es deliberado. GitOps sincroniza los ficheros al host, pero
-  **no reconstruye la imagen**: hay que lanzar el rebuild a mano.
+- El merge a `main` es deliberado. GitOps sincroniza los ficheros al host **y sí
+  intenta redesplegar**, pero ese redeploy **falla en este proyecto**, así que en la
+  práctica hay que lanzar el rebuild a mano.
+
+  El error que devuelve, visible en `lastSyncError` con `arcane_gitops_sync_get_status`:
+
+  ```
+  redeploy failed: failed to prepare project images for deploy:
+  node:22-bookworm-slim: failed to resolve source metadata for
+  docker.io/library/node:22-bookworm-slim: no active sessions
+  ```
+
+  No es un problema de red: `registry-1.docker.io` responde desde el host. El build
+  que lanza Arcane no dispone de sesión de BuildKit para resolver la imagen base del
+  `Dockerfile`, y esa imagen tampoco está entre las locales. Un `docker compose up -d
+  --build` lanzado a mano sí funciona.
+
+  Consecuencia práctica: **un `lastSyncStatus` distinto de `success` no bloquea nada,
+  pero tampoco despliega**. Revísalo, y reconstruye tú.
 
 - ⚠️ **El orden importa: espera a que GitOps haya sincronizado tu commit ANTES de
   reconstruir.** El rebuild construye desde `/opt/stacks/arcane-mcp` tal como esté

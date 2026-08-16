@@ -261,17 +261,34 @@ Connect the inspector to `http://localhost:8788/mcp` to verify:
 
 Este fork se despliega como contenedor Docker mediante GitOps de Arcane, con
 `autoSync` sobre `main`. El sync escribe los ficheros nuevos en
-`/opt/stacks/arcane-mcp`, pero **no reconstruye la imagen**: como `docker-compose.yml`
-usa `build: .` sin volumen, el código va horneado dentro y un `compose up -d` sin
-`--build` no recoge nada. Desplegar requiere un rebuild explícito:
+`/opt/stacks/arcane-mcp` **e intenta redesplegar**, pero ese redeploy falla en este
+proyecto:
+
+```
+redeploy failed: failed to prepare project images for deploy: node:22-bookworm-slim:
+failed to resolve source metadata for docker.io/library/node:22-bookworm-slim:
+no active sessions
+```
+
+No es un problema de red — el registro responde desde el host —, sino que el build
+que lanza Arcane no tiene sesión de BuildKit para resolver la imagen base del
+`Dockerfile`. Como `docker-compose.yml` usa `build: .` sin volumen, el código va
+horneado en la imagen, así que sin rebuild no llega nada nuevo. En la práctica,
+desplegar requiere lanzarlo a mano:
 
 ```bash
 ssh VM-Control 'cd /opt/stacks/arcane-mcp && docker compose up -d --build'
 ```
 
-Un `lastSyncStatus: success` **no** significa que el código nuevo esté sirviendo.
-Verifica siempre mirando dentro del contenedor. Todo el trabajo va en ramas y los
-merges a `main` son deliberados y verificados.
+Dos reglas que se ganaron a base de despliegues fantasma:
+
+1. **Espera a que GitOps haya sincronizado tu commit antes de reconstruir.** El build
+   toma el disco tal como esté; lanzarlo antes produce una imagen nueva con código
+   viejo. Comprueba `lastSyncCommit` con `arcane_gitops_sync_get_status`.
+2. **Verifica mirando dentro del contenedor**, no el estado del sync. Ni un
+   `lastSyncStatus: success` ni uno `failed` te dicen qué código está sirviendo.
+
+Todo el trabajo va en ramas y los merges a `main` son deliberados y verificados.
 
 Para desplegar en Cloudflare Workers en su lugar, usa `npm run deploy`
 (`wrangler.jsonc`, con binding de servicio VPC hacia Arcane).
