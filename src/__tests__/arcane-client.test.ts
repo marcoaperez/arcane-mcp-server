@@ -295,12 +295,13 @@ describe("ArcaneClient", () => {
     });
 
     it(".pull(envId, stackId) - POST /environments/{envId}/projects/{stackId}/pull (NDJSON)", async () => {
-      // Endpoint /pull returns NDJSON (newline-delimited JSON), not a single JSON object.
+      // Task 11: /pull streams the same {activityId,log,done} shape as /up
+      // and /redeploy, not docker-pull-style {status,id}. Fixture captured
+      // verbatim from a real Arcane v2.7.0 stream (2026-08-16, stack
+      // "ical-bridge", local image, no registry involved).
       const ndjsonBody = [
-        '{"status":"starting project image pull"}',
-        '{"status":"Pulling from adguard/adguardhome","id":"latest"}',
-        '{"status":"Status: Image is up to date for adguard/adguardhome:latest"}',
-        '{"status":"complete"}',
+        '{"type":"activity","activityId":"bf40d2c4-53a0-4058-9b1b-296442fdf6b1"}',
+        '{"done":true}',
       ].join("\n");
 
       mockFetch.mockResolvedValue({
@@ -315,12 +316,11 @@ describe("ArcaneClient", () => {
         expect.objectContaining({ method: "POST" })
       );
       expect(result.success).toBe(true);
-      expect(result.message).toContain("complete");
     });
 
-    it(".pull(envId, stackId) - reports error when NDJSON contains errors", async () => {
+    it(".pull(envId, stackId) - reports error when NDJSON contains an `error` field", async () => {
       const ndjsonBody = [
-        '{"status":"starting project image pull"}',
+        '{"type":"activity","activityId":"abc"}',
         '{"error":"manifest not found"}',
       ].join("\n");
 
@@ -335,220 +335,186 @@ describe("ArcaneClient", () => {
     });
   });
 
-  describe("pull success criterion (Task 10 regression: absence of error is success)", () => {
-    // Live evidence (2026-08-16, Arcane v2.7.0, env "0", stack "ical-bridge"):
-    // a 2-event pull stream with no errors and no {"status":"complete"} sentinel
-    // was reported as `success:false` ("Pull failed for stack 'ical-bridge':
-    // Pull finished (2 events)") because the old code required that sentinel,
-    // which has never been observed against a real server.
-    const realisticNoSentinelStream = [
-      '{"status":"Pulling from taiko/ical-bridge","id":"latest"}',
-      '{"status":"Image is up to date for taiko/ical-bridge:latest"}',
+  describe("Task 11: /pull uses summarizeComposeStream, same shape as /up and /redeploy", () => {
+    // Origin: real stream captured against Arcane v2.7.0 (2026-08-16),
+    // POST /api/environments/0/projects/{id}/pull. Keys observed across the
+    // whole capture: activityId, done, log, type — `status`/`id` (the
+    // docker-pull shape the old, now-deleted summarizePullStream() assumed)
+    // never appear.
+
+    // Caso A: local image, no registry involved (stack "ical-bridge").
+    const localImagePullStream = [
+      '{"type":"activity","activityId":"bf40d2c4-53a0-4058-9b1b-296442fdf6b1"}',
+      '{"done":true}',
     ].join("\n");
 
-    const errorStream = [
-      '{"status":"starting project image pull"}',
-      '{"error":"manifest for ghcr.io/foo/bar:latest not found"}',
+    // Caso B: registry image (stack "gitea", image gitea/gitea:1.25.5).
+    const giteaPullStream = [
+      '{"type":"activity","activityId":"77c852a9-af6e-4e05-9180-1e021b22c8b6"}',
+      '{"log":"1.25.5: Pulling from gitea/gitea"}',
+      '{"log":"Digest: sha256:f846d26a4fc389c5806a580a765e00bfdd1fd181e6f2060da98ea2669d914472"}',
+      '{"log":"Status: Image is up to date for gitea/gitea:1.25.5"}',
+      '{"done":true}',
     ].join("\n");
 
-    const singleObjectFallback = '{"success":true,"message":"Images pulled"}';
-
-    const statusLineStream = [
-      '{"status":"Pulling fs layer","id":"a1b2c3"}',
-      '{"status":"Downloading","id":"a1b2c3"}',
-      '{"status":"Status: Downloaded newer image for myapp/web:latest"}',
+    // Log lines with no terminal {"done":true} — deliberate behavior change:
+    // the old summarizePullStream() treated "no error observed" as success
+    // even without a sentinel; summarizeComposeStream() requires {"done":true}.
+    const noDoneStream = [
+      '{"type":"activity","activityId":"xyz"}',
+      '{"log":"Pulling fs layer"}',
     ].join("\n");
 
-    // openapi.txt declares /pull's 200 response with no `content`, so the stream
-    // shape isn't specified anywhere. Arcane may report a failed layer via
-    // `errorDetail` (an object, typically `{"message":"..."}`) instead of the
-    // plain `error` string. Only checking `e.error` lets this fall through to
-    // the "no errors observed" branch and report success:true on a broken pull.
+    // errorDetail-only failure (no plain `error` field). openapi.txt declares
+    // no content schema for /pull's 200 response, so this shape — first
+    // observed on /pull — must keep being recognized through the shared helper.
     const errorDetailOnlyStream = [
-      '{"status":"Pulling from foo/bar"}',
-      '{"errorDetail":{"message":"manifest for ghcr.io/foo/bar:latest not found"}}',
+      '{"type":"activity","activityId":"xyz"}',
+      '{"errorDetail":{"message":"manifest for foo/bar:latest not found"}}',
     ].join("\n");
 
-    // Same event carries both forms with identical text: the extracted error
-    // message must not be duplicated.
-    const bothErrorFormsSameTextStream = [
-      '{"error":"pull access denied","errorDetail":{"message":"pull access denied"}}',
-    ].join("\n");
+    // Defensive fallback: a single {success,message} object instead of a
+    // stream. requestNdjson() yields it as one event; summarizeComposeStream()
+    // must pass it through unchanged rather than trying to aggregate it.
+    const singleObjectFallback = '{"success":true,"message":"Project images pulled"}';
 
+    // Zero events: no {"done":true} was ever observed, so success must be
+    // false. Deliberate decision (same rationale as noDoneStream above) —
+    // an empty stream is not vacuous success.
     const emptyStream = "";
 
-    // Realistic docker-pull progress: two layers pulled with repeated identical
-    // progress ticks ("Downloading"/"Extracting" repeated per layer while the
-    // byte counters that aren't captured here change), ending on a burst of
-    // identical "Extracting" ticks for the slower layer.
-    const repetitiveMultiLayerStream = [
-      '{"status":"Pulling fs layer","id":"a1"}',
-      '{"status":"Pulling fs layer","id":"b2"}',
-      '{"status":"Downloading","id":"a1"}',
-      '{"status":"Downloading","id":"b2"}',
-      '{"status":"Downloading","id":"a1"}',
-      '{"status":"Downloading","id":"b2"}',
-      '{"status":"Downloading","id":"a1"}',
-      '{"status":"Verifying Checksum","id":"a1"}',
-      '{"status":"Download complete","id":"a1"}',
-      '{"status":"Downloading","id":"b2"}',
-      '{"status":"Verifying Checksum","id":"b2"}',
-      '{"status":"Download complete","id":"b2"}',
-      '{"status":"Extracting","id":"a1"}',
-      '{"status":"Extracting","id":"b2"}',
-      '{"status":"Extracting","id":"b2"}',
-      '{"status":"Extracting","id":"b2"}',
-      '{"status":"Extracting","id":"b2"}',
-      '{"status":"Extracting","id":"b2"}',
+    // Same event carries both `error` and `errorDetail.message` with
+    // identical text. extractStreamError() returns the first match it finds
+    // (`error`) and never falls through to `errorDetail`, so the message
+    // must appear exactly once in the aggregated result, not twice.
+    const duplicateErrorStream = [
+      '{"type":"activity","activityId":"xyz"}',
+      '{"error":"manifest for foo/bar:latest not found","errorDetail":{"message":"manifest for foo/bar:latest not found"}}',
     ].join("\n");
 
     describe("stacks.pull", () => {
-      it("Test 1 (regression): a stream with no errors and no complete sentinel reports success:true", async () => {
-        mockFetch.mockResolvedValue({ ok: true, text: async () => realisticNoSentinelStream } as Response);
+      it("Test 1 (regression): the gitea fixture message contains real docker output, not a bare event count", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => giteaPullStream } as Response);
+
+        const result = await client.stacks.pull("env123", "stack1");
+
+        expect(result.message).toContain("Status: Image is up to date for gitea/gitea:1.25.5");
+        expect(result.message).not.toMatch(/^Pull finished \(\d+ events\)$/);
+      });
+
+      it('Test 2: a stream ending in {"done":true} with no log lines reports success:true', async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => localImagePullStream } as Response);
 
         const result = await client.stacks.pull("env123", "stack1");
 
         expect(result.success).toBe(true);
       });
 
-      it("Test 2: a stream with an error event reports success:false with the error text", async () => {
-        mockFetch.mockResolvedValue({ ok: true, text: async () => errorStream } as Response);
+      it('Test 3 (deliberate behavior change): log lines with no {"done":true} report success:false', async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => noDoneStream } as Response);
 
         const result = await client.stacks.pull("env123", "stack1");
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain("manifest for ghcr.io/foo/bar:latest not found");
       });
 
-      it("Test 3: single-object ActionResponse fallback is returned unchanged", async () => {
-        mockFetch.mockResolvedValue({ ok: true, text: async () => singleObjectFallback } as Response);
-
-        const result = await client.stacks.pull("env123", "stack1");
-
-        expect(result).toEqual({ success: true, message: "Images pulled" });
-      });
-
-      it("Test 4: a normal pull stream produces a message with real event info, not just a count", async () => {
-        mockFetch.mockResolvedValue({ ok: true, text: async () => statusLineStream } as Response);
-
-        const result = await client.stacks.pull("env123", "stack1");
-
-        expect(result.success).toBe(true);
-        expect(result.message).not.toMatch(/^Pull finished \(\d+ events\)$/);
-        expect(result.message).toContain("Downloaded newer image for myapp/web:latest");
-      });
-
-      it("Test 5 (regression): an error reported only via errorDetail (no plain `error` field) reports success:false", async () => {
+      it("Test 4: an error reported only via errorDetail (no plain `error` field) is still detected", async () => {
         mockFetch.mockResolvedValue({ ok: true, text: async () => errorDetailOnlyStream } as Response);
 
         const result = await client.stacks.pull("env123", "stack1");
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain("manifest for ghcr.io/foo/bar:latest not found");
+        expect(result.message).toContain("manifest for foo/bar:latest not found");
       });
 
-      it("Test 6: an event carrying both `error` and `errorDetail` with identical text does not duplicate it", async () => {
-        mockFetch.mockResolvedValue({ ok: true, text: async () => bothErrorFormsSameTextStream } as Response);
+      it("Test 5: falls back to a single ActionResponse object if the endpoint does not stream", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => singleObjectFallback } as Response);
 
         const result = await client.stacks.pull("env123", "stack1");
 
-        expect(result.success).toBe(false);
-        expect(result.message).toBe("Pull failed: pull access denied");
+        expect(result.success).toBe(true);
+        expect(result.message).toBe("Project images pulled");
       });
 
-      it("Test 7: an empty stream (0 events) cannot confirm success, so it reports success:false", async () => {
+      it("Test 6: an empty stream (0 events) reports success:false", async () => {
         mockFetch.mockResolvedValue({ ok: true, text: async () => emptyStream } as Response);
 
         const result = await client.stacks.pull("env123", "stack1");
 
         expect(result.success).toBe(false);
-        expect(result.message).toBe("Pull returned no events; cannot confirm success");
       });
 
-      it("Test 8: repeated identical status lines across layers are collapsed, not echoed 5x", async () => {
-        mockFetch.mockResolvedValue({ ok: true, text: async () => repetitiveMultiLayerStream } as Response);
+      it("Test 7: `error` and `errorDetail` on the same event do not duplicate the message", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => duplicateErrorStream } as Response);
 
         const result = await client.stacks.pull("env123", "stack1");
 
-        expect(result.success).toBe(true);
-        expect(result.message).toBe(
-          "b2: Downloading | b2: Verifying Checksum | b2: Download complete | a1: Extracting | b2: Extracting"
-        );
+        expect(result.success).toBe(false);
+        const occurrences = (result.message.match(/manifest for foo\/bar:latest not found/g) ?? []).length;
+        expect(occurrences).toBe(1);
       });
     });
 
     describe("projectAdditional.pullImages", () => {
-      it("Test 1 (regression): a stream with no errors and no complete sentinel reports success:true", async () => {
-        mockFetch.mockResolvedValue({ ok: true, text: async () => realisticNoSentinelStream } as Response);
+      it("Test 1 (regression): the gitea fixture message contains real docker output, not a bare event count", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => giteaPullStream } as Response);
+
+        const result = await client.projectAdditional.pullImages("env123", "proj1");
+
+        expect(result.message).toContain("Status: Image is up to date for gitea/gitea:1.25.5");
+        expect(result.message).not.toMatch(/^Pull finished \(\d+ events\)$/);
+      });
+
+      it('Test 2: a stream ending in {"done":true} with no log lines reports success:true', async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => localImagePullStream } as Response);
 
         const result = await client.projectAdditional.pullImages("env123", "proj1");
 
         expect(result.success).toBe(true);
       });
 
-      it("Test 2: a stream with an error event reports success:false with the error text", async () => {
-        mockFetch.mockResolvedValue({ ok: true, text: async () => errorStream } as Response);
+      it('Test 3 (deliberate behavior change): log lines with no {"done":true} report success:false', async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => noDoneStream } as Response);
 
         const result = await client.projectAdditional.pullImages("env123", "proj1");
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain("manifest for ghcr.io/foo/bar:latest not found");
       });
 
-      it("Test 3: single-object ActionResponse fallback is returned unchanged", async () => {
-        mockFetch.mockResolvedValue({ ok: true, text: async () => singleObjectFallback } as Response);
-
-        const result = await client.projectAdditional.pullImages("env123", "proj1");
-
-        expect(result).toEqual({ success: true, message: "Images pulled" });
-      });
-
-      it("Test 4: a normal pull stream produces a message with real event info, not just a count", async () => {
-        mockFetch.mockResolvedValue({ ok: true, text: async () => statusLineStream } as Response);
-
-        const result = await client.projectAdditional.pullImages("env123", "proj1");
-
-        expect(result.success).toBe(true);
-        expect(result.message).not.toMatch(/^Pull finished \(\d+ events\)$/);
-        expect(result.message).toContain("Downloaded newer image for myapp/web:latest");
-      });
-
-      it("Test 5 (regression): an error reported only via errorDetail (no plain `error` field) reports success:false", async () => {
+      it("Test 4: an error reported only via errorDetail (no plain `error` field) is still detected", async () => {
         mockFetch.mockResolvedValue({ ok: true, text: async () => errorDetailOnlyStream } as Response);
 
         const result = await client.projectAdditional.pullImages("env123", "proj1");
 
         expect(result.success).toBe(false);
-        expect(result.message).toContain("manifest for ghcr.io/foo/bar:latest not found");
+        expect(result.message).toContain("manifest for foo/bar:latest not found");
       });
 
-      it("Test 6: an event carrying both `error` and `errorDetail` with identical text does not duplicate it", async () => {
-        mockFetch.mockResolvedValue({ ok: true, text: async () => bothErrorFormsSameTextStream } as Response);
+      it("Test 5: falls back to a single ActionResponse object if the endpoint does not stream", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => singleObjectFallback } as Response);
 
         const result = await client.projectAdditional.pullImages("env123", "proj1");
 
-        expect(result.success).toBe(false);
-        expect(result.message).toBe("Pull failed: pull access denied");
+        expect(result.success).toBe(true);
+        expect(result.message).toBe("Project images pulled");
       });
 
-      it("Test 7: an empty stream (0 events) cannot confirm success, so it reports success:false", async () => {
+      it("Test 6: an empty stream (0 events) reports success:false", async () => {
         mockFetch.mockResolvedValue({ ok: true, text: async () => emptyStream } as Response);
 
         const result = await client.projectAdditional.pullImages("env123", "proj1");
 
         expect(result.success).toBe(false);
-        expect(result.message).toBe("Pull returned no events; cannot confirm success");
       });
 
-      it("Test 8: repeated identical status lines across layers are collapsed, not echoed 5x", async () => {
-        mockFetch.mockResolvedValue({ ok: true, text: async () => repetitiveMultiLayerStream } as Response);
+      it("Test 7: `error` and `errorDetail` on the same event do not duplicate the message", async () => {
+        mockFetch.mockResolvedValue({ ok: true, text: async () => duplicateErrorStream } as Response);
 
         const result = await client.projectAdditional.pullImages("env123", "proj1");
 
-        expect(result.success).toBe(true);
-        expect(result.message).toBe(
-          "b2: Downloading | b2: Verifying Checksum | b2: Download complete | a1: Extracting | b2: Extracting"
-        );
+        expect(result.success).toBe(false);
+        const occurrences = (result.message.match(/manifest for foo\/bar:latest not found/g) ?? []).length;
+        expect(occurrences).toBe(1);
       });
     });
   });

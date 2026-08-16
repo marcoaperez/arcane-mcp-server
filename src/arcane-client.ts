@@ -283,14 +283,24 @@ export interface VersionInfo {
 }
 
 /**
- * One line of the NDJSON stream emitted by the compose action endpoints
- * (/up and /redeploy). Arcane serves these as `application/x-json-stream`:
+ * One line of the NDJSON stream emitted by the compose/pull action endpoints
+ * (/up, /redeploy, and — as of Task 11 — /pull too). Arcane serves these as
+ * `application/x-json-stream`:
  *   {"type":"activity","activityId":"..."}   // opening handle
- *   {"log":" Container foo Recreated "}       // docker compose progress lines
+ *   {"log":" Container foo Recreated "}       // docker compose/pull progress lines
  *   {"done":true}                             // terminal success marker
  *   {"error":"..."}                           // emitted instead on failure
+ *   {"errorDetail":{"message":"..."}}         // alternate failure shape
  * `success`/`message` are only present in the defensive single-object fallback
  * (some Arcane versions/endpoints may answer with a plain ActionResponse).
+ *
+ * Task 11: /pull was believed to emit docker-pull-style `{status,id}` events
+ * and had its own aggregator (`summarizePullStream`/`PullStreamEvent`). A
+ * real stream captured against Arcane v2.7.0 (2026-08-16, `/projects/{id}/pull`)
+ * showed `activityId`/`log`/`done` — the exact same shape as /up and /redeploy,
+ * never `status` or `id`. `summarizePullStream` is gone; all four endpoints
+ * (stacks.pull, stacks.start, projectAdditional.pullImages, projectAdditional.redeploy)
+ * now share this one event shape and summarizeComposeStream() below.
  */
 export interface ComposeStreamEvent {
   type?: string;
@@ -298,16 +308,35 @@ export interface ComposeStreamEvent {
   log?: string;
   done?: boolean;
   error?: string;
+  errorDetail?: { message?: string };
   success?: boolean;
   message?: string;
 }
 
 /**
- * Aggregate an NDJSON compose stream into a single ActionResponse.
+ * Extract the error text from a stream event, whichever shape it arrived in.
+ * openapi.txt declares these streaming endpoints' 200 responses with no
+ * `content`, so the stream shape isn't specified: Arcane may report a
+ * failure via the plain `error` string, or via `errorDetail` (an object,
+ * typically `{"message":"..."}`) — this was first observed on /pull, but
+ * nothing rules it out on /up or /redeploy, so all four endpoints check both.
+ * When both are present with the same text, `error` wins so the text isn't
+ * duplicated in the aggregated message.
+ */
+function extractStreamError(e: ComposeStreamEvent): string | undefined {
+  if (typeof e.error === "string" && e.error.length > 0) return e.error;
+  if (e.errorDetail && typeof e.errorDetail.message === "string" && e.errorDetail.message.length > 0) {
+    return e.errorDetail.message;
+  }
+  return undefined;
+}
+
+/**
+ * Aggregate an NDJSON compose/pull stream into a single ActionResponse.
  * Surfaces stream errors actionably and treats `{"done":true}` as success.
  */
 function summarizeComposeStream(events: ComposeStreamEvent[], action: string): ActionResponse {
-  const errors = events.filter(e => e.error).map(e => e.error as string);
+  const errors = events.map(extractStreamError).filter((e): e is string => typeof e === "string");
   if (errors.length > 0) {
     return { success: false, message: `${action} failed: ${errors.join("; ")}` };
   }
@@ -327,99 +356,6 @@ function summarizeComposeStream(events: ComposeStreamEvent[], action: string): A
     success: done,
     message: logs.length > 0 ? logs.join(" | ") : `${action} finished (${events.length} events)`,
   };
-}
-
-/**
- * One line of the NDJSON stream emitted by the /pull endpoints (docker pull
- * progress, `application/x-json-stream`). Unlike the compose streams (/up,
- * /redeploy), which emit an explicit `{"done":true}` terminal marker, docker-pull
- * streams have no observed terminal success sentinel.
- */
-export interface PullStreamEvent {
-  status?: string;
-  error?: string;
-  errorDetail?: { message?: string };
-  id?: string;
-  success?: boolean;
-  message?: string;
-}
-
-/**
- * Aggregate an NDJSON docker-pull stream into a single ActionResponse.
- *
- * Task 10: a `{"status":"complete"}` sentinel was assumed as the success
- * criterion in the original code, but it has never been observed against a
- * real server (confirmed live against Arcane v2.7.0 — a 2-event pull stream
- * with no errors was reported as `success:false` purely because the sentinel
- * never arrived). In docker-pull semantics, absence of an error IS the
- * success signal, so this mirrors summarizeComposeStream()'s priority order
- * (errors first, then the single-object fallback) but treats "no errors" as
- * the normal-case success rather than requiring a sentinel.
- */
-/**
- * Extract the error text from a pull event, whichever shape it arrived in.
- * openapi.txt declares /pull's 200 response with no `content`, so the stream
- * shape isn't specified: Arcane may report a failed layer via the plain
- * `error` string, or via `errorDetail` (an object, typically
- * `{"message":"..."}`). When both are present with the same text, `error`
- * wins so the text isn't duplicated in the aggregated message.
- */
-function extractPullError(e: PullStreamEvent): string | undefined {
-  if (typeof e.error === "string" && e.error.length > 0) return e.error;
-  if (e.errorDetail && typeof e.errorDetail.message === "string" && e.errorDetail.message.length > 0) {
-    return e.errorDetail.message;
-  }
-  return undefined;
-}
-
-function summarizePullStream(events: PullStreamEvent[], action: string): ActionResponse {
-  const errors = events.map(extractPullError).filter((e): e is string => typeof e === "string");
-  if (errors.length > 0) {
-    return { success: false, message: `${action} failed: ${errors.join("; ")}` };
-  }
-
-  // Defensive fallback: a non-streaming response (single ActionResponse object).
-  // requestNdjson yields it as one event — pass it through unchanged.
-  if (events.length === 1 && typeof events[0]?.success === "boolean") {
-    return { success: events[0].success as boolean, message: events[0].message ?? `${action} finished` };
-  }
-
-  // An empty stream is not evidence of success. "Absence of error" only reads
-  // as success when there's a stream to have observed errors in: a real
-  // docker-pull stream always emits at least one status line, even when
-  // there's nothing new to pull. Zero events is indistinguishable from a
-  // truncated or otherwise anomalous response, so this does NOT default to
-  // success the way an errorless multi-event stream does.
-  if (events.length === 0) {
-    return { success: false, message: `${action} returned no events; cannot confirm success` };
-  }
-
-  // No error events observed: in docker-pull semantics that IS success.
-  // Surface real event info in the message (status lines, tagged with their
-  // layer id when present) rather than degrading to a bare count.
-  const statusLines = events
-    .filter(e => typeof e.status === "string" && e.status.length > 0)
-    .map(e => (e.id ? `${e.id}: ${e.status}` : (e.status as string)));
-
-  // Docker repeats identical status text for many progress ticks per layer
-  // (e.g. "Downloading", "Extracting" — only the byte counters we don't
-  // capture change between ticks). Collapse consecutive duplicates before
-  // taking the tail, so the message doesn't degrade into the same line
-  // repeated 5 times.
-  const dedupedStatusLines = statusLines.filter((line, i) => line !== statusLines[i - 1]);
-
-  let message: string;
-  if (dedupedStatusLines.length > 0) {
-    // Keep the message readable: the tail of the stream is the most relevant part.
-    message = dedupedStatusLines.slice(-5).join(" | ");
-  } else {
-    const ids = [...new Set(events.filter(e => typeof e.id === "string").map(e => e.id as string))];
-    message = ids.length > 0
-      ? `${action} finished for: ${ids.join(", ")}`
-      : `${action} finished (${events.length} events)`;
-  }
-
-  return { success: true, message };
 }
 
 export interface ListOptions {
@@ -657,13 +593,14 @@ class StacksMethods {
   }
 
   async pull(envId: string, stackId: string): Promise<ActionResponse> {
-    // Endpoint /pull returns NDJSON (newline-delimited JSON) streaming docker pull progress.
-    // Use requestNdjson to parse the stream and summarize it as an ActionResponse.
-    const events = await this.client.requestNdjson<PullStreamEvent>(
+    // /pull streams NDJSON, like /up and /redeploy (Task 11: confirmed against
+    // a real Arcane v2.7.0 stream to be the same {activityId,log,done} shape,
+    // not docker-pull-style {status,id}). Parse and summarize the same way.
+    const events = await this.client.requestNdjson<ComposeStreamEvent>(
       "POST",
       `/environments/${envId}/projects/${stackId}/pull`
     );
-    return summarizePullStream(events, "Pull");
+    return summarizeComposeStream(events, "Pull");
   }
 }
 
@@ -924,13 +861,14 @@ class ProjectAdditionalMethods {
   }
 
   async pullImages(envId: string, projectId: string): Promise<ActionResponse> {
-    // Endpoint /pull returns NDJSON (newline-delimited JSON) streaming docker pull progress.
-    // Use requestNdjson to parse the stream and summarize it as an ActionResponse.
-    const events = await this.client.requestNdjson<PullStreamEvent>(
+    // /pull streams NDJSON, like /up and /redeploy (Task 11: confirmed against
+    // a real Arcane v2.7.0 stream to be the same {activityId,log,done} shape,
+    // not docker-pull-style {status,id}). Parse and summarize the same way.
+    const events = await this.client.requestNdjson<ComposeStreamEvent>(
       "POST",
       `/environments/${envId}/projects/${projectId}/pull`
     );
-    return summarizePullStream(events, "Pull");
+    return summarizeComposeStream(events, "Pull");
   }
 
   async redeploy(envId: string, projectId: string): Promise<ActionResponse> {
