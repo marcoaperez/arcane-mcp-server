@@ -27,6 +27,8 @@ const MAP = {
   GitOpsSync: "GitopsGitOpsSync",
   Template: "TemplateTemplate",
   VolumeBackup: "VolumeBackup",
+  VolumeWorkspace: "WorkspaceWorkspace",
+  WorkspaceFileEntry: "WorkspaceFileEntry",
 };
 
 function tsInterfaceProps(file) {

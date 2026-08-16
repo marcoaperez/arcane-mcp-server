@@ -19,6 +19,9 @@ enlaza desde aquí.
 
 - [Drift de campos vs Arcane v2.7.0 (2026-08-16)](auditorias/2026-08-16-drift-campos-v2.7.0.md)
   — desalineaciones entre las interfaces TypeScript y los schemas del spec, y su resolución.
+- [Actualización a Arcane 2.8.0 (2026-08-16)](auditorias/2026-08-16-actualizacion-arcane-2.8.0.md)
+  — causa raíz del redeploy de GitOps roto, su arreglo, y las 9 operaciones que 2.8.0
+  elimina (2 de ellas en uso, migradas de `/browse` a `/workspace`).
 
 ## Specs y planes
 

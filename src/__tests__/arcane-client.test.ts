@@ -827,6 +827,62 @@ describe("ArcaneClient", () => {
     });
   });
 
+  // Arcane 2.8.0 eliminó la familia /browse y la sustituyó por /workspace.
+  // Comprobado en vivo contra la instancia: /browse devuelve 404.
+  describe("volumeFiles (API workspace de 2.8.0)", () => {
+    const workspaceVacio = {
+      success: true,
+      data: { files: [], fileTreeRevision: "rev-abc", fileTreeTruncated: false },
+    };
+
+    it(".getWorkspace(envId, name) - GET /environments/{envId}/volumes/{name}/workspace", async () => {
+      mockFetch.mockResolvedValue({ ok: true, json: async () => workspaceVacio } as Response);
+
+      const resultado = await client.volumeFiles.getWorkspace("env123", "data-vol");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/volumes/data-vol/workspace",
+        expect.objectContaining({ method: "GET" })
+      );
+      expect(resultado.data.fileTreeRevision).toBe("rev-abc");
+    });
+
+    it(".uploadFile() - PUT multipart con manifiesto create_file y el fichero en uploadIndex 0", async () => {
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => workspaceVacio } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ success: true, message: "Workspace updated" }),
+        } as Response);
+
+      await client.volumeFiles.uploadFile("env123", "data-vol", "notas/hola.txt", "hola mundo");
+
+      // Primero lee el workspace para obtener el testigo de concurrencia.
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        "http://localhost:3552/api/environments/env123/volumes/data-vol/workspace",
+        expect.objectContaining({ method: "GET" })
+      );
+
+      const [url, init] = mockFetch.mock.calls[1] as [string, RequestInit];
+      expect(url).toBe("http://localhost:3552/api/environments/env123/volumes/data-vol/workspace");
+      expect(init.method).toBe("PUT");
+
+      // El boundary lo pone el runtime: fijar Content-Type a mano lo rompería.
+      const headers = init.headers as Record<string, string>;
+      expect(headers["Content-Type"]).toBeUndefined();
+
+      const form = init.body as FormData;
+      expect(form).toBeInstanceOf(FormData);
+      const manifiesto = JSON.parse(form.get("manifest") as string);
+      expect(manifiesto).toEqual({
+        fileTreeRevision: "rev-abc",
+        fileChanges: [{ operation: "create_file", relativePath: "notas/hola.txt", uploadIndex: 0 }],
+      });
+      expect(await (form.getAll("files")[0] as File).text()).toBe("hola mundo");
+    });
+  });
+
   describe("networks", () => {
     it(".list(envId) - GET /environments/{envId}/networks", async () => {
       mockFetch.mockResolvedValue({

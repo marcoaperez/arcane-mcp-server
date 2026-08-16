@@ -1,14 +1,14 @@
 # Arcane Docker MCP Server
 
 > **Fork mantenido activamente por [Taiko Solutions](https://taikosolutions.com).**
-> Verificado contra **Arcane v2.7.0**: las **58** combinaciones método+ruta que usa el
+> Verificado contra **Arcane v2.8.0**: las **63** combinaciones método+ruta que usa el
 > cliente existen en el spec de la instancia, sin ausencias. Origen del fork:
 > [`cougz/arcane-mcp-server`](https://github.com/cougz/arcane-mcp-server), inactivo
 > desde marzo de 2026.
 >
 > | | |
 > |---|---|
-> | **Compatibilidad** | Arcane v2.x (probado contra v2.7.0) |
+> | **Compatibilidad** | Arcane v2.x (probado contra v2.8.0) |
 > | **Spec de referencia** | [`openapi.txt`](openapi.txt) — descargado de la instancia con `npm run update-api-spec` |
 > | **Tools** | 68 |
 > | **Documentación** | [`docs/`](docs/README.md) |
@@ -28,11 +28,11 @@ Built on Cloudflare Workers using the official Cloudflare `agents` package, this
 | Área | `cougz/arcane-mcp-server` | Este fork |
 |---|---|---|
 | Endpoints NDJSON (`/pull`, `/up`, `/redeploy`) | Rotos: parsean el cuerpo con `response.json()` y revientan con `Unexpected non-whitespace character after JSON` en la segunda línea del stream | `requestNdjson()` + agregación a `ActionResponse`, con los errores del stream propagados a la tool |
-| Path de `arcane_stack_pull` | `/pull-project-images`, inexistente en Arcane v2.x → 404 | `/pull`, según el spec v2.7.0 |
-| Compatibilidad de shapes | Escrito contra Arcane v1.x | Interfaces alineadas con v2.7.0 y auditadas por `scripts/audit-schema-drift.mjs` |
+| Path de `arcane_stack_pull` | `/pull-project-images`, inexistente en Arcane v2.x → 404 | `/pull`, según el spec v2.8.0 |
+| Compatibilidad de shapes | Escrito contra Arcane v1.x | Interfaces alineadas con v2.8.0 y auditadas por `scripts/audit-schema-drift.mjs` |
 | Despliegue | Solo Cloudflare Workers | Cloudflare Workers **o** contenedor Docker autoalojado (`docker-compose.yml` + `wrangler.local.jsonc`) |
 | Cliente | `baseUrl` fijo hacia el binding VPC | Modo dual: binding VPC en Workers, URL real en local/Docker |
-| Verificación | Sin runner de tests funcional | 107 tests unitarios + suite e2e contra una instancia Arcane real |
+| Verificación | Sin runner de tests funcional | 111 tests unitarios + 6 tests e2e contra una instancia Arcane real |
 
 El fix de los endpoints NDJSON se ha ofrecido al upstream como PR autocontenido.
 
@@ -128,7 +128,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_volume_browse` | Browse files and directories in a Docker volume. | `environmentId?`, `environmentName?`, `volumeName`, `path?` |
+| `arcane_volume_browse` | List the full file tree of a Docker volume. | `environmentId?`, `environmentName?`, `volumeName` |
 | `arcane_volume_upload_file` | Upload a file to a Docker volume. | `environmentId?`, `environmentName?`, `volumeName`, `filename`, `content`, `path?` |
 
 ### Networks (4)
