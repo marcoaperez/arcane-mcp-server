@@ -29,6 +29,16 @@ const MAP = {
   VolumeBackup: "VolumeBackup",
   VolumeWorkspace: "WorkspaceWorkspace",
   WorkspaceFileEntry: "WorkspaceFileEntry",
+  Activity: "ActivityActivity",
+  ActivityDetail: "ActivityDetail",
+  ActivityMessage: "ActivityMessage",
+  Event: "EventEvent",
+  EventSeverityCounts: "EventSeverityCounts",
+  JobStatus: "JobscheduleJobStatus",
+  JobSchedulesConfig: "JobscheduleConfig",
+  SystemPruneResult: "SystemPruneAllResult",
+  SystemConvertResult: "SystemConvertDockerRunResponse",
+  DockerInfo: "DockerinfoInfo",
 };
 
 function tsInterfaceProps(file) {

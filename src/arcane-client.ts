@@ -539,6 +539,254 @@ export interface WorkspaceUpdateManifest {
   fileChanges: WorkspaceFileChange[];
 }
 
+// ---------------------------------------------------------------------------
+// F2 — observabilidad: activities, events, jobs y system
+// ---------------------------------------------------------------------------
+
+export interface ActivityStartedBy {
+  displayName?: string;
+  userId?: string;
+  username: string;
+}
+
+export interface ActivityMessage {
+  activityId: string;
+  createdAt: string;
+  id: string;
+  level: string;
+  message: string;
+  payload?: Record<string, unknown>;
+}
+
+export interface Activity {
+  batchId?: string;
+  createdAt: string;
+  durationMs?: number;
+  endedAt?: string;
+  environmentId: string;
+  error?: string;
+  id: string;
+  latestMessage?: string;
+  metadata?: Record<string, unknown>;
+  progress?: number;
+  resourceId?: string;
+  resourceName?: string;
+  resourceType?: string;
+  sourceEnvironmentId?: string;
+  sourceEnvironmentName?: string;
+  startedAt: string;
+  startedBy?: ActivityStartedBy;
+  status: string;
+  step?: string;
+  type: string;
+  updatedAt?: string;
+}
+
+export interface ActivityDetail {
+  activity: Activity;
+  messages: ActivityMessage[] | null;
+}
+
+export interface Event {
+  createdAt: string;
+  description?: string;
+  environmentId?: string;
+  id: string;
+  metadata?: Record<string, unknown>;
+  resourceId?: string;
+  resourceName?: string;
+  resourceType?: string;
+  severity: string;
+  timestamp: string;
+  title: string;
+  type: string;
+  updatedAt?: string;
+  userId?: string;
+  username?: string;
+}
+
+export interface EventSeverityCounts {
+  error: number;
+  info: number;
+  success: number;
+  total: number;
+  warning: number;
+}
+
+export interface JobPrerequisite {
+  isMet: boolean;
+  label: string;
+  settingKey: string;
+  settingsUrl?: string;
+}
+
+export interface JobStatus {
+  canRunManually: boolean;
+  category: string;
+  description: string;
+  enabled: boolean;
+  id: string;
+  isContinuous: boolean;
+  managerOnly: boolean;
+  name: string;
+  nextRun?: string;
+  prerequisites: JobPrerequisite[] | null;
+  schedule: string;
+  settingsKey?: string;
+}
+
+/**
+ * OJO: este endpoint NO usa el sobre paginado `{data, pagination}` del resto
+ * de la API, sino `{jobs, isAgent}`. Tratarlo como paginado devuelve vacio
+ * en silencio. Verificado en vivo contra la instancia el 2026-08-16.
+ */
+export interface JobListResponse {
+  isAgent: boolean;
+  jobs: JobStatus[] | null;
+}
+
+export interface JobSchedulesConfig {
+  autoHealInterval: string;
+  autoUpdateInterval: string;
+  dockerClientRefreshInterval: string;
+  environmentHealthInterval: string;
+  eventCleanupInterval: string;
+  expiredSessionsCleanupInterval: string;
+  pollingInterval: string;
+  scheduledPruneInterval: string;
+  vulnerabilityScanInterval: string;
+}
+
+/** Todos los campos son opcionales: el spec declara `required: []`. */
+export interface JobSchedulesUpdate {
+  autoHealInterval?: string;
+  autoUpdateInterval?: string;
+  dockerClientRefreshInterval?: string;
+  environmentHealthInterval?: string;
+  eventCleanupInterval?: string;
+  expiredSessionsCleanupInterval?: string;
+  pollingInterval?: string;
+  scheduledPruneInterval?: string;
+  vulnerabilityScanInterval?: string;
+}
+
+/** Opciones de poda por recurso. `mode` es obligatorio en cada bloque. */
+export interface SystemPruneResourceOptions {
+  mode: string;
+  until?: string;
+}
+
+export interface SystemPruneRequest {
+  buildCache?: SystemPruneResourceOptions;
+  containers?: SystemPruneResourceOptions;
+  images?: SystemPruneResourceOptions;
+  networks?: { mode: string };
+  volumes?: { mode: string };
+}
+
+export interface SystemPruneResult {
+  activityId?: string;
+  buildCacheSpaceReclaimed?: number;
+  containerSpaceReclaimed?: number;
+  containersPruned?: string[] | null;
+  errors?: string[] | null;
+  imageSpaceReclaimed?: number;
+  imagesDeleted?: string[] | null;
+  networksDeleted?: string[] | null;
+  spaceReclaimed: number;
+  success: boolean;
+  volumeSpaceReclaimed?: number;
+  volumesDeleted?: string[] | null;
+}
+
+export interface SystemConvertResult {
+  dockerCompose: string;
+  envVars: string;
+  serviceName: string;
+  success: boolean;
+}
+
+/**
+ * Respuesta de `GET /system/docker/info`. Es un reenvio del `info` de Docker:
+ * ninguna tool lee sus campos, se serializa entero. Se declara completo para
+ * que la auditoria de drift lo vigile. Los campos anidados propios de Docker
+ * (`Plugins`, `Swarm`, `RegistryConfig`...) se dejan como `unknown`: la
+ * auditoria compara presencia y opcionalidad de campos, no tipos, asi que
+ * declararlos no aportaria nada y arrastraria una docena de interfaces mas.
+ */
+export interface DockerInfo {
+  Architecture: string;
+  CDISpecDirs: string[] | null;
+  CPUSet: boolean;
+  CPUShares: boolean;
+  CgroupDriver: string;
+  CgroupVersion?: string;
+  Containerd?: unknown;
+  ContainerdCommit: unknown;
+  Containers: number;
+  ContainersPaused: number;
+  ContainersRunning: number;
+  ContainersStopped: number;
+  CpuCfsPeriod: boolean;
+  CpuCfsQuota: boolean;
+  Debug: boolean;
+  DefaultAddressPools?: unknown[] | null;
+  DefaultRuntime: string;
+  DiscoveredDevices?: unknown[] | null;
+  DockerRootDir: string;
+  Driver: string;
+  DriverStatus: (string[] | null)[] | null;
+  ExperimentalBuild: boolean;
+  FirewallBackend?: unknown;
+  GenericResources: unknown[] | null;
+  HttpProxy: string;
+  HttpsProxy: string;
+  ID: string;
+  IPv4Forwarding: boolean;
+  Images: number;
+  IndexServerAddress: string;
+  InitBinary: string;
+  InitCommit: unknown;
+  Isolation: string;
+  KernelVersion: string;
+  Labels: string[] | null;
+  LiveRestoreEnabled: boolean;
+  LoggingDriver: string;
+  MemTotal: number;
+  MemoryLimit: boolean;
+  NCPU: number;
+  NEventsListener: number;
+  NFd: number;
+  NGoroutines: number;
+  NRI?: unknown;
+  Name: string;
+  NoProxy: string;
+  OSType: string;
+  OSVersion: string;
+  OomKillDisable: boolean;
+  OperatingSystem: string;
+  PidsLimit: boolean;
+  Plugins: unknown;
+  ProductLicense?: string;
+  RegistryConfig: unknown;
+  RuncCommit: unknown;
+  Runtimes: Record<string, unknown>;
+  SecurityOptions: string[] | null;
+  ServerVersion: string;
+  SwapLimit: boolean;
+  Swarm: unknown;
+  SystemStatus?: (string[] | null)[] | null;
+  SystemTime: string;
+  Warnings: string[] | null;
+  apiVersion: string;
+  arch: string;
+  buildTime: string;
+  gitCommit: string;
+  goVersion: string;
+  os: string;
+  success: boolean;
+}
+
 export interface ProjectUpdateExtended extends ProjectUpdate {
   removeFiles?: boolean;
   removeVolumes?: boolean;
@@ -1139,6 +1387,21 @@ export class ArcaneClient {
     }
 
     return response.json() as Promise<T>;
+  }
+
+  /**
+   * Como `request<T>`, pero para endpoints que no devuelven cuerpo (HEAD).
+   *
+   * `request()` termina en `response.json()`, que con un cuerpo vacio lanza.
+   * Aqui el veredicto es el codigo de estado, y un estado de error NO lanza:
+   * "el sistema no esta sano" es una respuesta valida, no un fallo de la llamada.
+   */
+  async requestHead(method: string, path: string): Promise<{ ok: boolean; status: number }> {
+    const response = await this._fetch(`${this.baseUrl}${path}`, {
+      method,
+      headers: { "X-API-Key": this.apiKey },
+    });
+    return { ok: response.ok, status: response.status };
   }
 
   /**

@@ -102,6 +102,26 @@ describe("ArcaneClient", () => {
 
       await expect(client.environments.get("123")).rejects.toThrow("Internal Server Error");
     });
+
+    it("requestHead() no parsea cuerpo y devuelve el codigo de estado", async () => {
+      mockFetch.mockResolvedValue({ ok: true, status: 200 } as Response);
+
+      const resultado = await client.requestHead("HEAD", "/environments/env123/system/health");
+
+      expect(resultado).toEqual({ ok: true, status: 200 });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/system/health",
+        expect.objectContaining({ method: "HEAD" })
+      );
+    });
+
+    it("requestHead() devuelve ok:false en vez de lanzar cuando el estado no es 2xx", async () => {
+      mockFetch.mockResolvedValue({ ok: false, status: 503 } as Response);
+
+      const resultado = await client.requestHead("HEAD", "/environments/env123/system/health");
+
+      expect(resultado).toEqual({ ok: false, status: 503 });
+    });
   });
 
   describe("environments", () => {
