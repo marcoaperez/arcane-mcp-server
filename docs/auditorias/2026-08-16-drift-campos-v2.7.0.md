@@ -170,3 +170,87 @@ que lea `Template.content` está leyendo `undefined`.
 npm run update-api-spec          # refresca openapi.txt desde la instancia
 node scripts/audit-schema-drift.mjs
 ```
+
+## Resolución (2026-08-16)
+
+Corregidos en `src/arcane-client.ts` todos los hallazgos de gravedad alta y media:
+
+- `NetworkSummary`: eliminados `internal`, `attachable`, `ingress` e `ipam` (no existen
+  en v2.7.0; siguen existiendo en `NetworkInspect`). Añadidos `inUse`, `isDefault`,
+  `labels` y `options`. `created` pasa a obligatorio.
+- `Volume`: añadidos `id`, `inUse`, `scope`, `containers`, `labels` y `options`;
+  `createdAt` y `size` pasan a obligatorios.
+- `NetworkInspect`: añadidos los campos obligatorios de v2.7.0 (`configOnly`,
+  `configFrom`, `enableIPv4`, `enableIPv6`, `containersList`) y `created` pasa a
+  obligatorio.
+- `Environment`: `name` pasa a opcional; añadidos los campos opcionales de edge/estado
+  de conexión (`connected`, `connectedAt`, `edge*`, `lastHeartbeat`, `lastPollAt`,
+  `lastSeen`).
+- `Project`: eliminado `iconUrl` (no existe); añadido `isArchived: boolean`
+  (obligatorio); añadidos los opcionales no diferidos (`activityId`, `archivedAt`,
+  `composeFileName`, `fileTreeRevision`, `fileTreeTruncated`, `hasBuildDirective`,
+  `iconDarkUrl`, `iconLightUrl`, `isDiscovered`, `overrideContent`,
+  `overrideFileName`, `redeployDisabled`, `relativePath`).
+- `ContainerSummary`: añadidos `iconDarkUrl`, `iconLightUrl`, `redeployDisabled`.
+- `ImageSummary`: sin cambios — sus dos únicos hallazgos (`usedBy`,
+  `vulnerabilityScan`) son diferidos a F3/F4.
+- `VersionInfo`: extraída como interfaz exportada (antes era un tipo inline no
+  auditable, de ahí el estado `INTERFAZ-AUSENTE`). **Discrepancia con el brief**: el
+  código propuesto en la Tarea 6 no incluía `nodeVersion` ni `svelteKitVersion`, pero
+  `openapi.txt` los marca `required` en `VersionInfo`. Se han añadido ambos siguiendo
+  la regla "el spec manda" — sin ellos la auditoría no bajaba de 2 hallazgos graves
+  (`FALTA-EN-TS-REQUERIDO`). Ver la nota en el propio código de la interfaz.
+- `Template`, `TemplateCreate`, `TemplateUpdate`: reescritas contra `TemplateTemplate` /
+  `TemplateCreateRequest` / `TemplateUpdateRequest`. Eliminados `composeContent`,
+  `category`, `tags`, `iconUrl`, `createdAt` y `updatedAt` (no existen en v2.7.0);
+  el compose vive en `content`. **Único cambio de comportamiento de la tarea**:
+  `arcane_template_create` y `arcane_template_update` no podían funcionar contra
+  v2.7.0 — enviaban `composeContent` (el spec exige `content`), trataban
+  `description`/`envContent` como opcionales (el spec los exige obligatorios) y
+  enviaban `category`/`tags`, que no existen en la API. Se corrigieron los parámetros
+  zod de ambas tools en `src/tools/templates.ts` para reflejar exactamente
+  `TemplateCreateRequest`/`TemplateUpdateRequest`.
+- `ContainerDetails`: `labels` pasa a opcional; añadidos `activityId`, `composeInfo`,
+  `iconDarkUrl`, `iconLightUrl`, `redeployDisabled`.
+- `GitRepository`: `createdAt`/`updatedAt` pasan a obligatorios; añadido
+  `sshHostKeyVerification`.
+- `GitOpsSync`: reescrita completa contra `GitopsGitOpsSync`. Eliminado `status` (el
+  estado real vive en `lastSyncStatus`). Añadidos los campos obligatorios que
+  faltaban (`environmentId`, `projectName`, `targetType`, `syncDirectory`,
+  `maxSyncFiles`, `maxSyncBinarySize`, `maxSyncTotalSize`, `preDeployNetworkMode`,
+  `preDeployTimeoutSec`, `createdAt`, `updatedAt`) y los opcionales no diferidos
+  (`lastSyncCommit`, `lastSyncError`, `lastSyncStatus`, `projectId`, `repository`,
+  `syncedFiles`).
+- `VolumeBackup`: eliminado `filename` (no existe); `size` pasa a obligatorio;
+  añadidos `activityId`, `updatedAt`.
+
+Ningún handler de `src/tools/gitops-syncs.ts`, `src/tools/volume-backups.ts`,
+`src/tools/networks.ts` ni `src/tools/volumes.ts` leía por nombre los campos
+eliminados (`status`, `filename`, `internal`, `attachable`, `ingress`, `ipam`) — todos
+reenvían el objeto `data`/`dto` sin desestructurar campos concretos, así que el
+type-check no encontró más roturas que las de `src/tools/templates.ts`. El único
+fichero de `src/tools/` que tuvo que tocarse fue `templates.ts`.
+
+La auditoría queda con **0 hallazgos graves**
+(`SOBRA-EN-TS` / `FALTA-EN-TS-REQUERIDO` / `OPCIONAL-PERO-REQUERIDO` /
+`OBLIGATORIO-PERO-OPCIONAL` / `INTERFAZ-AUSENTE`). Quedan 22 hallazgos
+`FALTA-EN-TS-OPCIONAL`, todos de dominios diferidos.
+
+### Diferido a F2–F5 (intencionadamente)
+
+Campos opcionales que pertenecen a dominios aún no implementados y que no se declaran
+porque ninguna tool los consume todavía:
+
+| Campo | Fase que lo necesita |
+|---|---|
+| `Project.updateInfo` | F3 — actualizaciones de imágenes |
+| `ImageSummary.updateInfo` (no aplica, no declarado) | — |
+| `ImageSummary.vulnerabilityScan` | F4 — vulnerability scanning |
+| `ImageSummary.usedBy` | F3 |
+| `Project.projectFiles`, `includeFiles`, `directoryFiles` | F5 — build |
+| `Project.runtimeServices`, `services` | F2 — system |
+| `GitOpsSync.preDeployEnv`, `preDeployExtraMounts`, `preDeployLastRun*`, `preDeployRunnerImage`, `preDeployScriptPath` | dominio pre-deploy de GitOps, sin tool que lo consuma |
+| `VersionInfo.$schema`, `currentDigest`, `currentTag`, `enabledFeatures`, `newestDigest`, `releaseNotes`, `releasedAt` | metadatos de auto-actualización/schema, sin tool que los consuma |
+
+Al abordar cada fase, volver a ejecutar `node scripts/audit-schema-drift.mjs` y
+declarar los campos correspondientes.

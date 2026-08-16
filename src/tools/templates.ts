@@ -51,11 +51,9 @@ export function registerTemplateTools(server: McpServer, client: ArcaneClient): 
     "Create a new Docker Compose template.",
     {
       name: z.string().describe("Template name"),
-      composeContent: z.string().describe("Docker Compose YAML content"),
-      envContent: z.string().optional().describe("Environment variables file content"),
-      description: z.string().optional().describe("Template description"),
-      category: z.string().optional().describe("Template category"),
-      tags: z.array(z.string()).optional().describe("Template tags"),
+      description: z.string().describe("Template description"),
+      content: z.string().describe("Docker Compose YAML content"),
+      envContent: z.string().describe("Environment variables file content"),
     },
     async (dto) => {
       try {
@@ -74,15 +72,13 @@ export function registerTemplateTools(server: McpServer, client: ArcaneClient): 
 
   server.tool(
     "arcane_template_update",
-    "Update an existing template.",
+    "Update an existing template. The API replaces the whole template, so all fields are required.",
     {
       templateId: z.string().describe("Template ID"),
-      name: z.string().optional().describe("New template name"),
-      composeContent: z.string().optional().describe("New Docker Compose YAML content"),
-      envContent: z.string().optional().describe("New environment variables file content"),
-      description: z.string().optional().describe("New template description"),
-      category: z.string().optional().describe("New template category"),
-      tags: z.array(z.string()).optional().describe("New template tags"),
+      name: z.string().describe("Template name"),
+      description: z.string().describe("Template description"),
+      content: z.string().describe("Docker Compose YAML content"),
+      envContent: z.string().describe("Environment variables file content"),
     },
     async ({ templateId, ...dto }) => {
       try {

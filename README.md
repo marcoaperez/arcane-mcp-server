@@ -48,8 +48,8 @@ Built on Cloudflare Workers using the official Cloudflare `agents` package, this
 | `arcane_network_prune` | Remove unused Docker networks | `environmentId?`/`environmentName?` |
 | `arcane_template_list` | List all Docker Compose templates | `search?`, `limit?` |
 | `arcane_template_get` | Get details of a specific template | `templateId` |
-| `arcane_template_create` | Create a new template | `name`, `composeContent`, `description?`, etc. |
-| `arcane_template_update` | Update an existing template | `templateId`, `name?`, `composeContent?`, etc. |
+| `arcane_template_create` | Create a new template | `name`, `description`, `content`, `envContent` |
+| `arcane_template_update` | Update an existing template (full replace) | `templateId`, `name`, `description`, `content`, `envContent` |
 | `arcane_template_delete` | Delete a template | `templateId` |
 | `arcane_version` | Get the Arcane server version | - |
 
