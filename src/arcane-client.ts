@@ -216,6 +216,53 @@ export interface ActionResponse {
   message: string;
 }
 
+/**
+ * One line of the NDJSON stream emitted by the compose action endpoints
+ * (/up and /redeploy). Arcane serves these as `application/x-json-stream`:
+ *   {"type":"activity","activityId":"..."}   // opening handle
+ *   {"log":" Container foo Recreated "}       // docker compose progress lines
+ *   {"done":true}                             // terminal success marker
+ *   {"error":"..."}                           // emitted instead on failure
+ * `success`/`message` are only present in the defensive single-object fallback
+ * (some Arcane versions/endpoints may answer with a plain ActionResponse).
+ */
+export interface ComposeStreamEvent {
+  type?: string;
+  activityId?: string;
+  log?: string;
+  done?: boolean;
+  error?: string;
+  success?: boolean;
+  message?: string;
+}
+
+/**
+ * Aggregate an NDJSON compose stream into a single ActionResponse.
+ * Surfaces stream errors actionably and treats `{"done":true}` as success.
+ */
+function summarizeComposeStream(events: ComposeStreamEvent[], action: string): ActionResponse {
+  const errors = events.filter(e => e.error).map(e => e.error as string);
+  if (errors.length > 0) {
+    return { success: false, message: `${action} failed: ${errors.join("; ")}` };
+  }
+
+  // Defensive fallback: a non-streaming response (single ActionResponse object).
+  // requestNdjson yields it as one event — pass it through unchanged.
+  if (events.length === 1 && typeof events[0]?.success === "boolean") {
+    return { success: events[0].success as boolean, message: events[0].message ?? `${action} finished` };
+  }
+
+  const done = events.some(e => e.done === true);
+  const logs = events
+    .filter(e => typeof e.log === "string")
+    .map(e => (e.log as string).trim())
+    .filter(Boolean);
+  return {
+    success: done,
+    message: logs.length > 0 ? logs.join(" | ") : `${action} finished (${events.length} events)`,
+  };
+}
+
 export interface ListOptions {
   search?: string;
   limit?: number;
@@ -418,7 +465,13 @@ class StacksMethods {
   }
 
   async start(envId: string, stackId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("POST", `/environments/${envId}/projects/${stackId}/up`);
+    // /up streams NDJSON (docker compose up progress), not a single JSON object.
+    // Parse the stream and summarize it as an ActionResponse.
+    const events = await this.client.requestNdjson<ComposeStreamEvent>(
+      "POST",
+      `/environments/${envId}/projects/${stackId}/up`
+    );
+    return summarizeComposeStream(events, "Start");
   }
 
   async stop(envId: string, stackId: string): Promise<ActionResponse> {
@@ -742,7 +795,13 @@ class ProjectAdditionalMethods {
   }
 
   async redeploy(envId: string, projectId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("POST", `/environments/${envId}/projects/${projectId}/redeploy`);
+    // /redeploy streams NDJSON (docker compose down+up progress), like /up.
+    // Parse the stream and summarize it as an ActionResponse.
+    const events = await this.client.requestNdjson<ComposeStreamEvent>(
+      "POST",
+      `/environments/${envId}/projects/${projectId}/redeploy`
+    );
+    return summarizeComposeStream(events, "Redeploy");
   }
 
   async destroy(envId: string, projectId: string, removeFiles?: boolean, removeVolumes?: boolean): Promise<ActionResponse> {
