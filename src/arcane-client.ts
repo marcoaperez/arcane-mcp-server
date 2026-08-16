@@ -67,8 +67,11 @@ export interface Project {
   activityId?: string;
   archivedAt?: string;
   composeFileName?: string;
-  fileTreeRevision?: string;
-  fileTreeTruncated?: boolean;
+  /**
+   * Obligatorio en 2.8.0 (nueva función de etiquetado de proyectos, upstream #3601).
+   * El spec lo declara `required` con tipo nullable.
+   */
+  tags: string[] | null;
   hasBuildDirective?: boolean;
   iconDarkUrl?: string;
   iconLightUrl?: string;
@@ -484,17 +487,56 @@ export interface VolumeBackup {
   updatedAt?: string;
 }
 
-export interface VolumeFileNode {
+/**
+ * Entrada del árbol de ficheros de un workspace (schema `WorkspaceFileEntry`).
+ * Arcane 2.8.0 retiró la familia `/browse` y la sustituyó por `/workspace`:
+ * el antiguo `type: 'file' | 'directory'` pasa a ser el booleano `isDirectory`.
+ */
+export interface WorkspaceFileEntry {
   name: string;
   path: string;
-  type: 'file' | 'directory';
-  size?: number;
-  modifiedAt?: string;
+  relativePath: string;
+  size: number;
+  modTime: string;
+  isDirectory: boolean;
+  isSymlink: boolean;
+  editable: boolean;
+  mode?: string;
+  linkTarget?: string;
+  readOnlyReason?: "binary" | "too_large" | "symlink" | "special";
 }
 
-export interface VolumeUploadFile {
-  filename: string;
-  content: string;
+/** Schema `WorkspaceWorkspace`. `files` es nullable en el spec. */
+export interface VolumeWorkspace {
+  files: WorkspaceFileEntry[] | null;
+  fileTreeRevision: string;
+  fileTreeTruncated: boolean;
+  activityId?: string;
+}
+
+export interface WorkspaceFileChange {
+  operation:
+    | "create_file"
+    | "create_folder"
+    | "update_file"
+    | "rename"
+    | "move"
+    | "delete"
+    | "restore_file";
+  relativePath: string;
+  newName?: string;
+  newParentPath?: string;
+  /** Índice del fichero correspondiente dentro del campo `files` del multipart. */
+  uploadIndex?: number;
+  baselineIndex?: number;
+  backupId?: string;
+  recursive?: boolean;
+}
+
+export interface WorkspaceUpdateManifest {
+  /** Testigo de concurrencia optimista: el `fileTreeRevision` leído del workspace. */
+  fileTreeRevision: string;
+  fileChanges: WorkspaceFileChange[];
 }
 
 export interface ProjectUpdateExtended extends ProjectUpdate {
@@ -971,24 +1013,44 @@ class VolumeBackupsMethods {
 class VolumeFilesMethods {
   constructor(private client: ArcaneClient) {}
 
-  async browse(envId: string, volumeName: string, path?: string): Promise<{ success: boolean; data: VolumeFileNode[] }> {
-    const params = new URLSearchParams();
-    if (path) params.set("path", path);
-    const query = params.toString();
-    return this.client.request<{ success: boolean; data: VolumeFileNode[] }>(
+  /**
+   * Devuelve el árbol completo del volumen. A diferencia del antiguo `/browse`,
+   * la API workspace no acepta un parámetro de ruta: entrega el árbol entero y
+   * cada entrada trae su `relativePath`.
+   */
+  async getWorkspace(envId: string, volumeName: string): Promise<{ success: boolean; data: VolumeWorkspace }> {
+    return this.client.request<{ success: boolean; data: VolumeWorkspace }>(
       "GET",
-      `/environments/${envId}/volumes/${volumeName}/browse${query ? `?${query}` : ""}`
+      `/environments/${envId}/volumes/${volumeName}/workspace`
     );
   }
 
-  async upload(envId: string, volumeName: string, filename: string, content: string, path?: string): Promise<ActionResponse> {
-    const params = new URLSearchParams();
-    if (path) params.set("path", path);
-    const query = params.toString();
-    return this.client.request<ActionResponse>(
-      "POST",
-      `/environments/${envId}/volumes/${volumeName}/browse/upload${query ? `?${query}` : ""}`,
-      { filename, content }
+  /**
+   * Escribe un fichero en el volumen mediante `PUT /workspace` (multipart).
+   * Lee antes el workspace porque el manifiesto exige el `fileTreeRevision`
+   * vigente: es el testigo de concurrencia optimista que evita pisar cambios ajenos.
+   */
+  async uploadFile(
+    envId: string,
+    volumeName: string,
+    relativePath: string,
+    content: string
+  ): Promise<ActionResponse> {
+    const workspace = await this.getWorkspace(envId, volumeName);
+
+    const manifest: WorkspaceUpdateManifest = {
+      fileTreeRevision: workspace.data.fileTreeRevision,
+      fileChanges: [{ operation: "create_file", relativePath, uploadIndex: 0 }],
+    };
+
+    const form = new FormData();
+    form.set("manifest", JSON.stringify(manifest));
+    form.append("files", new File([content], relativePath.split("/").pop() || relativePath));
+
+    return this.client.requestMultipart<ActionResponse>(
+      "PUT",
+      `/environments/${envId}/volumes/${volumeName}/workspace`,
+      form
     );
   }
 }
@@ -1065,6 +1127,33 @@ export class ArcaneClient {
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+
+    if (!response.ok) {
+      let message = response.statusText;
+      try {
+        const err = (await response.json()) as { detail?: string };
+        if (err.detail) message = err.detail;
+      } catch {}
+      throw new ArcaneApiError(response.status, message);
+    }
+
+    return response.json() as Promise<T>;
+  }
+
+  /**
+   * Like `request<T>`, but sends a `FormData` body for multipart endpoints
+   * (e.g. `PUT /volumes/{name}/workspace`).
+   *
+   * Deliberately omits `Content-Type`: the runtime must set it so it can add the
+   * multipart boundary. Setting it by hand produces a body the server can't parse.
+   */
+  async requestMultipart<T>(method: string, path: string, form: FormData): Promise<T> {
+    const url = `${this.baseUrl}${path}`;
+    const response = await this._fetch(url, {
+      method,
+      headers: { "X-API-Key": this.apiKey },
+      body: form,
     });
 
     if (!response.ok) {

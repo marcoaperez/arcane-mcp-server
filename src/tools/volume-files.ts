@@ -6,17 +6,16 @@ import { resolveEnvironmentId } from "./resolve";
 export function registerVolumeFileTools(server: McpServer, client: ArcaneClient): void {
   server.tool(
     "arcane_volume_browse",
-    "Browse files and directories in a Docker volume.",
+    "List the full file tree of a Docker volume.",
     {
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
       volumeName: z.string().describe("Volume name"),
-      path: z.string().optional().describe("Directory path to browse (defaults to root)"),
     },
-    async ({ environmentId, environmentName, volumeName, path }) => {
+    async ({ environmentId, environmentName, volumeName }) => {
       try {
         const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const result = await client.volumeFiles.browse(envId, volumeName, path);
+        const result = await client.volumeFiles.getWorkspace(envId, volumeName);
         return {
           content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
         };
@@ -43,7 +42,15 @@ export function registerVolumeFileTools(server: McpServer, client: ArcaneClient)
     async ({ environmentId, environmentName, volumeName, filename, content, path }) => {
       try {
         const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const result = await client.volumeFiles.upload(envId, volumeName, filename, content, path);
+        // La API workspace direcciona por ruta relativa única, no por (path, filename).
+        const relativePath = path ? `${path.replace(/\/+$/, "")}/${filename}` : filename;
+        const result = await client.volumeFiles.uploadFile(envId, volumeName, relativePath, content);
+        if (result.success === false) {
+          return {
+            content: [{ type: "text", text: `Error: ${result.message || "Upload failed"}` }],
+            isError: true,
+          };
+        }
         return {
           content: [{ type: "text", text: result.message || "File uploaded successfully" }],
         };

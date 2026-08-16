@@ -11,6 +11,7 @@ import { registerVolumeTools } from "../tools/volumes";
 import { registerNetworkTools } from "../tools/networks";
 import { registerTemplateTools } from "../tools/templates";
 import { registerSystemTools } from "../tools/system";
+import { registerVolumeFileTools } from "../tools/volume-files";
 
 type MockedFunction<T extends (...args: any[]) => any> = {
   (...args: Parameters<T>): ReturnType<T>;
@@ -392,6 +393,93 @@ describe("MCP Tools", () => {
 
       expect(mockClient.volumes.list).toHaveBeenCalledWith("env1");
       expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
+    });
+  });
+
+  describe("volume file tools (API workspace de 2.8.0)", () => {
+    const clienteConWorkspace = () => {
+      const mockClient = createMockClient() as any;
+      mockClient.volumeFiles = {
+        getWorkspace: vi.fn().mockResolvedValue({
+          success: true,
+          data: { files: [], fileTreeRevision: "rev-abc", fileTreeTruncated: false },
+        }),
+        uploadFile: vi.fn().mockResolvedValue({ success: true, message: "Workspace updated" }),
+      };
+      return mockClient;
+    };
+
+    it("arcane_volume_browse llama a client.volumeFiles.getWorkspace", async () => {
+      const mockClient = clienteConWorkspace();
+      const server = createMockServer();
+      registerVolumeFileTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_volume_browse");
+      const result = await handler({ environmentId: "env1", volumeName: "data-vol" });
+
+      expect(mockClient.volumeFiles.getWorkspace).toHaveBeenCalledWith("env1", "data-vol");
+      expect(result.isError).toBeUndefined();
+    });
+
+    it("arcane_volume_upload_file compone relativePath a partir de path y filename", async () => {
+      const mockClient = clienteConWorkspace();
+      const server = createMockServer();
+      registerVolumeFileTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_volume_upload_file");
+      await handler({
+        environmentId: "env1",
+        volumeName: "data-vol",
+        filename: "hola.txt",
+        content: "hola mundo",
+        path: "notas",
+      });
+
+      expect(mockClient.volumeFiles.uploadFile).toHaveBeenCalledWith(
+        "env1",
+        "data-vol",
+        "notas/hola.txt",
+        "hola mundo"
+      );
+    });
+
+    it("arcane_volume_upload_file sin path escribe en la raíz", async () => {
+      const mockClient = clienteConWorkspace();
+      const server = createMockServer();
+      registerVolumeFileTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_volume_upload_file");
+      await handler({
+        environmentId: "env1",
+        volumeName: "data-vol",
+        filename: "hola.txt",
+        content: "hola mundo",
+      });
+
+      expect(mockClient.volumeFiles.uploadFile).toHaveBeenCalledWith(
+        "env1",
+        "data-vol",
+        "hola.txt",
+        "hola mundo"
+      );
+    });
+
+    it("arcane_volume_upload_file devuelve isError cuando la API responde success:false", async () => {
+      const mockClient = clienteConWorkspace();
+      mockClient.volumeFiles.uploadFile.mockResolvedValue({ success: false, message: "revision conflict" });
+      const server = createMockServer();
+      registerVolumeFileTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_volume_upload_file");
+      const result = await handler({
+        environmentId: "env1",
+        volumeName: "data-vol",
+        filename: "hola.txt",
+        content: "hola mundo",
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("revision conflict");
     });
   });
 
