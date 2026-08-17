@@ -110,18 +110,20 @@ describe("observabilidad (e2e, Arcane 2.8.0)", () => {
     expect(typeof r.Containers).toBe("number");
   });
 
-  it("system.health devuelve {ok, status} coherentes entre si", async () => {
-    // HALLAZGO (real API vs. mock unitario): el mock de la Tarea 5 asumia un
-    // 200 sano. En esta instancia, HEAD /environments/{id}/system/health
-    // devuelve 500 de forma reproducible (comprobado tambien con curl directo,
-    // sin pasar por el cliente, y en mas de un entorno), mientras que el
-    // /health global (sin entorno) si responde 200. No se puede afirmar
-    // "sano" contra produccion real sin mentir sobre el estado observado, asi
-    // que lo que se verifica aqui es el contrato que si depende de la tool:
-    // que ok/status sean coherentes (ok === status en rango 2xx).
+  it("system.health devuelve 500 por un bug del endpoint en Arcane 2.8.0", async () => {
+    // Esta asercion parece rara a proposito. HEAD /environments/{id}/system/health
+    // devuelve 500 de forma reproducible en Arcane 2.8.0, y NO porque Docker este
+    // mal: system.dockerInfo responde 200 con el inventario completo del mismo
+    // entorno. La causa esta en el upstream: SystemHealthOutput declara un campo
+    // `Status int` que el handler nunca rellena, asi que vale 0, y las dos ramas
+    // de error del handler devuelven 503, no 500.
+    //
+    // Se afirma el estado REALMENTE observado en vez de un 200 que no ocurre, para
+    // que el test sea falsable: fallara el dia que el upstream lo arregle, que es
+    // justo cuando queremos enterarnos.
     const r = await client.system.health(envId);
-    expect(typeof r.status).toBe("number");
-    expect(r.ok).toBe(r.status >= 200 && r.status < 300);
+    expect(r.status).toBe(500);
+    expect(r.ok).toBe(false);
   });
 
   it("system.prune poda SOLO la cache de build", async () => {
