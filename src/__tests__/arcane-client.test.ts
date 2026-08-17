@@ -1242,4 +1242,66 @@ describe("ArcaneClient", () => {
       expect(info.updateAvailable).toBe(true);
     });
   });
+
+  describe("system (F2)", () => {
+    it(".dockerInfo(envId) - GET /environments/{envId}/system/docker/info", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, ServerVersion: "29.2.1" }),
+      } as Response);
+
+      await client.system.dockerInfo("env123");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/system/docker/info",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".health(envId) - HEAD, sin parsear cuerpo", async () => {
+      mockFetch.mockResolvedValue({ ok: true, status: 200 } as Response);
+
+      const resultado = await client.system.health("env123");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/system/health",
+        expect.objectContaining({ method: "HEAD" })
+      );
+      expect(resultado).toEqual({ ok: true, status: 200 });
+    });
+
+    it(".prune(envId, opciones) - POST con las opciones como cuerpo", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { success: true, spaceReclaimed: 0 } }),
+      } as Response);
+
+      await client.system.prune("env123", { buildCache: { mode: "dangling" } });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/system/prune",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ buildCache: { mode: "dangling" } }),
+        })
+      );
+    });
+
+    it(".convert(envId, comando) - POST /system/convert", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, dockerCompose: "services:", envVars: "", serviceName: "nginx" }),
+      } as Response);
+
+      await client.system.convert("env123", "docker run -d nginx");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/system/convert",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ dockerRunCommand: "docker run -d nginx" }),
+        })
+      );
+    });
+  });
 });

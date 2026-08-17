@@ -40,7 +40,7 @@ El fix de los endpoints NDJSON se ha ofrecido al upstream como PR autocontenido.
 
 <!-- BEGIN TOOLS -->
 
-Las **77** tools que expone el servidor, agrupadas por dominio. Esta tabla la
+Las **81** tools que expone el servidor, agrupadas por dominio. Esta tabla la
 genera `npm run gen-tools-table` a partir de `src/tools/`: las descripciones y los
 parámetros son los que registra el código, no una copia mantenida a mano.
 
@@ -176,11 +176,15 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | `arcane_gitops_sync_get_status` | Get the current sync status of a GitOps sync. | `environmentId?`, `environmentName?`, `syncId?`, `syncName?` |
 | `arcane_gitops_sync_perform_sync` | Manually trigger a sync for a GitOps sync. | `environmentId?`, `environmentName?`, `syncId?`, `syncName?` |
 
-### System (1)
+### System (5)
 
 | Tool | Description | Inputs |
 |---|---|---|
 | `arcane_version` | Get the Arcane server version information. | — |
+| `arcane_system_docker_info` | Get Docker daemon and host information: versions, container and image counts, storage driver, resources. | `environmentId?`, `environmentName?` |
+| `arcane_system_health` | Check whether the Docker system of an environment is healthy. | `environmentId?`, `environmentName?` |
+| `arcane_system_prune` | Prune unused Docker resources. You must explicitly choose which resources to prune; nothing is pruned by default. | `environmentId?`, `environmentName?`, `buildCache?`, `images?`, `containers?`, `volumes?`, `networks?` |
+| `arcane_system_convert` | Convert a docker run command into a Docker Compose service definition. | `environmentId?`, `environmentName?`, `dockerRunCommand` |
 
 ### Activities (3)
 

@@ -1022,6 +1022,31 @@ class SystemMethods {
   async version(): Promise<VersionInfo> {
     return this.client.request<VersionInfo>("GET", "/app-version");
   }
+
+  async dockerInfo(envId: string): Promise<DockerInfo> {
+    return this.client.request<DockerInfo>("GET", `/environments/${envId}/system/docker/info`);
+  }
+
+  /** HEAD sin cuerpo: el veredicto es el codigo de estado. */
+  async health(envId: string): Promise<{ ok: boolean; status: number }> {
+    return this.client.requestHead("HEAD", `/environments/${envId}/system/health`);
+  }
+
+  async prune(envId: string, opciones: SystemPruneRequest): Promise<{ success: boolean; data: SystemPruneResult }> {
+    return this.client.request<{ success: boolean; data: SystemPruneResult }>(
+      "POST",
+      `/environments/${envId}/system/prune`,
+      opciones
+    );
+  }
+
+  async convert(envId: string, dockerRunCommand: string): Promise<SystemConvertResult> {
+    return this.client.request<SystemConvertResult>(
+      "POST",
+      `/environments/${envId}/system/convert`,
+      { dockerRunCommand }
+    );
+  }
 }
 
 export interface ActivityListOptions extends ListOptionsWithSort {
