@@ -4,17 +4,22 @@
 - **Punto de partida:** `ccabb12` — cierre de F2 en `main`
 - **Punto de llegada:** `533477f` — 20 commits, 33 ficheros, +5.585 / −1.429
   (más el cierre de esta tarea)
-- **Estado:** implementación completa y verificada contra la instancia real;
-  pendiente el merge a `main`, el push y la verificación del despliegue, que
-  ejecuta el propietario del proyecto, no este agente
+- **Estado:** implementación completa; tests unitarios verificados en esta
+  sesión de arreglo (228 passed). La suite e2e (36 tests) tuvo una corrida
+  limpia durante la ronda de arreglos, pero no en la verificación final ni
+  después — pendiente repetir la corrida contra la instancia estable (ver
+  3.2). Pendiente además el merge a `main`, el push y la verificación del
+  despliegue, que ejecuta el propietario del proyecto, no este agente
 
 ---
 
 ## 1. Resumen en una frase
 
-Las once tareas de implementación dan a las trece tools de listado un
-contrato de salida uniforme (`{pagination, counts?, data}`) con `sort`,
-`order`, `start` y `limit` reenviados de verdad al servidor, corrigen de paso
+Hay trece tools cuyo nombre acaba en `_list`; doce de ellas —todas menos
+`arcane_job_list`, cuyo endpoint devuelve `{jobs:[...]}` y no el sobre
+paginado— reciben de las once tareas de implementación un contrato de salida
+uniforme (`{pagination, counts?, data}`) con `sort`, `order`, `start` y
+`limit` reenviados de verdad al servidor. De paso, esas tareas corrigen
 un bug de la propia API de Arcane 2.8.0 que hacía perder elementos al paginar
 sin orden explícito, y sustituyen 80 `try/catch` repetidos (81 → 1, medido
 con `git grep -c '} catch' -- 'src/tools/*.ts'`) por un único sobre de error
@@ -30,44 +35,70 @@ sección 3.
 
 | Métrica | Comando | Resultado |
 |---|---|---|
-| Tests unitarios | `npm test` | **214 passed** (5 ficheros) |
-| Tests e2e (verbose, contra la instancia real) | `npm run test:e2e -- --reporter=verbose` | **32 passed**, 0 skipped, contados uno a uno |
+| Tests unitarios | `npm test` | **228 passed** (5 ficheros) |
+| Tamaño de la suite e2e | `grep -rn "it(\|test(" src/__e2e__/*.e2e.ts \| wc -l` (confirmado por el propio resumen de vitest en cada intento) | **36 tests** — sin corrida limpia reciente contra la instancia real, ver nota en 3.2 |
 | `tsc --noEmit` | `npm run type-check` | Limpio, sin salida |
 | Tools registradas | `npm run gen-tools-table -- --check` | **81** (`OK: la tabla del README.md está al día`) |
 | Drift de campos | `node scripts/audit-schema-drift.mjs` | 23 desalineaciones, **0 graves** (las 23 son `FALTA-EN-TS-OPCIONAL`) |
-| Cobertura de operaciones método+ruta | script ad hoc con el compilador de TS (ver 3.2) | **78 de 347**, 0 ausentes — **sin cambio** respecto a F2 |
+| Cobertura de operaciones método+ruta | script ad hoc con el compilador de TS (ver 3.3) | **78 de 347**, 0 ausentes — **sin cambio** respecto a F2 |
 
 ## 3. Cómo se midió cada cifra
 
 ### 3.1 Tests y verificación estática
 
 ```
-npm test                                    → Test Files 5 passed (5); Tests 214 passed (214)
+npm test                                    → Test Files 5 passed (5); Tests 228 passed (228)
 npm run type-check                          → sin salida (tsc limpio)
 npm run gen-tools-table -- --check          → OK: la tabla del README.md está al día (81 tools).
 node scripts/audit-schema-drift.mjs         → Total: 23 desalineaciones (0 graves: las 23 son FALTA-EN-TS-OPCIONAL)
 ```
 
-### 3.2 Tests e2e: varios intentos con `ECONNREFUSED` antes del run limpio
+### 3.2 Tests e2e: verificación pendiente de repetir con la instancia estable
 
 ```
 set -a; . ./.dev.vars; set +a
 ARCANE_BASE_URL=http://192.168.180.210:3552 npm run test:e2e -- --reporter=verbose
 ```
 
-La instancia tiene los cortes de red intermitentes que ya avisaba el brief.
-No hay un número fijo de intentos: es un rango observado, no una cifra
-exacta. En esta sesión hicieron falta siete ejecuciones completas antes de
-una limpia; en la revisión final de la rama hicieron falta nueve. En ambos
-casos, cada intento fallido tuvo entre 1 y 5 tests con `TypeError: fetch
-failed / ECONNREFUSED` — nunca un fallo de aserción, siempre el mismo
-`connect ECONNREFUSED 192.168.180.210:3552` en un test distinto cada vez, a
-veces en cascada sobre tests posteriores del mismo fichero que dependían del
-resultado del que falló. La última ejecución dio **Test Files 5 passed (5);
-Tests 32 passed (32)**, contada línea a línea con `grep -c "✓"` sobre la
-salida cruda (32, coincide con el recuento agregado de vitest) y verificado
-que no hay ninguna línea `skip`. Los 32 nombres de test son únicos: no hay
-duplicados que inflen el recuento.
+La suite tiene **36 tests**, contados con dos métodos independientes:
+`grep -rn "it(\|test(" src/__e2e__/*.e2e.ts | wc -l` da 36, y el resumen de
+vitest (`Tests ... (36)`) coincide en cada intento, limpio o no.
+
+Durante la ronda de arreglos de esta misma tarea se consiguió una corrida
+completamente limpia: **36 de 36 passed, 0 skipped**. Es la única corrida
+limpia registrada hasta ahora.
+
+En la revisión final de la rama y después, la instancia
+(`192.168.180.210:3552`) se degradó: en más de 30 intentos no se volvió a
+conseguir una corrida limpia; los mejores intentos dieron **35 de 36**. Ni
+un solo fallo fue de aserción — todos son `TypeError: fetch failed` /
+`connect ECONNREFUSED`. Las pocas líneas que aparecen como `AssertionError`
+son literalmente `expected TypeError: fetch failed to be an instance of
+ArcaneApiError`: la misma caída de red golpeando un test que esperaba un
+error de API, no una regresión de comportamiento. Se descartó que fuera
+saturación por concurrencia propia de la suite: serializando con
+`--no-file-parallelism` falla igual (la propia `vitest.e2e.config.ts` ya
+corre con `fileParallelism: false`), y sondas sueltas con `curl` contra la
+instancia responden `200` con normalidad entre fallos. Es relevante que el
+propietario del proyecto está trabajando sobre esa misma instancia en
+paralelo en otra sesión, lo que podría explicar reinicios del servicio.
+
+Como parte de esta tarea de arreglo se relanzó la suite una vez más ahora
+(mismo comando de arriba): **28 passed, 5 failed, 3 skipped (36)**. Los 5
+fallos son `TypeError: fetch failed` / `connect ECONNREFUSED` o su efecto en
+cascada (`no such volume` sobre un volumen que no llegó a crearse porque el
+fetch anterior falló). Los 3 `skipped` son los tests de
+`stack-lifecycle.e2e.ts`, cuyo fichero completo abortó al importar por el
+mismo `ECONNREFUSED` — exactamente el caso que la regla del proyecto señala:
+**un fichero e2e que aborta al importar sale como `skipped`, no como fallo,
+y `skipped` no es verde**
+(`docs/superpowers/plans/2026-08-17-coherencia-superficie-listado.md:19`).
+El patrón descrito arriba sigue vigente en el momento de escribir esto.
+
+**Conclusión: esto es una verificación pendiente de repetir con la instancia
+estable, no un resultado en verde.** El diseño de los 36 tests no está en
+duda —cuando corren, no fallan por aserción—, pero no hay, a día de hoy, una
+corrida limpia reciente que lo confirme end-to-end.
 
 ### 3.3 Cobertura de operaciones método+ruta
 
@@ -153,8 +184,9 @@ los 4 de `jobs.ts` como parte de darle el contrato de salida común; los de
 atribuible a un único commit.
 
 Cuentas de partida verificadas: 152 tests / 19 e2e / 81 tools antes de la
-Tarea 1 → **214 tests / 32 e2e / 81 tools** hoy (81 tools no cambia: este
-trabajo modifica tools existentes, no añade dominios nuevos).
+Tarea 1 → **228 tests / 36 e2e (tamaño de la suite; ver 3.2 sobre el estado
+de la corrida) / 81 tools** hoy (81 tools no cambia: este trabajo modifica
+tools existentes, no añade dominios nuevos).
 
 ## 5. Lo que apareció y no estaba en el plan
 
@@ -282,15 +314,18 @@ necesitado otro diseño si la inferencia se hubiera perdido.
     "cuatro".
   - ~~El test de `arcane_environment_list` (Tarea 8) solo comprueba el sobre
     de salida... no verifica que `sort`/`order`/`start`/`type` se
-    reenvíen~~ — corregido: las trece tools de listado tienen ahora al
-    menos un test que falla si dejan de reenviar `sort`/`order`/`start` con
-    valores reales, y otro que falla si dejan de usar `listResponse` (ver
-    la revisión final de la rama). Se encontró además que el mismo problema
-    afectaba a `container`, `image`, `network`, `stack`, `template` y
-    `git_repository`, no solo a `environment`: las aserciones que los
-    cubrían comparaban contra `undefined`, que `toHaveBeenCalledWith`
-    considera igual a una clave ausente, así que no cazaban una regresión
-    real.
+    reenvíen~~ — corregido: las doce tools de listado paginadas (las trece
+    que terminan en `_list` menos `arcane_job_list`, que no reenvía estos
+    parámetros — ver sección 1) tienen ahora al menos un test que falla si dejan de
+    reenviar `sort`/`order`/`start` con valores reales, y otro que falla si
+    dejan de usar `listResponse` (ver la revisión final de la rama;
+    verificado contando los tests `"... pasa sort, order y start con
+    valores reales"` en `src/__tests__/tools.test.ts`, uno por cada una de
+    las doce). Se encontró además que el mismo problema afectaba a
+    `container`, `image`, `network`, `stack`, `template` y `git_repository`,
+    no solo a `environment`: las aserciones que los cubrían comparaban
+    contra `undefined`, que `toHaveBeenCalledWith` considera igual a una
+    clave ausente, así que no cazaban una regresión real.
   - El cap de "Available containers" en los mensajes de resolución cuenta
     nombres, no contenedores (un contenedor puede repetir nombre entre
     proyectos) — literal del diseño, no un defecto. Sigue sin tocar.
@@ -313,10 +348,17 @@ necesitado otro diseño si la inferencia se hubiera perdido.
   a intentar disparar contra la instancia real con `limit=1000` en esta
   tarea de cierre (ya se hizo y quedó documentado en las Tareas 6 y 8); no
   se repite aquí porque no es una cifra que este balance publique.
+- **La suite e2e (36 tests) no tiene una corrida limpia reciente contra la
+  instancia real** (ver 3.2): la última fue durante la ronda de arreglos, no
+  en la verificación final ni después, por la degradación de
+  `192.168.180.210:3552`. Es una verificación pendiente de repetir cuando la
+  instancia esté estable, no un defecto de diseño de los tests — ninguno de
+  los fallos observados es de aserción.
 
-Ninguna de estas es bloqueante: la superficie de listado funciona
-correctamente contra la instancia real tal y como está, con 214 tests
-unitarios y 32 e2e en verde.
+Ninguna de estas es bloqueante para el diseño: los 228 tests unitarios están
+en verde y ninguno de los 36 tests e2e ha fallado nunca por aserción. Pero la
+superficie de listado no tiene, a día de hoy, una verificación e2e completa
+y limpia contra la instancia real — eso queda pendiente, no confirmado.
 
 ## 7. Referencias
 
