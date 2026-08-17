@@ -262,7 +262,8 @@ export interface PaginatedResponse<T> {
  *
  * El spec lo separa igual: `BasePaginated...` frente a
  * `BasePaginatedWithCounts...`. `counts` va sin `?` porque openapi.txt lo
- * declara en `required` en los tres schemas que lo usan.
+ * declara en `required` en los cuatro schemas que lo usan (containers,
+ * volumes, networks y gitops-syncs).
  */
 export interface PaginatedResponseWithCounts<T, C> extends PaginatedResponse<T> {
   counts: C;
@@ -1300,11 +1301,7 @@ class GitRepositoriesMethods {
 
   async list(opts?: ListOptionsWithSort): Promise<PaginatedResponse<GitRepository>> {
     const params = new URLSearchParams();
-    if (opts?.search) params.set("search", opts.search);
-    if (opts?.sort) params.set("sort", opts.sort);
-    if (opts?.order) params.set("order", opts.order);
-    if (opts?.start) params.set("start", String(opts.start));
-    if (opts?.limit) params.set("limit", String(opts.limit));
+    appendListParams(params, opts);
     const query = params.toString();
     return this.client.request<PaginatedResponse<GitRepository>>(
       "GET",
@@ -1354,11 +1351,7 @@ class GitOpsSyncsMethods {
 
   async list(envId: string, opts?: ListOptionsWithSort): Promise<PaginatedResponseWithCounts<GitOpsSync, GitopsSyncCounts>> {
     const params = new URLSearchParams();
-    if (opts?.search) params.set("search", opts.search);
-    if (opts?.sort) params.set("sort", opts.sort);
-    if (opts?.order) params.set("order", opts.order);
-    if (opts?.start) params.set("start", String(opts.start));
-    if (opts?.limit) params.set("limit", String(opts.limit));
+    appendListParams(params, opts);
     const query = params.toString();
     return this.client.request<PaginatedResponseWithCounts<GitOpsSync, GitopsSyncCounts>>(
       "GET",
@@ -1486,11 +1479,7 @@ class VolumeBackupsMethods {
 
   async list(envId: string, volumeName: string, opts?: ListOptionsWithSort): Promise<PaginatedResponse<VolumeBackup>> {
     const params = new URLSearchParams();
-    if (opts?.search) params.set("search", opts.search);
-    if (opts?.sort) params.set("sort", opts.sort);
-    if (opts?.order) params.set("order", opts.order);
-    if (opts?.start) params.set("start", String(opts.start));
-    if (opts?.limit) params.set("limit", String(opts.limit));
+    appendListParams(params, opts);
     const query = params.toString();
     return this.client.request<PaginatedResponse<VolumeBackup>>(
       "GET",

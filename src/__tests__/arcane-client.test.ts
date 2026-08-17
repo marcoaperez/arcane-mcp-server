@@ -1399,6 +1399,36 @@ describe("ArcaneClient", () => {
       );
     });
 
+    // gitRepositories, gitOpsSyncs y volumeBackups construian su query a mano
+    // con `if (opts?.start)` en vez de usar appendListParams: start=0 se
+    // perdia por veracidad. Ahora los tres usan el helper, igual que el resto.
+    it("gitRepositories.list: start=0 se envia (es un valor valido, no una ausencia)", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.gitRepositories.list({ start: 0 });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/customize/git-repositories?start=0",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("gitOpsSyncs.list: start=0 se envia (es un valor valido, no una ausencia)", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.gitOpsSyncs.list("env1", { start: 0 });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/gitops-syncs?start=0",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("volumeBackups.list: start=0 se envia (es un valor valido, no una ausencia)", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.volumeBackups.list("env1", "data-vol", { start: 0 });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/volumes/data-vol/backups?start=0",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
     it("images.list envia los cinco comunes mas inUse", async () => {
       mockFetch.mockResolvedValue(okVacio());
       await client.images.list("env1", { search: "nginx", sort: "size", order: "desc", start: 10, limit: 5, inUse: "true" });
