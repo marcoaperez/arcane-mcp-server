@@ -289,6 +289,19 @@ export interface NetworkUsageCounts {
   total: number;
 }
 
+/**
+ * Agregados de `GET /environments/{id}/gitops-syncs` (spec: GitopsSyncCounts).
+ *
+ * El inventario original del plan solo contaba tres endpoints con `counts`
+ * (containers, volumes, networks); `BasePaginatedWithCountsGitopsGitOpsSyncGitopsSyncCounts`
+ * en openapi.txt declara este cuarto tambien con `counts` en `required`.
+ */
+export interface GitopsSyncCounts {
+  totalSyncs: number;
+  activeSyncs: number;
+  successfulSyncs: number;
+}
+
 export interface ActionResponse {
   success: boolean;
   message: string;
@@ -1339,7 +1352,7 @@ class GitRepositoriesMethods {
 class GitOpsSyncsMethods {
   constructor(private client: ArcaneClient) {}
 
-  async list(envId: string, opts?: ListOptionsWithSort): Promise<PaginatedResponse<GitOpsSync>> {
+  async list(envId: string, opts?: ListOptionsWithSort): Promise<PaginatedResponseWithCounts<GitOpsSync, GitopsSyncCounts>> {
     const params = new URLSearchParams();
     if (opts?.search) params.set("search", opts.search);
     if (opts?.sort) params.set("sort", opts.sort);
@@ -1347,7 +1360,7 @@ class GitOpsSyncsMethods {
     if (opts?.start) params.set("start", String(opts.start));
     if (opts?.limit) params.set("limit", String(opts.limit));
     const query = params.toString();
-    return this.client.request<PaginatedResponse<GitOpsSync>>(
+    return this.client.request<PaginatedResponseWithCounts<GitOpsSync, GitopsSyncCounts>>(
       "GET",
       `/environments/${encodeURIComponent(envId)}/gitops-syncs${query ? `?${query}` : ""}`
     );

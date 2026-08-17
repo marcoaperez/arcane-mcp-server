@@ -44,6 +44,7 @@ const MAP = {
   ContainerStatusCounts: "ContainerStatusCounts",
   VolumeUsageCounts: "DockerVolumeVolumeUsageCountsData",
   NetworkUsageCounts: "NetworkUsageCounts",
+  GitopsSyncCounts: "GitopsSyncCounts",
 };
 
 function tsInterfaceProps(file) {

@@ -1158,6 +1158,25 @@ describe("ArcaneClient", () => {
     });
   });
 
+  describe("gitOpsSyncs", () => {
+    it(".list(envId) devuelve el objeto counts que trae la API (cuarto endpoint con counts, hallazgo 3)", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [],
+          counts: { totalSyncs: 5, activeSyncs: 3, successfulSyncs: 4 },
+          pagination: { totalItems: 5, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+        }),
+      } as Response);
+
+      const r = await client.gitOpsSyncs.list("env123");
+
+      expect(r.counts).toEqual({ totalSyncs: 5, activeSyncs: 3, successfulSyncs: 4 });
+      expect(r.pagination.totalItems).toBe(5);
+    });
+  });
+
   describe("templates", () => {
     it(".list(opts?) - GET /templates", async () => {
       mockFetch.mockResolvedValue({
