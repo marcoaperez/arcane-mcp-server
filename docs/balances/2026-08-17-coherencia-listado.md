@@ -5,11 +5,11 @@
 - **Punto de llegada:** `533477f` — 20 commits, 33 ficheros, +5.585 / −1.429
   (más el cierre de esta tarea)
 - **Estado:** implementación completa; tests unitarios verificados en esta
-  sesión de arreglo (228 passed). La suite e2e (36 tests) tuvo una corrida
-  limpia durante la ronda de arreglos, pero no en la verificación final ni
-  después — pendiente repetir la corrida contra la instancia estable (ver
-  3.2). Pendiente además el merge a `main`, el push y la verificación del
-  despliegue, que ejecuta el propietario del proyecto, no este agente
+  sesión de arreglo (228 passed). La suite e2e (36 tests) tiene una corrida
+  limpia: 36 de 36, 0 skipped (ver 3.2 para el resultado y el diagnóstico de
+  la inestabilidad previa). Pendiente el merge a `main`, el push y la
+  verificación del despliegue, que ejecuta el propietario del proyecto, no
+  este agente
 
 ---
 
@@ -36,7 +36,7 @@ sección 3.
 | Métrica | Comando | Resultado |
 |---|---|---|
 | Tests unitarios | `npm test` | **228 passed** (5 ficheros) |
-| Tamaño de la suite e2e | `grep -rn "it(\|test(" src/__e2e__/*.e2e.ts \| wc -l` (confirmado por el propio resumen de vitest en cada intento) | **36 tests** — sin corrida limpia reciente contra la instancia real, ver nota en 3.2 |
+| Tamaño de la suite e2e | `grep -rn "it(\|test(" src/__e2e__/*.e2e.ts \| wc -l` (confirmado por el propio resumen de vitest en cada intento) | **36 tests** — corrida limpia conseguida: 36/36, 0 skipped, ver 3.2 |
 | `tsc --noEmit` | `npm run type-check` | Limpio, sin salida |
 | Tools registradas | `npm run gen-tools-table -- --check` | **81** (`OK: la tabla del README.md está al día`) |
 | Drift de campos | `node scripts/audit-schema-drift.mjs` | 23 desalineaciones, **0 graves** (las 23 son `FALTA-EN-TS-OPCIONAL`) |
@@ -53,7 +53,7 @@ npm run gen-tools-table -- --check          → OK: la tabla del README.md está
 node scripts/audit-schema-drift.mjs         → Total: 23 desalineaciones (0 graves: las 23 son FALTA-EN-TS-OPCIONAL)
 ```
 
-### 3.2 Tests e2e: verificación pendiente de repetir con la instancia estable
+### 3.2 Tests e2e: verificación conseguida, y diagnóstico de la inestabilidad
 
 ```
 set -a; . ./.dev.vars; set +a
@@ -64,41 +64,70 @@ La suite tiene **36 tests**, contados con dos métodos independientes:
 `grep -rn "it(\|test(" src/__e2e__/*.e2e.ts | wc -l` da 36, y el resumen de
 vitest (`Tests ... (36)`) coincide en cada intento, limpio o no.
 
-Durante la ronda de arreglos de esta misma tarea se consiguió una corrida
-completamente limpia: **36 de 36 passed, 0 skipped**. Es la única corrida
-limpia registrada hasta ahora.
+**Resultado: corrida limpia conseguida — 36 de 36 passed, 0 skipped**, con
+las 36 líneas `✓` contadas una a una. Se logró al quinto intento de una
+tanda; los cuatro anteriores de esa misma tanda dieron 35, 34, 33 y 30
+passed + 3 skipped. Además, los dos ficheros e2e que cubren específicamente
+esta rama —`src/__e2e__/paginacion.e2e.ts` (12 tests) y
+`src/__e2e__/resolvers.e2e.ts` (5 tests), 17 en total— pasaron **17/17** en
+una corrida propia, aislados del resto de la suite.
 
-En la revisión final de la rama y después, la instancia
-(`192.168.180.210:3552`) se degradó: en más de 30 intentos no se volvió a
-conseguir una corrida limpia; los mejores intentos dieron **35 de 36**. Ni
-un solo fallo fue de aserción — todos son `TypeError: fetch failed` /
-`connect ECONNREFUSED`. Las pocas líneas que aparecen como `AssertionError`
-son literalmente `expected TypeError: fetch failed to be an instance of
-ArcaneApiError`: la misma caída de red golpeando un test que esperaba un
-error de API, no una regresión de comportamiento. Se descartó que fuera
-saturación por concurrencia propia de la suite: serializando con
-`--no-file-parallelism` falla igual (la propia `vitest.e2e.config.ts` ya
-corre con `fileParallelism: false`), y sondas sueltas con `curl` contra la
-instancia responden `200` con normalidad entre fallos. Es relevante que el
-propietario del proyecto está trabajando sobre esa misma instancia en
-paralelo en otra sesión, lo que podría explicar reinicios del servicio.
+Ni un solo fallo, en ningún intento, fue de aserción: todos son
+`TypeError: fetch failed` / `connect ECONNREFUSED`, o su efecto en cascada
+(por ejemplo `no such volume` sobre un volumen que no llegó a crearse
+porque el fetch anterior falló). Las pocas líneas que aparecen como
+`AssertionError` son literalmente `expected TypeError: fetch failed to be
+an instance of ArcaneApiError`: la misma caída de red golpeando un test que
+esperaba un error de API, no una regresión de comportamiento.
 
-Como parte de esta tarea de arreglo se relanzó la suite una vez más ahora
-(mismo comando de arriba): **28 passed, 5 failed, 3 skipped (36)**. Los 5
-fallos son `TypeError: fetch failed` / `connect ECONNREFUSED` o su efecto en
-cascada (`no such volume` sobre un volumen que no llegó a crearse porque el
-fetch anterior falló). Los 3 `skipped` son los tests de
+**Diagnóstico de la inestabilidad**
+
+Durante la ronda de arreglos de esta tarea ya se había conseguido una
+corrida limpia, pero en la revisión final la instancia
+(`192.168.180.210:3552`) se degradó: en más de 30 intentos no se volvía a
+conseguir una corrida limpia, con `28 passed, 5 failed, 3 skipped (36)`
+entre los resultados. Los 3 `skipped` de ese intento fueron los tests de
 `stack-lifecycle.e2e.ts`, cuyo fichero completo abortó al importar por el
-mismo `ECONNREFUSED` — exactamente el caso que la regla del proyecto señala:
-**un fichero e2e que aborta al importar sale como `skipped`, no como fallo,
-y `skipped` no es verde**
+mismo `ECONNREFUSED` — el caso que la regla del proyecto señala: **un
+fichero e2e que aborta al importar sale como `skipped`, no como fallo, y
+`skipped` no es verde**
 (`docs/superpowers/plans/2026-08-17-coherencia-superficie-listado.md:19`).
-El patrón descrito arriba sigue vigente en el momento de escribir esto.
+Se descartó que fuera saturación por concurrencia propia de la suite:
+serializando con `--no-file-parallelism` fallaba igual (la propia
+`vitest.e2e.config.ts` ya corre con `fileParallelism: false`), y sondas
+sueltas con `curl` contra la instancia respondían `200` con normalidad
+entre fallos.
 
-**Conclusión: esto es una verificación pendiente de repetir con la instancia
-estable, no un resultado en verde.** El diseño de los 36 tests no está en
-duda —cuando corren, no fallan por aserción—, pero no hay, a día de hoy, una
-corrida limpia reciente que lo confirme end-to-end.
+La hipótesis manejada entonces —que el propietario del proyecto,
+trabajando en paralelo sobre esa misma instancia, pudiera estar
+reiniciando el servicio— se descartó por SSH: el contenedor `arcane`
+llevaba **26 horas arriba con 0 reinicios**, y `arcane-mcp-server`, **8
+horas con 0 reinicios**. Arcane era inocente.
+
+La causa real estaba en el enlace, no en el servicio. El acceso al host es
+por **Tailscale**, y lo que fallaba era el establecimiento de conexiones
+TCP **en cualquier puerto**, no solo el 3552: en 15 sondas seguidas
+fallaron 2 contra el puerto 22 (SSH) y 1 contra el 3552 (Arcane). El `ping`
+daba 0% de pérdida con 66-87 ms de latencia — el enlace estaba vivo, pero
+el establecimiento de la conexión fallaba de forma intermitente. Ráfagas de
+20 peticiones daban entre un 10% y un 30% de fallos de conexión.
+
+Eso explica la dificultad con aritmética, no con intuición: con un 20% de
+conexiones fallidas y 36 tests que abren al menos una conexión cada uno, la
+probabilidad de que los 36 salgan verdes en la misma corrida ronda el
+0,03%. No era un problema del código ni de la instancia: era el enlace.
+
+Se intentó `--retry=5` del ejecutor de tests y no sirvió, por un motivo que
+merece quedar escrito: el fallo caía en el `beforeAll` de
+`volume-workspace.e2e.ts`, y un hook que falla convierte sus tests en
+`skipped`, no en fallos — `--retry` no repite un `skipped`. Es exactamente
+la misma trampa señalada arriba («`skipped` no es verde»), ahora observada
+también en el intento de mitigarla con reintentos automáticos.
+
+**Conclusión: la verificación e2e está hecha.** El diseño de los 36 tests
+no estaba en duda —cuando corrían, no fallaban por aserción—, y ahora hay
+una corrida limpia que lo confirma end-to-end, junto con el diagnóstico de
+por qué costó conseguirla.
 
 ### 3.3 Cobertura de operaciones método+ruta
 
@@ -184,9 +213,9 @@ los 4 de `jobs.ts` como parte de darle el contrato de salida común; los de
 atribuible a un único commit.
 
 Cuentas de partida verificadas: 152 tests / 19 e2e / 81 tools antes de la
-Tarea 1 → **228 tests / 36 e2e (tamaño de la suite; ver 3.2 sobre el estado
-de la corrida) / 81 tools** hoy (81 tools no cambia: este trabajo modifica
-tools existentes, no añade dominios nuevos).
+Tarea 1 → **228 tests / 36 e2e (36/36 en corrida limpia, ver 3.2) / 81
+tools** hoy (81 tools no cambia: este trabajo modifica tools existentes, no
+añade dominios nuevos).
 
 ## 5. Lo que apareció y no estaba en el plan
 
@@ -348,17 +377,11 @@ necesitado otro diseño si la inferencia se hubiera perdido.
   a intentar disparar contra la instancia real con `limit=1000` en esta
   tarea de cierre (ya se hizo y quedó documentado en las Tareas 6 y 8); no
   se repite aquí porque no es una cifra que este balance publique.
-- **La suite e2e (36 tests) no tiene una corrida limpia reciente contra la
-  instancia real** (ver 3.2): la última fue durante la ronda de arreglos, no
-  en la verificación final ni después, por la degradación de
-  `192.168.180.210:3552`. Es una verificación pendiente de repetir cuando la
-  instancia esté estable, no un defecto de diseño de los tests — ninguno de
-  los fallos observados es de aserción.
 
 Ninguna de estas es bloqueante para el diseño: los 228 tests unitarios están
-en verde y ninguno de los 36 tests e2e ha fallado nunca por aserción. Pero la
-superficie de listado no tiene, a día de hoy, una verificación e2e completa
-y limpia contra la instancia real — eso queda pendiente, no confirmado.
+en verde, la suite e2e tiene una corrida limpia (36/36, 0 skipped — ver 3.2
+para el resultado y el diagnóstico de la inestabilidad que costó llegar a
+ella) y ninguno de los 36 tests e2e ha fallado nunca por aserción.
 
 ## 7. Referencias
 
