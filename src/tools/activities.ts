@@ -32,16 +32,17 @@ export function registerActivityTools(server: McpServer, client: ArcaneClient): 
 
   server.tool(
     "arcane_activity_get",
-    "Get a background activity with its full message log. Use this to resolve the activityId returned by deploy, redeploy and pull operations.",
+    "Get a background activity with its full message log. Use this to resolve the activityId returned by deploy, redeploy and pull operations. The server truncates the message log to 500 entries by default; pass limit to raise that.",
     {
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
       activityId: z.string().describe("Activity ID"),
+      limit: z.number().optional().describe("Maximum number of log messages to return (server default: 500)"),
     },
-    async ({ environmentId, environmentName, activityId }) => {
+    async ({ environmentId, environmentName, activityId, limit }) => {
       try {
         const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const result = await client.activities.get(envId, activityId);
+        const result = await client.activities.get(envId, activityId, limit);
         return { content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }] };
       } catch (err) {
         return {

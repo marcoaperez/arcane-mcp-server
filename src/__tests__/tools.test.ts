@@ -535,8 +535,19 @@ describe("MCP Tools", () => {
       const handler = server.getHandler("arcane_activity_get");
       const result = await handler({ environmentId: "env1", activityId: "act1" });
 
-      expect(mockClient.activities.get).toHaveBeenCalledWith("env1", "act1");
+      expect(mockClient.activities.get).toHaveBeenCalledWith("env1", "act1", undefined);
       expect(result.isError).toBeUndefined();
+    });
+
+    it("arcane_activity_get pasa limit al cliente para no truncar el log en el default de 500 del servidor", async () => {
+      const mockClient = clienteConActivities();
+      const server = createMockServer();
+      registerActivityTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_activity_get");
+      await handler({ environmentId: "env1", activityId: "act1", limit: 2000 });
+
+      expect(mockClient.activities.get).toHaveBeenCalledWith("env1", "act1", 2000);
     });
 
     it("arcane_activity_cancel devuelve isError con success:false", async () => {

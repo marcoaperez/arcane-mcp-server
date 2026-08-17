@@ -1072,10 +1072,18 @@ class ActivitiesMethods {
     );
   }
 
-  async get(envId: string, activityId: string): Promise<{ success: boolean; data: ActivityDetail }> {
+  /**
+   * `limit` es el maximo de mensajes del log a devolver. openapi.txt lo declara
+   * `default: 500` en el propio servidor: sin pasarlo explicitamente, un log
+   * mas largo que eso llega truncado sin ningun aviso.
+   */
+  async get(envId: string, activityId: string, limit?: number): Promise<{ success: boolean; data: ActivityDetail }> {
+    const params = new URLSearchParams();
+    if (limit !== undefined) params.set("limit", String(limit));
+    const query = params.toString();
     return this.client.request<{ success: boolean; data: ActivityDetail }>(
       "GET",
-      `/environments/${encodeURIComponent(envId)}/activities/${encodeURIComponent(activityId)}`
+      `/environments/${encodeURIComponent(envId)}/activities/${encodeURIComponent(activityId)}${query ? `?${query}` : ""}`
     );
   }
 

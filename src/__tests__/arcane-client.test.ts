@@ -932,6 +932,20 @@ describe("ArcaneClient", () => {
       );
     });
 
+    it(".get(envId, activityId, limit) - añade ?limit= para no truncar el log en el default de 500 del servidor", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { activity: { id: "act1" }, messages: [] } }),
+      } as Response);
+
+      await client.activities.get("env123", "act1", 2000);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/activities/act1?limit=2000",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
     it(".cancel(envId, activityId) - POST /environments/{envId}/activities/{activityId}/cancel", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
