@@ -32,7 +32,7 @@ Built on Cloudflare Workers using the official Cloudflare `agents` package, this
 | Compatibilidad de shapes | Escrito contra Arcane v1.x | Interfaces alineadas con v2.8.0 y auditadas por `scripts/audit-schema-drift.mjs` |
 | Despliegue | Solo Cloudflare Workers | Cloudflare Workers **o** contenedor Docker autoalojado (`docker-compose.yml` + `wrangler.local.jsonc`) |
 | Cliente | `baseUrl` fijo hacia el binding VPC | Modo dual: binding VPC en Workers, URL real en local/Docker |
-| Verificación | Sin runner de tests funcional | 144 tests unitarios + 19 tests e2e contra una instancia Arcane real |
+| Verificación | Sin runner de tests funcional | 214 tests unitarios + 32 tests e2e contra una instancia Arcane real |
 
 El fix de los endpoints NDJSON se ha ofrecido al upstream como PR autocontenido.
 
