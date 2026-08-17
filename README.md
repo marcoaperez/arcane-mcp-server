@@ -182,7 +182,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 |---|---|---|
 | `arcane_version` | Get the Arcane server version information. | — |
 | `arcane_system_docker_info` | Get Docker daemon and host information: versions, container and image counts, storage driver, resources. | `environmentId?`, `environmentName?` |
-| `arcane_system_health` | Check whether the Docker system of an environment is healthy. | `environmentId?`, `environmentName?` |
+| `arcane_system_health` | Check whether the Docker system of an environment is healthy. Known issue: against Arcane 2.8.0 this endpoint always returns HTTP 500 (its Status field is never populated by the upstream handler), regardless of Docker's actual health — a 500 here is a known bug, not a verdict on Docker. Use arcane_system_docker_info to check Docker's status directly. | `environmentId?`, `environmentName?` |
 | `arcane_system_prune` | Prune unused Docker resources. You must explicitly choose which resources to prune; nothing is pruned by default. | `environmentId?`, `environmentName?`, `buildCache?`, `images?`, `containers?`, `volumes?`, `networks?` |
 | `arcane_system_convert` | Convert a docker run command into a Docker Compose service definition. | `environmentId?`, `environmentName?`, `dockerRunCommand` |
 
@@ -191,7 +191,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | Tool | Description | Inputs |
 |---|---|---|
 | `arcane_activity_list` | List background activities (deployments, pulls, scans) with optional filters. | `environmentId?`, `environmentName?`, `status?`, `type?`, `resourceType?`, `search?`, `limit?` |
-| `arcane_activity_get` | Get a background activity with its full message log. Use this to resolve the activityId returned by deploy, redeploy and pull operations. | `environmentId?`, `environmentName?`, `activityId` |
+| `arcane_activity_get` | Get a background activity with its full message log. Use this to resolve the activityId returned by deploy, redeploy and pull operations. The server truncates the message log to 500 entries by default; pass limit to raise that. | `environmentId?`, `environmentName?`, `activityId`, `limit?` |
 | `arcane_activity_cancel` | Cancel a running background activity. | `environmentId?`, `environmentName?`, `activityId`, `requestedBy?` |
 
 ### Events (2)

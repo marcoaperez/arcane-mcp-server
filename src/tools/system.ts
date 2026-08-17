@@ -55,10 +55,7 @@ export function registerSystemTools(server: McpServer, client: ArcaneClient): vo
 
   server.tool(
     "arcane_system_health",
-    "Check whether the Docker system of an environment is healthy. Known issue: against Arcane " +
-      "2.8.0 this endpoint always returns HTTP 500 (its Status field is never populated by the " +
-      "upstream handler), regardless of Docker's actual health — a 500 here is a known bug, not a " +
-      "verdict on Docker. Use arcane_system_docker_info to check Docker's status directly.",
+    "Check whether the Docker system of an environment is healthy. Known issue: against Arcane 2.8.0 this endpoint always returns HTTP 500 (its Status field is never populated by the upstream handler), regardless of Docker's actual health — a 500 here is a known bug, not a verdict on Docker. Use arcane_system_docker_info to check Docker's status directly.",
     {
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
