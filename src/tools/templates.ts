@@ -31,19 +31,12 @@ export function registerTemplateTools(server: McpServer, client: ArcaneClient): 
     {
       templateId: z.string().describe("Template ID"),
     },
-    async ({ templateId }) => {
-      try {
-        const result = await client.templates.get(templateId);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ templateId }) => {
+      const result = await client.templates.get(templateId);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
+      };
+    }),
   );
 
   server.tool(
@@ -55,19 +48,12 @@ export function registerTemplateTools(server: McpServer, client: ArcaneClient): 
       content: z.string().describe("Docker Compose YAML content"),
       envContent: z.string().describe("Environment variables file content"),
     },
-    async (dto) => {
-      try {
-        const result = await client.templates.create(dto);
-        return {
-          content: [{ type: "text", text: `Template created successfully:\n${JSON.stringify(result.data, null, 2)}` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async (dto) => {
+      const result = await client.templates.create(dto);
+      return {
+        content: [{ type: "text", text: `Template created successfully:\n${JSON.stringify(result.data, null, 2)}` }],
+      };
+    }),
   );
 
   server.tool(
@@ -80,19 +66,12 @@ export function registerTemplateTools(server: McpServer, client: ArcaneClient): 
       content: z.string().describe("Docker Compose YAML content"),
       envContent: z.string().describe("Environment variables file content"),
     },
-    async ({ templateId, ...dto }) => {
-      try {
-        const result = await client.templates.update(templateId, dto);
-        return {
-          content: [{ type: "text", text: `Template updated successfully:\n${JSON.stringify(result.data, null, 2)}` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ templateId, ...dto }) => {
+      const result = await client.templates.update(templateId, dto);
+      return {
+        content: [{ type: "text", text: `Template updated successfully:\n${JSON.stringify(result.data, null, 2)}` }],
+      };
+    }),
   );
 
   server.tool(
@@ -101,18 +80,11 @@ export function registerTemplateTools(server: McpServer, client: ArcaneClient): 
     {
       templateId: z.string().describe("Template ID"),
     },
-    async ({ templateId }) => {
-      try {
-        const result = await client.templates.delete(templateId);
-        return {
-          content: [{ type: "text", text: result.message || "Template deleted successfully" }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ templateId }) => {
+      const result = await client.templates.delete(templateId);
+      return {
+        content: [{ type: "text", text: result.message || "Template deleted successfully" }],
+      };
+    }),
   );
 }

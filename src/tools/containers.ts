@@ -39,21 +39,14 @@ export function registerContainerTools(server: McpServer, client: ArcaneClient):
       containerId: z.string().optional().describe("Container ID (use if known)"),
       containerName: z.string().optional().describe("Container name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName, containerId, containerName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const cId = await resolveContainerId(client, envId, containerId, containerName);
-        const result = await client.containers.get(envId, cId);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, containerId, containerName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const cId = await resolveContainerId(client, envId, containerId, containerName);
+      const result = await client.containers.get(envId, cId);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
+      };
+    }),
   );
 
   server.tool(
@@ -65,22 +58,15 @@ export function registerContainerTools(server: McpServer, client: ArcaneClient):
       containerId: z.string().optional().describe("Container ID (use if known)"),
       containerName: z.string().optional().describe("Container name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName, containerId, containerName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const cId = await resolveContainerId(client, envId, containerId, containerName);
-        const containerNameValue = containerName || (await client.containers.get(envId, cId)).data.name;
-        const result = await client.containers.start(envId, cId);
-        return {
-          content: [{ type: "text", text: `Container '${containerNameValue}' started successfully in environment '${envId}'` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, containerId, containerName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const cId = await resolveContainerId(client, envId, containerId, containerName);
+      const containerNameValue = containerName || (await client.containers.get(envId, cId)).data.name;
+      const result = await client.containers.start(envId, cId);
+      return {
+        content: [{ type: "text", text: `Container '${containerNameValue}' started successfully in environment '${envId}'` }],
+      };
+    }),
   );
 
   server.tool(
@@ -92,22 +78,15 @@ export function registerContainerTools(server: McpServer, client: ArcaneClient):
       containerId: z.string().optional().describe("Container ID (use if known)"),
       containerName: z.string().optional().describe("Container name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName, containerId, containerName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const cId = await resolveContainerId(client, envId, containerId, containerName);
-        const containerNameValue = containerName || (await client.containers.get(envId, cId)).data.name;
-        const result = await client.containers.stop(envId, cId);
-        return {
-          content: [{ type: "text", text: `Container '${containerNameValue}' stopped successfully in environment '${envId}'` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, containerId, containerName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const cId = await resolveContainerId(client, envId, containerId, containerName);
+      const containerNameValue = containerName || (await client.containers.get(envId, cId)).data.name;
+      const result = await client.containers.stop(envId, cId);
+      return {
+        content: [{ type: "text", text: `Container '${containerNameValue}' stopped successfully in environment '${envId}'` }],
+      };
+    }),
   );
 
   server.tool(
@@ -119,22 +98,15 @@ export function registerContainerTools(server: McpServer, client: ArcaneClient):
       containerId: z.string().optional().describe("Container ID (use if known)"),
       containerName: z.string().optional().describe("Container name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName, containerId, containerName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const cId = await resolveContainerId(client, envId, containerId, containerName);
-        const containerNameValue = containerName || (await client.containers.get(envId, cId)).data.name;
-        const result = await client.containers.restart(envId, cId);
-        return {
-          content: [{ type: "text", text: `Container '${containerNameValue}' restarted successfully in environment '${envId}'` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, containerId, containerName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const cId = await resolveContainerId(client, envId, containerId, containerName);
+      const containerNameValue = containerName || (await client.containers.get(envId, cId)).data.name;
+      const result = await client.containers.restart(envId, cId);
+      return {
+        content: [{ type: "text", text: `Container '${containerNameValue}' restarted successfully in environment '${envId}'` }],
+      };
+    }),
   );
 
   server.tool(
@@ -146,21 +118,14 @@ export function registerContainerTools(server: McpServer, client: ArcaneClient):
       containerId: z.string().optional().describe("Container ID (use if known)"),
       containerName: z.string().optional().describe("Container name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName, containerId, containerName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const cId = await resolveContainerId(client, envId, containerId, containerName);
-        const containerNameValue = containerName || (await client.containers.get(envId, cId)).data.name;
-        const result = await client.containers.kill(envId, cId);
-        return {
-          content: [{ type: "text", text: `Container '${containerNameValue}' killed successfully in environment '${envId}'` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, containerId, containerName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const cId = await resolveContainerId(client, envId, containerId, containerName);
+      const containerNameValue = containerName || (await client.containers.get(envId, cId)).data.name;
+      const result = await client.containers.kill(envId, cId);
+      return {
+        content: [{ type: "text", text: `Container '${containerNameValue}' killed successfully in environment '${envId}'` }],
+      };
+    }),
   );
 }

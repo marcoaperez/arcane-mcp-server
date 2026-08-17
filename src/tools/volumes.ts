@@ -38,20 +38,13 @@ export function registerVolumeTools(server: McpServer, client: ArcaneClient): vo
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
       volumeName: z.string().describe("Volume name to inspect"),
     },
-    async ({ environmentId, environmentName, volumeName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const result = await client.volumes.inspect(envId, volumeName);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, volumeName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const result = await client.volumes.inspect(envId, volumeName);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
+      };
+    }),
   );
 
   server.tool(
@@ -62,20 +55,13 @@ export function registerVolumeTools(server: McpServer, client: ArcaneClient): vo
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
       volumeName: z.string().describe("Volume name to remove"),
     },
-    async ({ environmentId, environmentName, volumeName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const result = await client.volumes.remove(envId, volumeName);
-        return {
-          content: [{ type: "text", text: result.message || `Volume '${volumeName}' removed successfully` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, volumeName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const result = await client.volumes.remove(envId, volumeName);
+      return {
+        content: [{ type: "text", text: result.message || `Volume '${volumeName}' removed successfully` }],
+      };
+    }),
   );
 
   server.tool(
@@ -85,24 +71,17 @@ export function registerVolumeTools(server: McpServer, client: ArcaneClient): vo
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const result = await client.volumes.prune(envId);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Pruned ${result.data.volumesDeleted} volumes, reclaimed ${result.data.spaceReclaimed} bytes`,
-            },
-          ],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const result = await client.volumes.prune(envId);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Pruned ${result.data.volumesDeleted} volumes, reclaimed ${result.data.spaceReclaimed} bytes`,
+          },
+        ],
+      };
+    }),
   );
 }

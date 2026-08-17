@@ -37,20 +37,13 @@ export function registerImageTools(server: McpServer, client: ArcaneClient): voi
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
       imageName: z.string().describe("Image name to pull (e.g., nginx:latest)"),
     },
-    async ({ environmentId, environmentName, imageName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const result = await client.images.pull(envId, { imageName });
-        return {
-          content: [{ type: "text", text: result.message || `Image '${imageName}' pulled successfully` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, imageName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const result = await client.images.pull(envId, { imageName });
+      return {
+        content: [{ type: "text", text: result.message || `Image '${imageName}' pulled successfully` }],
+      };
+    }),
   );
 
   server.tool(
@@ -61,20 +54,13 @@ export function registerImageTools(server: McpServer, client: ArcaneClient): voi
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
       imageId: z.string().describe("Image ID to remove"),
     },
-    async ({ environmentId, environmentName, imageId }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const result = await client.images.remove(envId, imageId);
-        return {
-          content: [{ type: "text", text: result.message || `Image '${imageId}' removed successfully` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, imageId }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const result = await client.images.remove(envId, imageId);
+      return {
+        content: [{ type: "text", text: result.message || `Image '${imageId}' removed successfully` }],
+      };
+    }),
   );
 
   server.tool(
@@ -84,24 +70,17 @@ export function registerImageTools(server: McpServer, client: ArcaneClient): voi
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const result = await client.images.prune(envId);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Pruned ${result.data.imagesDeleted} images, reclaimed ${result.data.spaceReclaimed} bytes`,
-            },
-          ],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const result = await client.images.prune(envId);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Pruned ${result.data.imagesDeleted} images, reclaimed ${result.data.spaceReclaimed} bytes`,
+          },
+        ],
+      };
+    }),
   );
 }

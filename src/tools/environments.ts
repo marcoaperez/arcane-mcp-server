@@ -33,20 +33,13 @@ export function registerEnvironmentTools(server: McpServer, client: ArcaneClient
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName }) => {
-      try {
-        const id = await resolveEnvironmentId(client, environmentId, environmentName);
-        const result = await client.environments.get(id);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName }) => {
+      const id = await resolveEnvironmentId(client, environmentId, environmentName);
+      const result = await client.environments.get(id);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
+      };
+    }),
   );
 
   server.tool(
@@ -61,19 +54,12 @@ export function registerEnvironmentTools(server: McpServer, client: ArcaneClient
       isEdge: z.boolean().optional().describe("Whether this is an edge environment"),
       useApiKey: z.boolean().optional().describe("Use API key authentication"),
     },
-    async (dto) => {
-      try {
-        const result = await client.environments.create(dto);
-        return {
-          content: [{ type: "text", text: `Environment created successfully:\n${JSON.stringify(result.data, null, 2)}` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async (dto) => {
+      const result = await client.environments.create(dto);
+      return {
+        content: [{ type: "text", text: `Environment created successfully:\n${JSON.stringify(result.data, null, 2)}` }],
+      };
+    }),
   );
 
   server.tool(
@@ -89,20 +75,13 @@ export function registerEnvironmentTools(server: McpServer, client: ArcaneClient
       enabled: z.boolean().optional().describe("Enable or disable the environment"),
       regenerateApiKey: z.boolean().optional().describe("Regenerate the API key"),
     },
-    async ({ environmentId, environmentName, ...dto }) => {
-      try {
-        const id = await resolveEnvironmentId(client, environmentId, environmentName);
-        const result = await client.environments.update(id, dto);
-        return {
-          content: [{ type: "text", text: `Environment updated successfully:\n${JSON.stringify(result.data, null, 2)}` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, ...dto }) => {
+      const id = await resolveEnvironmentId(client, environmentId, environmentName);
+      const result = await client.environments.update(id, dto);
+      return {
+        content: [{ type: "text", text: `Environment updated successfully:\n${JSON.stringify(result.data, null, 2)}` }],
+      };
+    }),
   );
 
   server.tool(
@@ -112,19 +91,12 @@ export function registerEnvironmentTools(server: McpServer, client: ArcaneClient
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName }) => {
-      try {
-        const id = await resolveEnvironmentId(client, environmentId, environmentName);
-        const result = await client.environments.delete(id);
-        return {
-          content: [{ type: "text", text: result.message || "Environment deleted successfully" }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName }) => {
+      const id = await resolveEnvironmentId(client, environmentId, environmentName);
+      const result = await client.environments.delete(id);
+      return {
+        content: [{ type: "text", text: result.message || "Environment deleted successfully" }],
+      };
+    }),
   );
 }

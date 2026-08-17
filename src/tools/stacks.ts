@@ -40,21 +40,14 @@ export function registerStackTools(server: McpServer, client: ArcaneClient): voi
       stackId: z.string().optional().describe("Stack ID (use if known)"),
       stackName: z.string().optional().describe("Stack name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName, stackId, stackName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const sId = await resolveStackId(client, envId, stackId, stackName);
-        const result = await client.stacks.get(envId, sId);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, stackId, stackName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const sId = await resolveStackId(client, envId, stackId, stackName);
+      const result = await client.stacks.get(envId, sId);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
+      };
+    }),
   );
 
   server.tool(
@@ -67,20 +60,13 @@ export function registerStackTools(server: McpServer, client: ArcaneClient): voi
       composeContent: z.string().describe("Docker Compose YAML content"),
       envContent: z.string().optional().describe("Environment variables file content"),
     },
-    async ({ environmentId, environmentName, ...dto }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const result = await client.stacks.deploy(envId, dto);
-        return {
-          content: [{ type: "text", text: `Stack '${dto.name}' deployed successfully in environment '${envId}'` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, ...dto }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const result = await client.stacks.deploy(envId, dto);
+      return {
+        content: [{ type: "text", text: `Stack '${dto.name}' deployed successfully in environment '${envId}'` }],
+      };
+    }),
   );
 
   server.tool(
@@ -95,21 +81,14 @@ export function registerStackTools(server: McpServer, client: ArcaneClient): voi
       composeContent: z.string().optional().describe("New Docker Compose YAML content"),
       envContent: z.string().optional().describe("New environment variables file content"),
     },
-    async ({ environmentId, environmentName, stackId, stackName, ...dto }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const sId = await resolveStackId(client, envId, stackId, stackName);
-        const result = await client.stacks.update(envId, sId, dto);
-        return {
-          content: [{ type: "text", text: `Stack updated successfully:\n${JSON.stringify(result.data, null, 2)}` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, stackId, stackName, ...dto }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const sId = await resolveStackId(client, envId, stackId, stackName);
+      const result = await client.stacks.update(envId, sId, dto);
+      return {
+        content: [{ type: "text", text: `Stack updated successfully:\n${JSON.stringify(result.data, null, 2)}` }],
+      };
+    }),
   );
 
   server.tool(
@@ -121,21 +100,14 @@ export function registerStackTools(server: McpServer, client: ArcaneClient): voi
       stackId: z.string().optional().describe("Stack ID (use if known)"),
       stackName: z.string().optional().describe("Stack name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName, stackId, stackName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const sId = await resolveStackId(client, envId, stackId, stackName);
-        const result = await client.stacks.delete(envId, sId);
-        return {
-          content: [{ type: "text", text: result.message || "Stack deleted successfully" }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, stackId, stackName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const sId = await resolveStackId(client, envId, stackId, stackName);
+      const result = await client.stacks.delete(envId, sId);
+      return {
+        content: [{ type: "text", text: result.message || "Stack deleted successfully" }],
+      };
+    }),
   );
 
   server.tool(
@@ -147,28 +119,21 @@ export function registerStackTools(server: McpServer, client: ArcaneClient): voi
       stackId: z.string().optional().describe("Stack ID (use if known)"),
       stackName: z.string().optional().describe("Stack name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName, stackId, stackName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const sId = await resolveStackId(client, envId, stackId, stackName);
-        const stackNameValue = stackName || (await client.stacks.get(envId, sId)).data.name;
-        const result = await client.stacks.start(envId, sId);
-        if (result.success === false) {
-          return {
-            content: [{ type: "text", text: `Failed to start stack '${stackNameValue}': ${result.message}` }],
-            isError: true,
-          };
-        }
+    withErrors(async ({ environmentId, environmentName, stackId, stackName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const sId = await resolveStackId(client, envId, stackId, stackName);
+      const stackNameValue = stackName || (await client.stacks.get(envId, sId)).data.name;
+      const result = await client.stacks.start(envId, sId);
+      if (result.success === false) {
         return {
-          content: [{ type: "text", text: `Stack '${stackNameValue}' started successfully in environment '${envId}'. ${result.message}` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+          content: [{ type: "text" as const, text: `Failed to start stack '${stackNameValue}': ${result.message}` }],
           isError: true,
         };
       }
-    },
+      return {
+        content: [{ type: "text", text: `Stack '${stackNameValue}' started successfully in environment '${envId}'. ${result.message}` }],
+      };
+    }),
   );
 
   server.tool(
@@ -180,22 +145,15 @@ export function registerStackTools(server: McpServer, client: ArcaneClient): voi
       stackId: z.string().optional().describe("Stack ID (use if known)"),
       stackName: z.string().optional().describe("Stack name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName, stackId, stackName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const sId = await resolveStackId(client, envId, stackId, stackName);
-        const stackNameValue = stackName || (await client.stacks.get(envId, sId)).data.name;
-        const result = await client.stacks.stop(envId, sId);
-        return {
-          content: [{ type: "text", text: `Stack '${stackNameValue}' stopped successfully in environment '${envId}'` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, stackId, stackName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const sId = await resolveStackId(client, envId, stackId, stackName);
+      const stackNameValue = stackName || (await client.stacks.get(envId, sId)).data.name;
+      const result = await client.stacks.stop(envId, sId);
+      return {
+        content: [{ type: "text", text: `Stack '${stackNameValue}' stopped successfully in environment '${envId}'` }],
+      };
+    }),
   );
 
   server.tool(
@@ -207,22 +165,15 @@ export function registerStackTools(server: McpServer, client: ArcaneClient): voi
       stackId: z.string().optional().describe("Stack ID (use if known)"),
       stackName: z.string().optional().describe("Stack name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName, stackId, stackName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const sId = await resolveStackId(client, envId, stackId, stackName);
-        const stackNameValue = stackName || (await client.stacks.get(envId, sId)).data.name;
-        const result = await client.stacks.restart(envId, sId);
-        return {
-          content: [{ type: "text", text: `Stack '${stackNameValue}' restarted successfully in environment '${envId}'` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, stackId, stackName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const sId = await resolveStackId(client, envId, stackId, stackName);
+      const stackNameValue = stackName || (await client.stacks.get(envId, sId)).data.name;
+      const result = await client.stacks.restart(envId, sId);
+      return {
+        content: [{ type: "text", text: `Stack '${stackNameValue}' restarted successfully in environment '${envId}'` }],
+      };
+    }),
   );
 
   server.tool(
@@ -234,27 +185,20 @@ export function registerStackTools(server: McpServer, client: ArcaneClient): voi
       stackId: z.string().optional().describe("Stack ID (use if known)"),
       stackName: z.string().optional().describe("Stack name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName, stackId, stackName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const sId = await resolveStackId(client, envId, stackId, stackName);
-        const stackNameValue = stackName || (await client.stacks.get(envId, sId)).data.name;
-        const result = await client.stacks.pull(envId, sId);
-        if (result.success === false) {
-          return {
-            content: [{ type: "text", text: `Pull failed for stack '${stackNameValue}': ${result.message}` }],
-            isError: true,
-          };
-        }
+    withErrors(async ({ environmentId, environmentName, stackId, stackName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const sId = await resolveStackId(client, envId, stackId, stackName);
+      const stackNameValue = stackName || (await client.stacks.get(envId, sId)).data.name;
+      const result = await client.stacks.pull(envId, sId);
+      if (result.success === false) {
         return {
-          content: [{ type: "text", text: `Images pulled successfully for stack '${stackNameValue}' in environment '${envId}'. ${result.message}` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+          content: [{ type: "text" as const, text: `Pull failed for stack '${stackNameValue}': ${result.message}` }],
           isError: true,
         };
       }
-    },
+      return {
+        content: [{ type: "text", text: `Images pulled successfully for stack '${stackNameValue}' in environment '${envId}'. ${result.message}` }],
+      };
+    }),
   );
 }
