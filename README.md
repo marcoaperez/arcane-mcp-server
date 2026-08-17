@@ -81,7 +81,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_container_list` | List all Docker containers in an environment. | `environmentId?`, `environmentName?` |
+| `arcane_container_list` | List Docker containers in an environment. Returns pagination and running/stopped counts; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `includeInternal?`, `standalone?` |
 | `arcane_container_get` | Get details of a specific Docker container by ID or name. | `environmentId?`, `environmentName?`, `containerId?`, `containerName?` |
 | `arcane_container_start` | Start a Docker container. | `environmentId?`, `environmentName?`, `containerId?`, `containerName?` |
 | `arcane_container_stop` | Stop a Docker container. | `environmentId?`, `environmentName?`, `containerId?`, `containerName?` |
@@ -100,7 +100,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_image_list` | List all Docker images in an environment. | `environmentId?`, `environmentName?` |
+| `arcane_image_list` | List Docker images in an environment. Returns pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `inUse?` |
 | `arcane_image_pull` | Pull a Docker image in an environment. | `environmentId?`, `environmentName?`, `imageName` |
 | `arcane_image_remove` | Remove a Docker image from an environment. | `environmentId?`, `environmentName?`, `imageId` |
 | `arcane_image_prune` | Remove unused Docker images from an environment. | `environmentId?`, `environmentName?` |
@@ -109,7 +109,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_volume_list` | List all Docker volumes in an environment. | `environmentId?`, `environmentName?` |
+| `arcane_volume_list` | List Docker volumes in an environment. Returns pagination and in-use counts; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `inUse?`, `includeInternal?` |
 | `arcane_volume_inspect` | Get details of a specific Docker volume. | `environmentId?`, `environmentName?`, `volumeName` |
 | `arcane_volume_remove` | Remove a Docker volume from an environment. | `environmentId?`, `environmentName?`, `volumeName` |
 | `arcane_volume_prune` | Remove unused Docker volumes from an environment. | `environmentId?`, `environmentName?` |
@@ -135,7 +135,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_network_list` | List all Docker networks in an environment. | `environmentId?`, `environmentName?` |
+| `arcane_network_list` | List Docker networks in an environment. Returns pagination and in-use counts; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `inUse?` |
 | `arcane_network_inspect` | Get details of a specific Docker network. | `environmentId?`, `environmentName?`, `networkId` |
 | `arcane_network_remove` | Remove a Docker network from an environment. | `environmentId?`, `environmentName?`, `networkId` |
 | `arcane_network_prune` | Remove unused Docker networks from an environment. | `environmentId?`, `environmentName?` |

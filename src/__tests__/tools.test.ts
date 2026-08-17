@@ -302,7 +302,10 @@ describe("MCP Tools", () => {
       const handler = server.getHandler("arcane_container_list");
       const result = await handler({ environmentId: "env1" });
 
-      expect(mockClient.containers.list).toHaveBeenCalledWith("env1");
+      expect(mockClient.containers.list).toHaveBeenCalledWith("env1", {
+        search: undefined, sort: undefined, order: undefined, start: undefined,
+        limit: undefined, includeInternal: undefined, standalone: undefined,
+      });
       expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
     });
 
@@ -364,7 +367,10 @@ describe("MCP Tools", () => {
       const handler = server.getHandler("arcane_image_list");
       const result = await handler({ environmentId: "env1" });
 
-      expect(mockClient.images.list).toHaveBeenCalledWith("env1");
+      expect(mockClient.images.list).toHaveBeenCalledWith("env1", {
+        search: undefined, sort: undefined, order: undefined, start: undefined,
+        limit: undefined, inUse: undefined,
+      });
       expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
     });
   });
@@ -394,7 +400,10 @@ describe("MCP Tools", () => {
       const handler = server.getHandler("arcane_volume_list");
       const result = await handler({ environmentId: "env1" });
 
-      expect(mockClient.volumes.list).toHaveBeenCalledWith("env1");
+      expect(mockClient.volumes.list).toHaveBeenCalledWith("env1", {
+        search: undefined, sort: undefined, order: undefined, start: undefined,
+        limit: undefined, inUse: undefined, includeInternal: undefined,
+      });
       expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
     });
   });
@@ -761,8 +770,130 @@ describe("MCP Tools", () => {
       const handler = server.getHandler("arcane_network_list");
       const result = await handler({ environmentId: "env1" });
 
-      expect(mockClient.networks.list).toHaveBeenCalledWith("env1");
+      expect(mockClient.networks.list).toHaveBeenCalledWith("env1", {
+        search: undefined, sort: undefined, order: undefined, start: undefined,
+        limit: undefined, inUse: undefined,
+      });
       expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
+    });
+  });
+
+  describe("Superficie de listado — containers, images, volumes, networks", () => {
+    it("arcane_volume_list pasa los parametros de paginacion al cliente", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerVolumeTools(server as any, mockClient);
+
+      (mockClient.volumes.list as any).mockResolvedValue({
+        success: true,
+        data: [],
+        counts: { inuse: 0, unused: 0, total: 0 },
+        pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_volume_list");
+      await handler({ environmentId: "env1", search: "data", sort: "name", order: "asc", start: 20, limit: 50, inUse: "true" });
+
+      expect(mockClient.volumes.list).toHaveBeenCalledWith("env1", {
+        search: "data", sort: "name", order: "asc", start: 20, limit: 50,
+        inUse: "true", includeInternal: undefined,
+      });
+    });
+
+    it("arcane_volume_list avisa en prosa cuando la lista viene truncada", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerVolumeTools(server as any, mockClient);
+
+      (mockClient.volumes.list as any).mockResolvedValue({
+        success: true,
+        data: Array.from({ length: 20 }, (_, i) => ({ name: `vol${i}` })),
+        counts: { inuse: 8, unused: 24, total: 32 },
+        pagination: { totalItems: 32, totalPages: 2, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_volume_list");
+      const result = await handler({ environmentId: "env1" });
+
+      const [primera] = result.content[0].text.split("\n");
+      expect(primera).toBe("Showing 20 of 32 volumes (page 1 of 2). Pass start=20 to see the rest.");
+      expect(result.isError).toBeUndefined();
+    });
+
+    it("arcane_volume_list incluye counts y pagination en el cuerpo", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerVolumeTools(server as any, mockClient);
+
+      (mockClient.volumes.list as any).mockResolvedValue({
+        success: true,
+        data: [{ name: "vol1" }],
+        counts: { inuse: 1, unused: 0, total: 1 },
+        pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_volume_list");
+      const result = await handler({ environmentId: "env1" });
+      const body = JSON.parse(result.content[0].text);
+
+      expect(body.counts).toEqual({ inuse: 1, unused: 0, total: 1 });
+      expect(body.pagination.totalItems).toBe(1);
+      expect(body.data).toEqual([{ name: "vol1" }]);
+    });
+
+    it("arcane_container_list sigue devolviendo isError cuando el cliente falla", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerContainerTools(server as any, mockClient);
+
+      (mockClient.containers.list as any).mockRejectedValue(new ArcaneApiError(500, "boom"));
+
+      const handler = server.getHandler("arcane_container_list");
+      const result = await handler({ environmentId: "env1" });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("boom");
+    });
+
+    it("arcane_image_list pasa inUse y los cinco comunes", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerImageTools(server as any, mockClient);
+
+      (mockClient.images.list as any).mockResolvedValue({
+        success: true,
+        data: [],
+        pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_image_list");
+      await handler({ environmentId: "env1", inUse: "false", limit: 10 });
+
+      expect(mockClient.images.list).toHaveBeenCalledWith("env1", {
+        search: undefined, sort: undefined, order: undefined, start: undefined,
+        limit: 10, inUse: "false",
+      });
+    });
+
+    it("arcane_network_list pasa inUse y los cinco comunes", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerNetworkTools(server as any, mockClient);
+
+      (mockClient.networks.list as any).mockResolvedValue({
+        success: true,
+        data: [],
+        counts: { inuse: 0, unused: 0, total: 0 },
+        pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_network_list");
+      await handler({ environmentId: "env1", inUse: "true" });
+
+      expect(mockClient.networks.list).toHaveBeenCalledWith("env1", {
+        search: undefined, sort: undefined, order: undefined, start: undefined,
+        limit: undefined, inUse: "true",
+      });
     });
   });
 
