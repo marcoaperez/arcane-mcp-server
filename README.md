@@ -181,7 +181,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | Tool | Description | Inputs |
 |---|---|---|
 | `arcane_version` | Get the Arcane server version information. | — |
-| `arcane_system_docker_info` | Get Docker daemon and host information: versions, container and image counts, storage driver, resources. | `environmentId?`, `environmentName?` |
+| `arcane_system_docker_info` | Get Docker daemon and host information: versions, container and image counts, storage driver, CPU/memory resources, and warnings. Pass full:true to get the complete raw Docker info object (70+ fields, including Plugins, Swarm and RegistryConfig) instead of this summary. | `environmentId?`, `environmentName?`, `full?` |
 | `arcane_system_health` | Check whether the Docker system of an environment is healthy. Known issue: against Arcane 2.8.0 this endpoint always returns HTTP 500 (its Status field is never populated by the upstream handler), regardless of Docker's actual health — a 500 here is a known bug, not a verdict on Docker. Use arcane_system_docker_info to check Docker's status directly. | `environmentId?`, `environmentName?` |
 | `arcane_system_prune` | Prune unused Docker resources. You must explicitly choose which resources to prune; nothing is pruned by default. | `environmentId?`, `environmentName?`, `buildCache?`, `images?`, `containers?`, `volumes?`, `networks?` |
 | `arcane_system_convert` | Convert a docker run command into a Docker Compose service definition. | `environmentId?`, `environmentName?`, `dockerRunCommand` |
@@ -208,7 +208,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | `arcane_job_list` | List background jobs with their schedule, whether they are enabled, and whether they can be run manually. | `environmentId?`, `environmentName?` |
 | `arcane_job_run` | Run a background job immediately. Jobs with unmet prerequisites will not execute. | `environmentId?`, `environmentName?`, `jobId` |
 | `arcane_job_schedules_get` | Get the configured intervals for scheduled background jobs. | `environmentId?`, `environmentName?` |
-| `arcane_job_schedules_update` | Update one or more scheduled job intervals. Only the intervals provided are changed. | `environmentId?`, `environmentName?`, `autoHealInterval?`, `autoUpdateInterval?`, `dockerClientRefreshInterval?`, `environmentHealthInterval?`, `eventCleanupInterval?`, `expiredSessionsCleanupInterval?`, `pollingInterval?`, `scheduledPruneInterval?`, `vulnerabilityScanInterval?` |
+| `arcane_job_schedules_update` | Update one or more scheduled job intervals. Only the intervals provided are changed. Two of them govern background jobs with real side effects: scheduledPruneInterval controls how often unused Docker resources are automatically destroyed, and autoUpdateInterval controls how often running containers are automatically checked and mutated to newer images. | `environmentId?`, `environmentName?`, `autoHealInterval?`, `autoUpdateInterval?`, `dockerClientRefreshInterval?`, `environmentHealthInterval?`, `eventCleanupInterval?`, `expiredSessionsCleanupInterval?`, `pollingInterval?`, `scheduledPruneInterval?`, `vulnerabilityScanInterval?` |
 
 <!-- END TOOLS -->
 

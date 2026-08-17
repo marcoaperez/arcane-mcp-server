@@ -28,6 +28,11 @@ export function registerJobTools(server: McpServer, client: ArcaneClient): void 
       try {
         const envId = await resolveEnvironmentId(client, environmentId, environmentName);
         const result = await client.jobs.list(envId);
+        // El spec permite `jobs: null`; sin este chequeo se devolveria el texto
+        // literal "null" en vez de un mensaje legible.
+        if (!result.jobs || result.jobs.length === 0) {
+          return { content: [{ type: "text", text: "No background jobs found" }] };
+        }
         return { content: [{ type: "text", text: JSON.stringify(result.jobs, null, 2) }] };
       } catch (err) {
         return {
@@ -89,7 +94,7 @@ export function registerJobTools(server: McpServer, client: ArcaneClient): void 
 
   server.tool(
     "arcane_job_schedules_update",
-    "Update one or more scheduled job intervals. Only the intervals provided are changed.",
+    "Update one or more scheduled job intervals. Only the intervals provided are changed. Two of them govern background jobs with real side effects: scheduledPruneInterval controls how often unused Docker resources are automatically destroyed, and autoUpdateInterval controls how often running containers are automatically checked and mutated to newer images.",
     {
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
@@ -105,7 +110,7 @@ export function registerJobTools(server: McpServer, client: ArcaneClient): void 
         const result = await client.jobs.updateSchedules(envId, cambios);
         if (result.success === false) {
           return {
-            content: [{ type: "text", text: "Error: update failed" }],
+            content: [{ type: "text", text: "Error: Job schedules update failed" }],
             isError: true,
           };
         }

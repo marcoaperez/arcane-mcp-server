@@ -34,16 +34,46 @@ export function registerSystemTools(server: McpServer, client: ArcaneClient): vo
 
   server.tool(
     "arcane_system_docker_info",
-    "Get Docker daemon and host information: versions, container and image counts, storage driver, resources.",
+    "Get Docker daemon and host information: versions, container and image counts, storage driver, CPU/memory resources, and warnings. Pass full:true to get the complete raw Docker info object (70+ fields, including Plugins, Swarm and RegistryConfig) instead of this summary.",
     {
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
+      full: z.boolean().optional().describe("Return the complete raw Docker info object instead of the summary"),
     },
-    async ({ environmentId, environmentName }) => {
+    async ({ environmentId, environmentName, full }) => {
       try {
         const envId = await resolveEnvironmentId(client, environmentId, environmentName);
         const result = await client.system.dockerInfo(envId);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+        if (full) {
+          return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+        }
+        // Resumen: la tool solo promete versiones, recuentos de contenedores/imagenes,
+        // storage driver, recursos y avisos. El objeto completo (70+ campos, con Plugins,
+        // Swarm, RegistryConfig...) es puro coste de contexto salvo que se pida con full:true.
+        const resumen = {
+          versions: {
+            serverVersion: result.ServerVersion,
+            apiVersion: result.apiVersion,
+            kernelVersion: result.KernelVersion,
+            operatingSystem: result.OperatingSystem,
+            osType: result.OSType,
+            arch: result.arch,
+          },
+          containers: {
+            total: result.Containers,
+            running: result.ContainersRunning,
+            paused: result.ContainersPaused,
+            stopped: result.ContainersStopped,
+          },
+          images: result.Images,
+          storageDriver: result.Driver,
+          resources: {
+            cpus: result.NCPU,
+            memTotal: result.MemTotal,
+          },
+          warnings: result.Warnings,
+        };
+        return { content: [{ type: "text", text: JSON.stringify(resumen, null, 2) }] };
       } catch (err) {
         return {
           content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
@@ -107,7 +137,12 @@ export function registerSystemTools(server: McpServer, client: ArcaneClient): vo
       buildCache: z.string().optional().describe("Prune build cache with this mode, e.g. dangling or all"),
       images: z.string().optional().describe("Prune images with this mode, e.g. dangling or all"),
       containers: z.string().optional().describe("Prune stopped containers with this mode"),
-      volumes: z.string().optional().describe("Prune unused volumes with this mode"),
+      volumes: z
+        .string()
+        .optional()
+        .describe(
+          "Prune unused volumes with this mode. Irreversible: this permanently deletes their data, with no way to recover it.",
+        ),
       networks: z.string().optional().describe("Prune unused networks with this mode"),
     },
     async ({ environmentId, environmentName, buildCache, images, containers, volumes, networks }) => {
