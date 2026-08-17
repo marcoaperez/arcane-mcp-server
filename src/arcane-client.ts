@@ -257,6 +257,38 @@ export interface PaginatedResponse<T> {
   pagination: Pagination;
 }
 
+/**
+ * Sobre paginado que ademas trae agregados de la coleccion filtrada.
+ *
+ * El spec lo separa igual: `BasePaginated...` frente a
+ * `BasePaginatedWithCounts...`. `counts` va sin `?` porque openapi.txt lo
+ * declara en `required` en los tres schemas que lo usan.
+ */
+export interface PaginatedResponseWithCounts<T, C> extends PaginatedResponse<T> {
+  counts: C;
+}
+
+/** Agregados de `GET /environments/{id}/containers` (spec: ContainerStatusCounts). */
+export interface ContainerStatusCounts {
+  runningContainers: number;
+  stoppedContainers: number;
+  totalContainers: number;
+}
+
+/** Agregados de `GET /environments/{id}/volumes` (spec: DockerVolumeVolumeUsageCountsData). */
+export interface VolumeUsageCounts {
+  inuse: number;
+  unused: number;
+  total: number;
+}
+
+/** Agregados de `GET /environments/{id}/networks` (spec: NetworkUsageCounts). */
+export interface NetworkUsageCounts {
+  inuse: number;
+  unused: number;
+  total: number;
+}
+
 export interface ActionResponse {
   success: boolean;
   message: string;
