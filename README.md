@@ -1,16 +1,16 @@
 # Arcane Docker MCP Server
 
 > **Fork mantenido activamente por [Taiko Solutions](https://taikosolutions.com).**
-> Verificado contra **Arcane v2.8.0**: las **63** combinaciones método+ruta que usa el
-> cliente existen en el spec de la instancia, sin ausencias. Origen del fork:
-> [`cougz/arcane-mcp-server`](https://github.com/cougz/arcane-mcp-server), inactivo
-> desde marzo de 2026.
+> Verificado contra **Arcane v2.8.0**: las **78** combinaciones método+ruta que usa el
+> cliente existen en el spec de la instancia (de 347 operaciones), sin ausencias.
+> Origen del fork: [`cougz/arcane-mcp-server`](https://github.com/cougz/arcane-mcp-server),
+> inactivo desde marzo de 2026.
 >
 > | | |
 > |---|---|
 > | **Compatibilidad** | Arcane v2.x (probado contra v2.8.0) |
 > | **Spec de referencia** | [`openapi.txt`](openapi.txt) — descargado de la instancia con `npm run update-api-spec` |
-> | **Tools** | 68 |
+> | **Tools** | 81 |
 > | **Documentación** | [`docs/`](docs/README.md) |
 
 A Model Context Protocol (MCP) server for managing Docker environments through [Arcane](https://getarcane.app/), deployed on Cloudflare Workers.
@@ -32,7 +32,7 @@ Built on Cloudflare Workers using the official Cloudflare `agents` package, this
 | Compatibilidad de shapes | Escrito contra Arcane v1.x | Interfaces alineadas con v2.8.0 y auditadas por `scripts/audit-schema-drift.mjs` |
 | Despliegue | Solo Cloudflare Workers | Cloudflare Workers **o** contenedor Docker autoalojado (`docker-compose.yml` + `wrangler.local.jsonc`) |
 | Cliente | `baseUrl` fijo hacia el binding VPC | Modo dual: binding VPC en Workers, URL real en local/Docker |
-| Verificación | Sin runner de tests funcional | 111 tests unitarios + 6 tests e2e contra una instancia Arcane real |
+| Verificación | Sin runner de tests funcional | 144 tests unitarios + 19 tests e2e contra una instancia Arcane real |
 
 El fix de los endpoints NDJSON se ha ofrecido al upstream como PR autocontenido.
 
