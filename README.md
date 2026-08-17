@@ -48,7 +48,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_environment_list` | List all Docker environments managed by Arcane. Returns environment IDs, names, and connection status. | `search?`, `limit?` |
+| `arcane_environment_list` | List Docker environments managed by Arcane. Returns environment IDs, names, connection status and pagination; if the response says there are more pages, pass start to see the rest. | `search?`, `sort?`, `order?`, `start?`, `limit?`, `type?` |
 | `arcane_environment_get` | Get details of a specific Docker environment by ID or name. | `environmentId?`, `environmentName?` |
 | `arcane_environment_create` | Create a new Docker environment in Arcane. | `name`, `apiUrl`, `accessToken?`, `bootstrapToken?`, `enabled?`, `isEdge?`, `useApiKey?` |
 | `arcane_environment_update` | Update an existing Docker environment. | `environmentId?`, `environmentName?`, `name?`, `apiUrl?`, `accessToken?`, `bootstrapToken?`, `enabled?`, `regenerateApiKey?` |
@@ -58,7 +58,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_stack_list` | List all Docker Compose stacks (projects) in an environment. | `environmentId?`, `environmentName?`, `search?`, `limit?` |
+| `arcane_stack_list` | List Docker Compose stacks (projects) in an environment. Returns pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `status?`, `archived?`, `tags?` |
 | `arcane_stack_get` | Get details of a specific Docker Compose stack by ID or name. | `environmentId?`, `environmentName?`, `stackId?`, `stackName?` |
 | `arcane_stack_deploy` | Deploy a new Docker Compose stack to an environment. | `environmentId?`, `environmentName?`, `name`, `composeContent`, `envContent?` |
 | `arcane_stack_update` | Update an existing Docker Compose stack. | `environmentId?`, `environmentName?`, `stackId?`, `stackName?`, `name?`, `composeContent?`, `envContent?` |
@@ -144,7 +144,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_template_list` | List all Docker Compose templates. | `search?`, `limit?` |
+| `arcane_template_list` | List Docker Compose templates. Returns pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `search?`, `sort?`, `order?`, `start?`, `limit?`, `type?` |
 | `arcane_template_get` | Get details of a specific template. | `templateId` |
 | `arcane_template_create` | Create a new Docker Compose template. | `name`, `description`, `content`, `envContent` |
 | `arcane_template_update` | Update an existing template. The API replaces the whole template, so all fields are required. | `templateId`, `name`, `description`, `content`, `envContent` |
@@ -190,7 +190,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_activity_list` | List background activities (deployments, pulls, scans) with optional filters. | `environmentId?`, `environmentName?`, `status?`, `type?`, `resourceType?`, `search?`, `limit?` |
+| `arcane_activity_list` | List background activities (deployments, pulls, scans) with optional filters. Returns pagination; if the response says there are more pages, pass start to see the rest before concluding an activity did not happen. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `status?`, `type?`, `resourceType?` |
 | `arcane_activity_get` | Get a background activity with its full message log. Use this to resolve the activityId returned by deploy, redeploy and pull operations. The server truncates the message log to 500 entries by default; pass limit to raise that. | `environmentId?`, `environmentName?`, `activityId`, `limit?` |
 | `arcane_activity_cancel` | Cancel a running background activity. | `environmentId?`, `environmentName?`, `activityId`, `requestedBy?` |
 
@@ -198,7 +198,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_event_list` | List audit events. Without environmentId returns events from all environments. | `environmentId?`, `severity?`, `type?`, `search?`, `limit?` |
+| `arcane_event_list` | List audit log events. Returns pagination; if the response says there are more pages, pass start to see the rest before concluding an event was not recorded. | `environmentId?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `severity?`, `type?` |
 | `arcane_event_stats` | Get event counts by severity across all environments. | — |
 
 ### Jobs (4)

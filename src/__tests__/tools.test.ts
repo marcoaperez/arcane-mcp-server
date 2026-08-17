@@ -110,6 +110,23 @@ describe("MCP Tools", () => {
         update: vi.fn(),
         delete: vi.fn(),
       },
+      activities: {
+        list: vi.fn().mockResolvedValue({
+          success: true,
+          data: [],
+          pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
+        }) as MockedFunction<(envId: string, opts?: ListOptions) => any>,
+        get: vi.fn(),
+        cancel: vi.fn(),
+      },
+      events: {
+        list: vi.fn().mockResolvedValue({
+          success: true,
+          data: [],
+          pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
+        }) as MockedFunction<(opts?: ListOptions) => any>,
+        stats: vi.fn(),
+      },
       system: {
         version: vi.fn().mockResolvedValue({
           success: true,
@@ -249,7 +266,10 @@ describe("MCP Tools", () => {
       const handler = server.getHandler("arcane_stack_list");
       const result = await handler({ environmentId: "env1", search: "myapp" });
 
-      expect(mockClient.stacks.list).toHaveBeenCalledWith("env1", { search: "myapp", limit: 50 });
+      expect(mockClient.stacks.list).toHaveBeenCalledWith("env1", {
+        search: "myapp", sort: undefined, order: undefined, start: undefined,
+        limit: undefined, status: undefined, archived: undefined, tags: undefined,
+      });
       expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
     });
 
@@ -922,7 +942,9 @@ describe("MCP Tools", () => {
       const handler = server.getHandler("arcane_template_list");
       const result = await handler({ search: "wordpress" });
 
-      expect(mockClient.templates.list).toHaveBeenCalledWith({ search: "wordpress", limit: 50 });
+      expect(mockClient.templates.list).toHaveBeenCalledWith({
+        search: "wordpress", sort: undefined, order: undefined, start: undefined, limit: undefined, type: undefined,
+      });
       expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
     });
 
@@ -1211,6 +1233,110 @@ describe("MCP Tools", () => {
       expect(result.content[0].text).toContain("Plugins");
       expect(result.content[0].text).toContain("Swarm");
       expect(result.content[0].text).toContain("RegistryConfig");
+    });
+  });
+
+  describe("Superficie de listado — stacks, templates, environments, activities, events", () => {
+    it("arcane_stack_list pasa limit al cliente y ya no lo pierde", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerStackTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_stack_list");
+      await handler({ environmentId: "env1", search: "app", limit: 50, status: "running" });
+
+      expect(mockClient.stacks.list).toHaveBeenCalledWith("env1", {
+        search: "app", sort: undefined, order: undefined, start: undefined,
+        limit: 50, status: "running", archived: undefined, tags: undefined,
+      });
+    });
+
+    it("arcane_stack_list ya no impone un limit por defecto propio", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerStackTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_stack_list");
+      await handler({ environmentId: "env1" });
+
+      expect(mockClient.stacks.list).toHaveBeenCalledWith("env1", expect.objectContaining({ limit: undefined }));
+    });
+
+    it("arcane_activity_list pasa sort, order y start", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerActivityTools(server as any, mockClient);
+
+      (mockClient.activities.list as any).mockResolvedValue({
+        success: true,
+        data: [],
+        pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
+      });
+
+      const handler = server.getHandler("arcane_activity_list");
+      await handler({ environmentId: "env1", sort: "createdAt", order: "desc", start: 50, status: "failed" });
+
+      expect(mockClient.activities.list).toHaveBeenCalledWith("env1", {
+        search: undefined, sort: "createdAt", order: "desc", start: 50, limit: undefined,
+        status: "failed", type: undefined, resourceType: undefined,
+      });
+    });
+
+    it("arcane_event_list pasa sort, order y start", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerEventTools(server as any, mockClient);
+
+      (mockClient.events.list as any).mockResolvedValue({
+        success: true,
+        data: [],
+        pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_event_list");
+      await handler({ sort: "timestamp", order: "desc", start: 20, severity: "error" });
+
+      expect(mockClient.events.list).toHaveBeenCalledWith({
+        environmentId: undefined, search: undefined, sort: "timestamp", order: "desc",
+        start: 20, limit: undefined, severity: "error", type: undefined,
+      });
+    });
+
+    it("arcane_environment_list devuelve el sobre con paginacion", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerEnvironmentTools(server as any, mockClient);
+
+      (mockClient.environments.list as any).mockResolvedValue({
+        success: true,
+        data: [{ id: "env1", name: "local" }],
+        pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_environment_list");
+      const result = await handler({});
+      const body = JSON.parse(result.content[0].text);
+
+      expect(body.pagination.totalItems).toBe(1);
+      expect(body.data).toHaveLength(1);
+    });
+
+    it("arcane_template_list avisa en prosa cuando la lista viene truncada", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerTemplateTools(server as any, mockClient);
+
+      (mockClient.templates.list as any).mockResolvedValue({
+        success: true,
+        data: Array.from({ length: 20 }, (_, i) => ({ id: `t${i}` })),
+        pagination: { totalItems: 45, totalPages: 3, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_template_list");
+      const result = await handler({});
+      const [primera] = result.content[0].text.split("\n");
+
+      expect(primera).toBe("Showing 20 of 45 templates (page 1 of 3). Pass start=20 to see the rest.");
     });
   });
 });

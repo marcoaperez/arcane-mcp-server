@@ -2,31 +2,33 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ArcaneClient } from "../arcane-client";
 import { resolveEnvironmentId, resolveStackId } from "./resolve";
+import { withErrors, listResponse } from "./respond";
+
+const LIST_PARAMS = {
+  search: z.string().optional().describe("Free-text search over stack names"),
+  sort: z.string().optional().describe("Column to sort by, e.g. name, status, createdAt"),
+  order: z.string().optional().describe("Sort direction: asc or desc"),
+  start: z.number().int().min(0).optional().describe("Start index for pagination (server default: 0)"),
+  limit: z.number().int().min(1).optional().describe("Items per page (server default: 20)"),
+};
 
 export function registerStackTools(server: McpServer, client: ArcaneClient): void {
   server.tool(
     "arcane_stack_list",
-    "List all Docker Compose stacks (projects) in an environment.",
+    "List Docker Compose stacks (projects) in an environment. Returns pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists.",
     {
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
-      search: z.string().optional().describe("Filter stacks by name"),
-      limit: z.number().int().min(1).max(100).optional().default(50),
+      ...LIST_PARAMS,
+      status: z.string().optional().describe("Filter by status, comma-separated: running, stopped, partially running"),
+      archived: z.string().optional().describe("Archived filter: 'true' for only archived, 'all' to include them. Excluded by default"),
+      tags: z.string().optional().describe("Filter by tag names, comma-separated, OR semantics"),
     },
-    async ({ environmentId, environmentName, search, limit = 50 }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const result = await client.stacks.list(envId, { search, limit });
-        return {
-          content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, search, sort, order, start, limit, status, archived, tags }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const result = await client.stacks.list(envId, { search, sort, order, start, limit, status, archived, tags });
+      return listResponse(result, "stacks");
+    }),
   );
 
   server.tool(

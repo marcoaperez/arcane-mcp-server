@@ -2,28 +2,28 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ArcaneClient } from "../arcane-client";
 import { resolveEnvironmentId } from "./resolve";
+import { withErrors, listResponse } from "./respond";
+
+const LIST_PARAMS = {
+  search: z.string().optional().describe("Free-text search over environment names"),
+  sort: z.string().optional().describe("Column to sort by, e.g. name, status"),
+  order: z.string().optional().describe("Sort direction: asc or desc"),
+  start: z.number().int().min(0).optional().describe("Start index for pagination (server default: 0)"),
+  limit: z.number().int().min(1).optional().describe("Items per page (server default: 20)"),
+};
 
 export function registerEnvironmentTools(server: McpServer, client: ArcaneClient): void {
   server.tool(
     "arcane_environment_list",
-    "List all Docker environments managed by Arcane. Returns environment IDs, names, and connection status.",
+    "List Docker environments managed by Arcane. Returns environment IDs, names, connection status and pagination; if the response says there are more pages, pass start to see the rest.",
     {
-      search: z.string().optional().describe("Filter environments by name"),
-      limit: z.number().int().min(1).max(100).optional().default(50),
+      ...LIST_PARAMS,
+      type: z.string().optional().describe("Filter by environment type"),
     },
-    async ({ search, limit }) => {
-      try {
-        const result = await client.environments.list({ search, limit });
-        return {
-          content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ search, sort, order, start, limit, type }) => {
+      const result = await client.environments.list({ search, sort, order, start, limit, type });
+      return listResponse(result, "environments");
+    }),
   );
 
   server.tool(
