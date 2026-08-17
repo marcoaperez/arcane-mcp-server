@@ -119,7 +119,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | Tool | Description | Inputs |
 |---|---|---|
 | `arcane_volume_backup_create` | Create a backup of a Docker volume. | `environmentId?`, `environmentName?`, `volumeName` |
-| `arcane_volume_backup_list` | List all backups for a Docker volume. | `environmentId?`, `environmentName?`, `volumeName`, `search?`, `sort?`, `order?`, `start?`, `limit?` |
+| `arcane_volume_backup_list` | List backups of a Docker volume. Returns pagination; if the response says there are more pages, pass start to see the rest. | `environmentId?`, `environmentName?`, `volumeName`, `search?`, `sort?`, `order?`, `start?`, `limit?` |
 | `arcane_volume_backup_delete` | Delete a volume backup. | `environmentId?`, `environmentName?`, `backupId` |
 | `arcane_volume_backup_download` | Download a volume backup. Returns download URL or instructions. | `environmentId?`, `environmentName?`, `backupId` |
 | `arcane_volume_backup_restore` | Restore a volume from a backup. | `environmentId?`, `environmentName?`, `volumeName`, `backupId` |
@@ -154,7 +154,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_git_repository_list` | List all git repositories configured in Arcane. Returns repository IDs, names, URLs, and authentication details. | `search?`, `sort?`, `order?`, `start?`, `limit?` |
+| `arcane_git_repository_list` | List git repositories configured in Arcane. Returns repository IDs, names, URLs, authentication details and pagination; if the response says there are more pages, pass start to see the rest. | `search?`, `sort?`, `order?`, `start?`, `limit?` |
 | `arcane_git_repository_get` | Get details of a specific git repository by ID. | `id` |
 | `arcane_git_repository_create` | Create a new git repository in Arcane. | `name`, `url`, `authType`, `description?`, `enabled?`, `username?`, `token?`, `sshKey?`, `sshHostKeyVerification?` |
 | `arcane_git_repository_update` | Update an existing git repository. | `id`, `name?`, `url?`, `authType?`, `description?`, `enabled?`, `username?`, `token?`, `sshKey?`, `sshHostKeyVerification?` |
@@ -167,7 +167,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_gitops_sync_list` | List all GitOps syncs in an environment. GitOps syncs automatically deploy stacks from git repositories. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?` |
+| `arcane_gitops_sync_list` | List GitOps syncs in an environment. Returns pagination; if the response says there are more pages, pass start to see the rest. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?` |
 | `arcane_gitops_sync_get` | Get details of a specific GitOps sync by ID or name. | `environmentId?`, `environmentName?`, `syncId?`, `syncName?` |
 | `arcane_gitops_sync_create` | Create a GitOps sync configuration for automatic deployment from a git repository. | `environmentId?`, `environmentName?`, `name`, `repositoryId`, `branch`, `composePath`, `projectName?`, `autoSync?`, `syncInterval?` |
 | `arcane_gitops_sync_update` | Update an existing GitOps sync. | `environmentId?`, `environmentName?`, `syncId?`, `syncName?`, `name?`, `repositoryId?`, `branch?`, `composePath?`, `projectName?`, `autoSync?`, `syncInterval?` |

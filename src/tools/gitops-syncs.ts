@@ -2,6 +2,15 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ArcaneClient } from "../arcane-client";
 import { resolveEnvironmentId } from "./resolve";
+import { withErrors, listResponse } from "./respond";
+
+const LIST_PARAMS = {
+  search: z.string().optional().describe("Free-text search over sync names"),
+  sort: z.string().optional().describe("Column to sort by, e.g. name, lastSyncAt, status"),
+  order: z.string().optional().describe("Sort direction: asc or desc"),
+  start: z.number().int().min(0).optional().describe("Start index for pagination (server default: 0)"),
+  limit: z.number().int().min(1).optional().describe("Items per page (server default: 20)"),
+};
 
 export async function resolveGitOpsSyncId(
   client: ArcaneClient,
@@ -38,30 +47,17 @@ export async function resolveGitOpsSyncId(
 export function registerGitOpsSyncTools(server: McpServer, client: ArcaneClient): void {
   server.tool(
     "arcane_gitops_sync_list",
-    "List all GitOps syncs in an environment. GitOps syncs automatically deploy stacks from git repositories.",
+    "List GitOps syncs in an environment. Returns pagination; if the response says there are more pages, pass start to see the rest.",
     {
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
-      search: z.string().optional().describe("Search query"),
-      sort: z.string().optional().describe("Column to sort by"),
-      order: z.string().optional().describe("Sort direction"),
-      start: z.number().int().optional().describe("Start index"),
-      limit: z.number().int().min(1).max(100).optional().default(50),
+      ...LIST_PARAMS,
     },
-    async ({ environmentId, environmentName, search, sort, order, start, limit = 50 }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const result = await client.gitOpsSyncs.list(envId, { search, sort, order, start, limit });
-        return {
-          content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, search, sort, order, start, limit }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const result = await client.gitOpsSyncs.list(envId, { search, sort, order, start, limit });
+      return listResponse(result, "GitOps syncs");
+    }),
   );
 
   server.tool(
@@ -73,21 +69,14 @@ export function registerGitOpsSyncTools(server: McpServer, client: ArcaneClient)
       syncId: z.string().optional().describe("Sync ID (use if known)"),
       syncName: z.string().optional().describe("Sync name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName, syncId, syncName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const sId = await resolveGitOpsSyncId(client, envId, syncId, syncName);
-        const result = await client.gitOpsSyncs.get(envId, sId);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, syncId, syncName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const sId = await resolveGitOpsSyncId(client, envId, syncId, syncName);
+      const result = await client.gitOpsSyncs.get(envId, sId);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
+      };
+    }),
   );
 
   server.tool(
@@ -104,20 +93,13 @@ export function registerGitOpsSyncTools(server: McpServer, client: ArcaneClient)
       autoSync: z.boolean().optional().describe("Enable automatic sync"),
       syncInterval: z.number().int().optional().describe("Sync interval in minutes"),
     },
-    async ({ environmentId, environmentName, ...dto }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const result = await client.gitOpsSyncs.create(envId, dto);
-        return {
-          content: [{ type: "text", text: `GitOps sync created successfully:\n${JSON.stringify(result.data, null, 2)}` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, ...dto }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const result = await client.gitOpsSyncs.create(envId, dto);
+      return {
+        content: [{ type: "text", text: `GitOps sync created successfully:\n${JSON.stringify(result.data, null, 2)}` }],
+      };
+    }),
   );
 
   server.tool(
@@ -136,21 +118,14 @@ export function registerGitOpsSyncTools(server: McpServer, client: ArcaneClient)
       autoSync: z.boolean().optional().describe("Enable or disable automatic sync"),
       syncInterval: z.number().int().optional().describe("New sync interval in minutes"),
     },
-    async ({ environmentId, environmentName, syncId, syncName, ...dto }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const sId = await resolveGitOpsSyncId(client, envId, syncId, syncName);
-        const result = await client.gitOpsSyncs.update(envId, sId, dto);
-        return {
-          content: [{ type: "text", text: `GitOps sync updated successfully:\n${JSON.stringify(result.data, null, 2)}` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, syncId, syncName, ...dto }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const sId = await resolveGitOpsSyncId(client, envId, syncId, syncName);
+      const result = await client.gitOpsSyncs.update(envId, sId, dto);
+      return {
+        content: [{ type: "text", text: `GitOps sync updated successfully:\n${JSON.stringify(result.data, null, 2)}` }],
+      };
+    }),
   );
 
   server.tool(
@@ -162,21 +137,14 @@ export function registerGitOpsSyncTools(server: McpServer, client: ArcaneClient)
       syncId: z.string().optional().describe("Sync ID (use if known)"),
       syncName: z.string().optional().describe("Sync name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName, syncId, syncName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const sId = await resolveGitOpsSyncId(client, envId, syncId, syncName);
-        const result = await client.gitOpsSyncs.delete(envId, sId);
-        return {
-          content: [{ type: "text", text: result.message || "GitOps sync deleted successfully" }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, syncId, syncName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const sId = await resolveGitOpsSyncId(client, envId, syncId, syncName);
+      const result = await client.gitOpsSyncs.delete(envId, sId);
+      return {
+        content: [{ type: "text", text: result.message || "GitOps sync deleted successfully" }],
+      };
+    }),
   );
 
   server.tool(
@@ -189,21 +157,14 @@ export function registerGitOpsSyncTools(server: McpServer, client: ArcaneClient)
       syncName: z.string().optional().describe("Sync name (alternative to ID)"),
       path: z.string().optional().describe("Path to browse (defaults to root)"),
     },
-    async ({ environmentId, environmentName, syncId, syncName, path }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const sId = await resolveGitOpsSyncId(client, envId, syncId, syncName);
-        const result = await client.gitOpsSyncs.browseFiles(envId, sId, path);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, syncId, syncName, path }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const sId = await resolveGitOpsSyncId(client, envId, syncId, syncName);
+      const result = await client.gitOpsSyncs.browseFiles(envId, sId, path);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
+      };
+    }),
   );
 
   server.tool(
@@ -215,21 +176,14 @@ export function registerGitOpsSyncTools(server: McpServer, client: ArcaneClient)
       syncId: z.string().optional().describe("Sync ID (use if known)"),
       syncName: z.string().optional().describe("Sync name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName, syncId, syncName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const sId = await resolveGitOpsSyncId(client, envId, syncId, syncName);
-        const result = await client.gitOpsSyncs.getStatus(envId, sId);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, syncId, syncName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const sId = await resolveGitOpsSyncId(client, envId, syncId, syncName);
+      const result = await client.gitOpsSyncs.getStatus(envId, sId);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
+      };
+    }),
   );
 
   server.tool(
@@ -241,20 +195,13 @@ export function registerGitOpsSyncTools(server: McpServer, client: ArcaneClient)
       syncId: z.string().optional().describe("Sync ID (use if known)"),
       syncName: z.string().optional().describe("Sync name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName, syncId, syncName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const sId = await resolveGitOpsSyncId(client, envId, syncId, syncName);
-        const result = await client.gitOpsSyncs.performSync(envId, sId);
-        return {
-          content: [{ type: "text", text: result.message || "GitOps sync performed successfully" }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, syncId, syncName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const sId = await resolveGitOpsSyncId(client, envId, syncId, syncName);
+      const result = await client.gitOpsSyncs.performSync(envId, sId);
+      return {
+        content: [{ type: "text", text: result.message || "GitOps sync performed successfully" }],
+      };
+    }),
   );
 }

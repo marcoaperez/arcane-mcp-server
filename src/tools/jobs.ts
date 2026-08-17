@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ArcaneClient, JobSchedulesUpdate } from "../arcane-client";
 import { resolveEnvironmentId } from "./resolve";
+import { withErrors, textResponse } from "./respond";
 
 /** Los nueve intervalos configurables, tal y como los declara JobscheduleUpdate. */
 const INTERVALOS = {
@@ -24,23 +25,14 @@ export function registerJobTools(server: McpServer, client: ArcaneClient): void 
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const result = await client.jobs.list(envId);
-        // El spec permite `jobs: null`; sin este chequeo se devolveria el texto
-        // literal "null" en vez de un mensaje legible.
-        if (!result.jobs || result.jobs.length === 0) {
-          return { content: [{ type: "text", text: "No background jobs found" }] };
-        }
-        return { content: [{ type: "text", text: JSON.stringify(result.jobs, null, 2) }] };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const result = await client.jobs.list(envId);
+      // Este endpoint devuelve {jobs:[...]}, no el sobre paginado del resto de
+      // la API, asi que no pasa por listResponse. `jobs: null` se emitia como
+      // el texto "null", que no es una lista vacia ni un error: era ruido.
+      return textResponse(JSON.stringify(result.jobs ?? [], null, 2));
+    }),
   );
 
   server.tool(
@@ -51,24 +43,17 @@ export function registerJobTools(server: McpServer, client: ArcaneClient): void 
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
       jobId: z.string().describe("Job ID, e.g. auto-heal"),
     },
-    async ({ environmentId, environmentName, jobId }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const result = await client.jobs.run(envId, jobId);
-        if (result.success === false) {
-          return {
-            content: [{ type: "text", text: `Error: ${result.message || "Job run failed"}` }],
-            isError: true,
-          };
-        }
-        return { content: [{ type: "text", text: result.message || "Job started" }] };
-      } catch (err) {
+    withErrors(async ({ environmentId, environmentName, jobId }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const result = await client.jobs.run(envId, jobId);
+      if (result.success === false) {
         return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+          content: [{ type: "text", text: `Error: ${result.message || "Job run failed"}` }],
           isError: true,
         };
       }
-    },
+      return { content: [{ type: "text", text: result.message || "Job started" }] };
+    }),
   );
 
   server.tool(
@@ -78,18 +63,11 @@ export function registerJobTools(server: McpServer, client: ArcaneClient): void 
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const result = await client.jobs.getSchedules(envId);
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const result = await client.jobs.getSchedules(envId);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }),
   );
 
   server.tool(
@@ -100,29 +78,22 @@ export function registerJobTools(server: McpServer, client: ArcaneClient): void 
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
       ...INTERVALOS,
     },
-    async ({ environmentId, environmentName, ...intervalos }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        // Solo se envian los intervalos indicados: el resto se deja intacto.
-        const cambios = Object.fromEntries(
-          Object.entries(intervalos).filter(([, v]) => v !== undefined),
-        ) as JobSchedulesUpdate;
-        const result = await client.jobs.updateSchedules(envId, cambios);
-        if (result.success === false) {
-          return {
-            content: [{ type: "text", text: "Error: Job schedules update failed" }],
-            isError: true,
-          };
-        }
-        // La respuesta trae la configuracion ya aplicada: devolverla es mas util
-        // que un texto fijo, y ademas confirma que los cambios cuajaron.
-        return { content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }] };
-      } catch (err) {
+    withErrors(async ({ environmentId, environmentName, ...intervalos }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      // Solo se envian los intervalos indicados: el resto se deja intacto.
+      const cambios = Object.fromEntries(
+        Object.entries(intervalos).filter(([, v]) => v !== undefined),
+      ) as JobSchedulesUpdate;
+      const result = await client.jobs.updateSchedules(envId, cambios);
+      if (result.success === false) {
         return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+          content: [{ type: "text", text: "Error: Job schedules update failed" }],
           isError: true,
         };
       }
-    },
+      // La respuesta trae la configuracion ya aplicada: devolverla es mas util
+      // que un texto fijo, y ademas confirma que los cambios cuajaron.
+      return { content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }] };
+    }),
   );
 }

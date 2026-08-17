@@ -15,6 +15,8 @@ import { registerVolumeFileTools } from "../tools/volume-files";
 import { registerActivityTools } from "../tools/activities";
 import { registerEventTools } from "../tools/events";
 import { registerJobTools } from "../tools/jobs";
+import { registerGitRepositoryTools } from "../tools/git-repositories";
+import { registerGitOpsSyncTools } from "../tools/gitops-syncs";
 
 type MockedFunction<T extends (...args: any[]) => any> = {
   (...args: Parameters<T>): ReturnType<T>;
@@ -132,6 +134,53 @@ describe("MCP Tools", () => {
           success: true,
           data: { version: "1.2.3" },
         }) as MockedFunction<() => any>,
+      },
+      jobs: {
+        list: vi.fn().mockResolvedValue({
+          isAgent: false,
+          jobs: [],
+        }) as MockedFunction<(envId: string) => any>,
+        run: vi.fn(),
+        getSchedules: vi.fn(),
+        updateSchedules: vi.fn(),
+      },
+      gitRepositories: {
+        list: vi.fn().mockResolvedValue({
+          success: true,
+          data: [],
+          pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
+        }) as MockedFunction<(opts?: ListOptions) => any>,
+        get: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+        listBranches: vi.fn(),
+        browseFiles: vi.fn(),
+        test: vi.fn(),
+      },
+      gitOpsSyncs: {
+        list: vi.fn().mockResolvedValue({
+          success: true,
+          data: [],
+          pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
+        }) as MockedFunction<(envId: string, opts?: ListOptions) => any>,
+        get: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+        browseFiles: vi.fn(),
+        getStatus: vi.fn(),
+        performSync: vi.fn(),
+      },
+      volumeBackups: {
+        create: vi.fn(),
+        list: vi.fn().mockResolvedValue({
+          success: true,
+          data: [],
+          pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
+        }) as MockedFunction<(envId: string, volumeName: string, opts?: ListOptions) => any>,
+        delete: vi.fn(),
+        restore: vi.fn(),
       },
     } as unknown as ArcaneClient;
     return mockClient;
@@ -1337,6 +1386,68 @@ describe("MCP Tools", () => {
       const [primera] = result.content[0].text.split("\n");
 
       expect(primera).toBe("Showing 20 of 45 templates (page 1 of 3). Pass start=20 to see the rest.");
+    });
+  });
+
+  describe("Superficie de listado — git, gitops, backups y jobs", () => {
+    it("arcane_git_repository_list devuelve el sobre con paginacion", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerGitRepositoryTools(server as any, mockClient);
+
+      (mockClient.gitRepositories.list as any).mockResolvedValue({
+        success: true,
+        data: [{ id: "r1", name: "infra" }],
+        pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_git_repository_list");
+      const body = JSON.parse((await handler({})).content[0].text);
+
+      expect(body.pagination.totalItems).toBe(1);
+      expect(body.data).toHaveLength(1);
+    });
+
+    it("arcane_git_repository_list ya no impone un limit por defecto propio", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerGitRepositoryTools(server as any, mockClient);
+
+      (mockClient.gitRepositories.list as any).mockResolvedValue({
+        success: true, data: [], pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_git_repository_list");
+      await handler({});
+
+      expect(mockClient.gitRepositories.list).toHaveBeenCalledWith(expect.objectContaining({ limit: undefined }));
+    });
+
+    it("arcane_job_list con jobs:null devuelve una lista vacia, no el texto 'null'", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerJobTools(server as any, mockClient);
+
+      (mockClient.jobs.list as any).mockResolvedValue({ success: true, jobs: null });
+
+      const handler = server.getHandler("arcane_job_list");
+      const result = await handler({ environmentId: "env1" });
+
+      expect(result.content[0].text.trim()).not.toBe("null");
+      expect(JSON.parse(result.content[0].text)).toEqual([]);
+    });
+
+    it("arcane_job_list con jobs devuelve la lista tal cual", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerJobTools(server as any, mockClient);
+
+      (mockClient.jobs.list as any).mockResolvedValue({ success: true, jobs: [{ id: "j1", name: "image_update_check" }] });
+
+      const handler = server.getHandler("arcane_job_list");
+      const result = await handler({ environmentId: "env1" });
+
+      expect(JSON.parse(result.content[0].text)).toEqual([{ id: "j1", name: "image_update_check" }]);
     });
   });
 });
