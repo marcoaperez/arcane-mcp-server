@@ -32,7 +32,7 @@ export function registerVolumeBackupTools(server: McpServer, client: ArcaneClien
 
   server.tool(
     "arcane_volume_backup_list",
-    "List backups of a Docker volume. Returns pagination; if the response says there are more pages, pass start to see the rest.",
+    "List backups of a Docker volume. Returns pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists.",
     {
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),

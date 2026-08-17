@@ -14,7 +14,7 @@ const LIST_PARAMS = {
 export function registerGitRepositoryTools(server: McpServer, client: ArcaneClient): void {
   server.tool(
     "arcane_git_repository_list",
-    "List git repositories configured in Arcane. Returns repository IDs, names, URLs, authentication details and pagination; if the response says there are more pages, pass start to see the rest.",
+    "List git repositories configured in Arcane. Returns repository IDs, names, URLs, authentication details and pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists.",
     { ...LIST_PARAMS },
     withErrors(async ({ search, sort, order, start, limit }) => {
       const result = await client.gitRepositories.list({ search, sort, order, start, limit });

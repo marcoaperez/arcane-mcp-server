@@ -15,7 +15,7 @@ const LIST_PARAMS = {
 export function registerEnvironmentTools(server: McpServer, client: ArcaneClient): void {
   server.tool(
     "arcane_environment_list",
-    "List Docker environments managed by Arcane. Returns environment IDs, names, connection status and pagination; if the response says there are more pages, pass start to see the rest.",
+    "List Docker environments managed by Arcane. Returns environment IDs, names, connection status and pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists.",
     {
       ...LIST_PARAMS,
       type: z.string().optional().describe("Filter by environment type"),

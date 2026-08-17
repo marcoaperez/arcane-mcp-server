@@ -49,7 +49,7 @@ export async function resolveGitOpsSyncId(
 export function registerGitOpsSyncTools(server: McpServer, client: ArcaneClient): void {
   server.tool(
     "arcane_gitops_sync_list",
-    "List GitOps syncs in an environment. Returns pagination; if the response says there are more pages, pass start to see the rest.",
+    "List GitOps syncs in an environment. Returns pagination and total/active/successful counts; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists.",
     {
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
