@@ -1658,6 +1658,12 @@ Añadir los imports `import { z } from "zod";` y `import { resolveEnvironmentId 
           };
         }
         const result = await client.system.prune(envId, opciones);
+        // Es la tool mas destructiva de la fase: un success:false silenciado aqui
+        // reportaria una poda normal mientras el host devuelve un fallo.
+        if (result.success === false) {
+          const motivo = result.data?.errors?.join("; ") || "Prune failed";
+          return { content: [{ type: "text", text: `Error: ${motivo}` }], isError: true };
+        }
         return { content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }] };
       } catch (err) {
         return {
