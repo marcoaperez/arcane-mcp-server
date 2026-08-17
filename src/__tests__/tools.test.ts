@@ -551,6 +551,11 @@ describe("MCP Tools", () => {
     });
 
     it("arcane_activity_cancel devuelve isError con success:false", async () => {
+      // Rama defensiva: el spec declara `success` en BaseApiResponseActivityActivity, pero
+      // los e2e contra la instancia real (2026-08-16) demuestran que la API nunca produce
+      // esta rama — un cancel invalido rechaza con HTTP 409, que ya cae en el catch de mas
+      // abajo. Se mantiene el chequeo y este test porque el contrato del spec lo permite,
+      // aunque en la practica no se haya observado.
       const mockClient = clienteConActivities();
       mockClient.activities.cancel.mockResolvedValue({
         success: false,

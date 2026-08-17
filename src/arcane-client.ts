@@ -587,6 +587,12 @@ export interface ActivityDetail {
   messages: ActivityMessage[] | null;
 }
 
+export interface ActivityListOptions extends ListOptionsWithSort {
+  status?: string;
+  type?: string;
+  resourceType?: string;
+}
+
 export interface Event {
   createdAt: string;
   description?: string;
@@ -611,6 +617,13 @@ export interface EventSeverityCounts {
   success: number;
   total: number;
   warning: number;
+}
+
+export interface EventListOptions extends ListOptionsWithSort {
+  /** Si viene, la consulta va a la ruta por entorno en vez de a la global. */
+  environmentId?: string;
+  severity?: string;
+  type?: string;
 }
 
 export interface JobPrerequisite {
@@ -1029,7 +1042,7 @@ class SystemMethods {
 
   /** HEAD sin cuerpo: el veredicto es el codigo de estado. */
   async health(envId: string): Promise<{ ok: boolean; status: number }> {
-    return this.client.requestHead("HEAD", `/environments/${encodeURIComponent(envId)}/system/health`);
+    return this.client.requestHead(`/environments/${encodeURIComponent(envId)}/system/health`);
   }
 
   async prune(envId: string, opciones: SystemPruneRequest): Promise<{ success: boolean; data: SystemPruneResult }> {
@@ -1047,12 +1060,6 @@ class SystemMethods {
       { dockerRunCommand }
     );
   }
-}
-
-export interface ActivityListOptions extends ListOptionsWithSort {
-  status?: string;
-  type?: string;
-  resourceType?: string;
 }
 
 class ActivitiesMethods {
@@ -1104,13 +1111,6 @@ class ActivitiesMethods {
       `/environments/${encodeURIComponent(envId)}/activities/${encodeURIComponent(activityId)}/cancel${query ? `?${query}` : ""}`
     );
   }
-}
-
-export interface EventListOptions extends ListOptionsWithSort {
-  /** Si viene, la consulta va a la ruta por entorno en vez de a la global. */
-  environmentId?: string;
-  severity?: string;
-  type?: string;
 }
 
 class EventsMethods {
@@ -1544,9 +1544,9 @@ export class ArcaneClient {
    * Aqui el veredicto es el codigo de estado, y un estado de error NO lanza:
    * "el sistema no esta sano" es una respuesta valida, no un fallo de la llamada.
    */
-  async requestHead(method: string, path: string): Promise<{ ok: boolean; status: number }> {
+  async requestHead(path: string): Promise<{ ok: boolean; status: number }> {
     const response = await this._fetch(`${this.baseUrl}${path}`, {
-      method,
+      method: "HEAD",
       headers: { "X-API-Key": this.apiKey },
     });
     return { ok: response.ok, status: response.status };

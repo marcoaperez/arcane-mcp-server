@@ -106,7 +106,7 @@ describe("ArcaneClient", () => {
     it("requestHead() no parsea cuerpo y devuelve el codigo de estado", async () => {
       mockFetch.mockResolvedValue({ ok: true, status: 200 } as Response);
 
-      const resultado = await client.requestHead("HEAD", "/environments/env123/system/health");
+      const resultado = await client.requestHead("/environments/env123/system/health");
 
       expect(resultado).toEqual({ ok: true, status: 200 });
       expect(mockFetch).toHaveBeenCalledWith(
@@ -118,7 +118,7 @@ describe("ArcaneClient", () => {
     it("requestHead() devuelve ok:false en vez de lanzar cuando el estado no es 2xx", async () => {
       mockFetch.mockResolvedValue({ ok: false, status: 503 } as Response);
 
-      const resultado = await client.requestHead("HEAD", "/environments/env123/system/health");
+      const resultado = await client.requestHead("/environments/env123/system/health");
 
       expect(resultado).toEqual({ ok: false, status: 503 });
     });
