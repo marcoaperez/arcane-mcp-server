@@ -1431,6 +1431,59 @@ class JobsMethods {
   }
 }
 
+class ImageUpdatesMethods {
+  constructor(private client: ArcaneClient) {}
+
+  async summary(envId: string): Promise<{ success: boolean; data: ImageUpdateSummary }> {
+    return this.client.request<{ success: boolean; data: ImageUpdateSummary }>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/image-updates/summary`
+    );
+  }
+
+  /**
+   * Informacion PERSISTIDA: no consulta los registros. El spec declara
+   * imageRefs como una cadena separada por comas, no como parametro repetido.
+   */
+  async byRefs(envId: string, imageRefs: string[]): Promise<{ success: boolean; data: Record<string, ImageUpdateInfo> }> {
+    const params = new URLSearchParams();
+    params.set("imageRefs", imageRefs.join(","));
+    return this.client.request<{ success: boolean; data: Record<string, ImageUpdateInfo> }>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/image-updates/by-refs?${params.toString()}`
+    );
+  }
+
+  /** Comprobacion EN VIVO de una imagen, por referencia o por ID. */
+  async check(envId: string, opts: { imageRef?: string; imageId?: string }): Promise<{ success: boolean; data: ImageUpdateResponse }> {
+    const base = `/environments/${encodeURIComponent(envId)}/image-updates`;
+    if (opts.imageId) {
+      return this.client.request<{ success: boolean; data: ImageUpdateResponse }>(
+        "GET",
+        `${base}/check/${encodeURIComponent(opts.imageId)}`
+      );
+    }
+    if (opts.imageRef) {
+      const params = new URLSearchParams();
+      params.set("imageRef", opts.imageRef);
+      return this.client.request<{ success: boolean; data: ImageUpdateResponse }>(
+        "GET",
+        `${base}/check?${params.toString()}`
+      );
+    }
+    throw new Error("check() necesita imageRef o imageId");
+  }
+
+  /** Comprobacion EN VIVO de una lista explicita. */
+  async checkBatch(envId: string, imageRefs: string[]): Promise<{ success: boolean; data: Record<string, ImageUpdateResponse> }> {
+    return this.client.request<{ success: boolean; data: Record<string, ImageUpdateResponse> }>(
+      "POST",
+      `/environments/${encodeURIComponent(envId)}/image-updates/check-batch`,
+      { imageRefs }
+    );
+  }
+}
+
 class GitRepositoriesMethods {
   constructor(private client: ArcaneClient) {}
 
@@ -1715,6 +1768,7 @@ export class ArcaneClient {
   readonly activities: ActivitiesMethods;
   readonly events: EventsMethods;
   readonly jobs: JobsMethods;
+  readonly imageUpdates: ImageUpdatesMethods;
   readonly gitRepositories: GitRepositoriesMethods;
   readonly gitOpsSyncs: GitOpsSyncsMethods;
   readonly projectAdditional: ProjectAdditionalMethods;
@@ -1748,6 +1802,7 @@ export class ArcaneClient {
     this.activities = new ActivitiesMethods(this);
     this.events = new EventsMethods(this);
     this.jobs = new JobsMethods(this);
+    this.imageUpdates = new ImageUpdatesMethods(this);
     this.gitRepositories = new GitRepositoriesMethods(this);
     this.gitOpsSyncs = new GitOpsSyncsMethods(this);
     this.projectAdditional = new ProjectAdditionalMethods(this);

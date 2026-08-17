@@ -1100,6 +1100,62 @@ describe("ArcaneClient", () => {
     });
   });
 
+  describe("ImageUpdatesMethods", () => {
+    const ok = (data: unknown) =>
+      ({ ok: true, json: async () => ({ success: true, data }) }) as Response;
+
+    it("summary(envId) - GET /environments/{envId}/image-updates/summary", async () => {
+      mockFetch.mockResolvedValue(ok({ totalImages: 18, imagesWithUpdates: 4, digestUpdates: 4, errorsCount: 2 }));
+      const r = await client.imageUpdates.summary("env1");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/image-updates/summary",
+        expect.objectContaining({ method: "GET" }),
+      );
+      expect(r.data.imagesWithUpdates).toBe(4);
+    });
+
+    it("byRefs(envId, refs) une las referencias con comas en un solo parametro", async () => {
+      mockFetch.mockResolvedValue(ok({}));
+      await client.imageUpdates.byRefs("env1", ["nginx:latest", "redis:7"]);
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/image-updates/by-refs?imageRefs=nginx%3Alatest%2Credis%3A7",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("check(envId, {imageRef}) usa el endpoint por referencia", async () => {
+      mockFetch.mockResolvedValue(ok({ checkTime: "t", currentVersion: "1", hasUpdate: true, responseTimeMs: 5, updateType: "digest" }));
+      await client.imageUpdates.check("env1", { imageRef: "nginx:latest" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/image-updates/check?imageRef=nginx%3Alatest",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("check(envId, {imageId}) usa el endpoint por ID", async () => {
+      mockFetch.mockResolvedValue(ok({ checkTime: "t", currentVersion: "1", hasUpdate: false, responseTimeMs: 5, updateType: "digest" }));
+      await client.imageUpdates.check("env1", { imageId: "sha256:abc" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/image-updates/check/sha256%3Aabc",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("check(envId, {}) sin referencia ni ID lanza sin llamar a la API", async () => {
+      await expect(client.imageUpdates.check("env1", {})).rejects.toThrow(/imageRef o imageId/);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("checkBatch(envId, refs) manda la lista en el cuerpo", async () => {
+      mockFetch.mockResolvedValue(ok({}));
+      await client.imageUpdates.checkBatch("env1", ["nginx:latest"]);
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/image-updates/check-batch",
+        expect.objectContaining({ method: "POST", body: JSON.stringify({ imageRefs: ["nginx:latest"] }) }),
+      );
+    });
+  });
+
   describe("networks", () => {
     it(".list(envId) - GET /environments/{envId}/networks", async () => {
       mockFetch.mockResolvedValue({
