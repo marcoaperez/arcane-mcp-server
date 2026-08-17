@@ -932,6 +932,48 @@ describe("MCP Tools", () => {
       expect(result.content[0].text).toContain("boom");
     });
 
+    it("arcane_container_list pasa sort, order y start con valores reales", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerContainerTools(server as any, mockClient);
+
+      (mockClient.containers.list as any).mockResolvedValue({
+        success: true,
+        data: [],
+        counts: { runningContainers: 0, stoppedContainers: 0, totalContainers: 0 },
+        pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_container_list");
+      await handler({ environmentId: "env1", search: "web", sort: "name", order: "desc", start: 40, limit: 25 });
+
+      expect(mockClient.containers.list).toHaveBeenCalledWith("env1", {
+        search: "web", sort: "name", order: "desc", start: 40, limit: 25,
+        includeInternal: undefined, standalone: undefined,
+      });
+    });
+
+    it("arcane_container_list incluye pagination y counts en el cuerpo, no el array pelado", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerContainerTools(server as any, mockClient);
+
+      (mockClient.containers.list as any).mockResolvedValue({
+        success: true,
+        data: [{ id: "c1" }],
+        counts: { runningContainers: 1, stoppedContainers: 0, totalContainers: 1 },
+        pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_container_list");
+      const result = await handler({ environmentId: "env1" });
+      const body = JSON.parse(result.content[0].text);
+
+      expect(body.pagination.totalItems).toBe(1);
+      expect(body.counts).toEqual({ runningContainers: 1, stoppedContainers: 0, totalContainers: 1 });
+      expect(body.data).toEqual([{ id: "c1" }]);
+    });
+
     it("arcane_image_list pasa inUse y los cinco comunes", async () => {
       const mockClient = createMockClient();
       const server = createMockServer();
@@ -944,12 +986,30 @@ describe("MCP Tools", () => {
       });
 
       const handler = server.getHandler("arcane_image_list");
-      await handler({ environmentId: "env1", inUse: "false", limit: 10 });
+      await handler({ environmentId: "env1", search: "nginx", sort: "size", order: "desc", start: 30, limit: 10, inUse: "false" });
 
       expect(mockClient.images.list).toHaveBeenCalledWith("env1", {
-        search: undefined, sort: undefined, order: undefined, start: undefined,
-        limit: 10, inUse: "false",
+        search: "nginx", sort: "size", order: "desc", start: 30, limit: 10, inUse: "false",
       });
+    });
+
+    it("arcane_image_list incluye pagination en el cuerpo, no el array pelado", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerImageTools(server as any, mockClient);
+
+      (mockClient.images.list as any).mockResolvedValue({
+        success: true,
+        data: [{ id: "img1" }],
+        pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_image_list");
+      const result = await handler({ environmentId: "env1" });
+      const body = JSON.parse(result.content[0].text);
+
+      expect(body.pagination.totalItems).toBe(1);
+      expect(body.data).toEqual([{ id: "img1" }]);
     });
 
     it("arcane_network_list pasa inUse y los cinco comunes", async () => {
@@ -965,12 +1025,32 @@ describe("MCP Tools", () => {
       });
 
       const handler = server.getHandler("arcane_network_list");
-      await handler({ environmentId: "env1", inUse: "true" });
+      await handler({ environmentId: "env1", search: "bridge", sort: "driver", order: "asc", start: 15, limit: 8, inUse: "true" });
 
       expect(mockClient.networks.list).toHaveBeenCalledWith("env1", {
-        search: undefined, sort: undefined, order: undefined, start: undefined,
-        limit: undefined, inUse: "true",
+        search: "bridge", sort: "driver", order: "asc", start: 15, limit: 8, inUse: "true",
       });
+    });
+
+    it("arcane_network_list incluye pagination y counts en el cuerpo, no el array pelado", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerNetworkTools(server as any, mockClient);
+
+      (mockClient.networks.list as any).mockResolvedValue({
+        success: true,
+        data: [{ id: "net1" }],
+        counts: { inuse: 1, unused: 0, total: 1 },
+        pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_network_list");
+      const result = await handler({ environmentId: "env1" });
+      const body = JSON.parse(result.content[0].text);
+
+      expect(body.pagination.totalItems).toBe(1);
+      expect(body.counts).toEqual({ inuse: 1, unused: 0, total: 1 });
+      expect(body.data).toEqual([{ id: "net1" }]);
     });
   });
 
@@ -1339,6 +1419,25 @@ describe("MCP Tools", () => {
       });
     });
 
+    it("arcane_activity_list incluye pagination en el cuerpo, no el array pelado", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerActivityTools(server as any, mockClient);
+
+      (mockClient.activities.list as any).mockResolvedValue({
+        success: true,
+        data: [{ id: "act1" }],
+        pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_activity_list");
+      const result = await handler({ environmentId: "env1" });
+      const body = JSON.parse(result.content[0].text);
+
+      expect(body.pagination.totalItems).toBe(1);
+      expect(body.data).toEqual([{ id: "act1" }]);
+    });
+
     it("arcane_event_list pasa sort, order y start", async () => {
       const mockClient = createMockClient();
       const server = createMockServer();
@@ -1359,6 +1458,25 @@ describe("MCP Tools", () => {
       });
     });
 
+    it("arcane_event_list incluye pagination en el cuerpo, no el array pelado", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerEventTools(server as any, mockClient);
+
+      (mockClient.events.list as any).mockResolvedValue({
+        success: true,
+        data: [{ id: "ev1" }],
+        pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_event_list");
+      const result = await handler({});
+      const body = JSON.parse(result.content[0].text);
+
+      expect(body.pagination.totalItems).toBe(1);
+      expect(body.data).toEqual([{ id: "ev1" }]);
+    });
+
     it("arcane_environment_list devuelve el sobre con paginacion", async () => {
       const mockClient = createMockClient();
       const server = createMockServer();
@@ -1376,6 +1494,65 @@ describe("MCP Tools", () => {
 
       expect(body.pagination.totalItems).toBe(1);
       expect(body.data).toHaveLength(1);
+    });
+
+    it("arcane_environment_list pasa sort, order y start con valores reales", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerEnvironmentTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_environment_list");
+      await handler({ search: "prod", sort: "name", order: "desc", start: 10, limit: 5, type: "local" });
+
+      expect(mockClient.environments.list).toHaveBeenCalledWith({
+        search: "prod", sort: "name", order: "desc", start: 10, limit: 5, type: "local",
+      });
+    });
+
+    it("arcane_stack_list pasa sort, order y start con valores reales", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerStackTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_stack_list");
+      await handler({ environmentId: "env1", sort: "name", order: "desc", start: 30, limit: 15, status: "running" });
+
+      expect(mockClient.stacks.list).toHaveBeenCalledWith("env1", {
+        search: undefined, sort: "name", order: "desc", start: 30, limit: 15,
+        status: "running", archived: undefined, tags: undefined,
+      });
+    });
+
+    it("arcane_stack_list incluye pagination en el cuerpo, no el array pelado", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerStackTools(server as any, mockClient);
+
+      (mockClient.stacks.list as any).mockResolvedValue({
+        success: true,
+        data: [{ id: "stack1", name: "myapp" }],
+        pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_stack_list");
+      const result = await handler({ environmentId: "env1" });
+      const body = JSON.parse(result.content[0].text);
+
+      expect(body.pagination.totalItems).toBe(1);
+      expect(body.data).toEqual([{ id: "stack1", name: "myapp" }]);
+    });
+
+    it("arcane_template_list pasa sort, order y start con valores reales", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerTemplateTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_template_list");
+      await handler({ search: "wordpress", sort: "name", order: "desc", start: 15, limit: 5, type: "compose" });
+
+      expect(mockClient.templates.list).toHaveBeenCalledWith({
+        search: "wordpress", sort: "name", order: "desc", start: 15, limit: 5, type: "compose",
+      });
     });
 
     it("arcane_template_list avisa en prosa cuando la lista viene truncada", async () => {
@@ -1429,6 +1606,23 @@ describe("MCP Tools", () => {
       await handler({});
 
       expect(mockClient.gitRepositories.list).toHaveBeenCalledWith(expect.objectContaining({ limit: undefined }));
+    });
+
+    it("arcane_git_repository_list pasa sort, order y start con valores reales", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerGitRepositoryTools(server as any, mockClient);
+
+      (mockClient.gitRepositories.list as any).mockResolvedValue({
+        success: true, data: [], pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_git_repository_list");
+      await handler({ search: "infra", sort: "name", order: "asc", start: 20, limit: 10 });
+
+      expect(mockClient.gitRepositories.list).toHaveBeenCalledWith({
+        search: "infra", sort: "name", order: "asc", start: 20, limit: 10,
+      });
     });
 
     it("arcane_gitops_sync_list pasa los parametros de paginacion al cliente", async () => {
