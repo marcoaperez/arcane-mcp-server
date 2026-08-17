@@ -930,6 +930,22 @@ describe("MCP Tools", () => {
       expect(mockClient.system.prune).not.toHaveBeenCalled();
     });
 
+    it("arcane_system_prune propaga success:false del host como isError", async () => {
+      const mockClient = clienteConSystem();
+      mockClient.system.prune.mockResolvedValue({
+        success: false,
+        data: { success: false, spaceReclaimed: 0, errors: ["permission denied"] },
+      });
+      const server = createMockServer();
+      registerSystemTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_system_prune");
+      const result = await handler({ environmentId: "env1", buildCache: "dangling" });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("permission denied");
+    });
+
     it("arcane_system_convert devuelve el compose", async () => {
       const mockClient = clienteConSystem();
       const server = createMockServer();
