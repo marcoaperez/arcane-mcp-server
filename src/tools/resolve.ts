@@ -10,7 +10,7 @@ const MAX_DISPONIBLES = 30;
  * Sin cap, un entorno con 2.000 contenedores produciria un mensaje de error de
  * miles de nombres.
  */
-export function listaDisponibles(nombres: string[]): string {
+function listaDisponibles(nombres: string[]): string {
   if (nombres.length === 0) return "none";
   if (nombres.length <= MAX_DISPONIBLES) return nombres.join(", ");
   const sobran = nombres.length - MAX_DISPONIBLES;
@@ -51,7 +51,7 @@ interface ResolveByNameLabels {
  * existe" (cuando si se ha visto la coleccion completa). Decir "no existe"
  * en el primer caso es la conclusion falsa que esta tarea elimina.
  */
-async function resolveIdByName<T>(spec: {
+export async function resolveIdByName<T>(spec: {
   sort: string;
   fetchPage: (req: PageRequest) => Promise<PaginatedResponse<T>>;
   isMatch: (item: T) => boolean;
@@ -186,6 +186,3 @@ export async function resolveContainerId(
     },
   });
 }
-
-/** Reexportado para que gitops-syncs.ts comparta exactamente esta misma forma. */
-export { resolveIdByName };
