@@ -267,7 +267,14 @@ describe("MCP Tools", () => {
       const handler = server.getHandler("arcane_environment_get");
       await handler({ environmentName: "production" });
 
-      expect(mockClient.environments.list).toHaveBeenCalledWith({ search: "production", limit: 50 });
+      // resolveEnvironmentId ahora recorre la coleccion con collectAllPages
+      // (Task 10): start/limit/sort vienen del paginador, no de un limit:50 fijo.
+      expect(mockClient.environments.list).toHaveBeenCalledWith({
+        search: "production",
+        start: 0,
+        limit: 200,
+        sort: "name",
+      });
       expect(mockClient.environments.get).toHaveBeenCalledWith("env1");
     });
 

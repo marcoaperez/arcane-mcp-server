@@ -30,7 +30,14 @@ describe("resolve helpers", () => {
 
       const result = await resolveEnvironmentId(mockClient, undefined, "production");
       expect(result).toBe("env123");
-      expect(mockClient.environments.list).toHaveBeenCalledWith({ search: "production", limit: 50 });
+      // Ahora resuelve con collectAllPages: search sigue siendo filtrado en
+      // servidor, pero start/limit/sort vienen del paginador, no de un limit:50 fijo.
+      expect(mockClient.environments.list).toHaveBeenCalledWith({
+        search: "production",
+        start: 0,
+        limit: 200,
+        sort: "name",
+      });
     });
 
     it("throws with list of available names if no match found", async () => {
@@ -107,7 +114,12 @@ describe("resolve helpers", () => {
 
       const result = await resolveStackId(mockClient, "env123", undefined, "myapp");
       expect(result).toBe("stack456");
-      expect(mockClient.stacks.list).toHaveBeenCalledWith("env123", { search: "myapp", limit: 50 });
+      expect(mockClient.stacks.list).toHaveBeenCalledWith("env123", {
+        search: "myapp",
+        start: 0,
+        limit: 200,
+        sort: "name",
+      });
     });
 
     it("throws with list of available names if no match found", async () => {
@@ -184,7 +196,9 @@ describe("resolve helpers", () => {
 
       const result = await resolveContainerId(mockClient, "env123", undefined, "myapp");
       expect(result).toBe("cont456");
-      expect(mockClient.containers.list).toHaveBeenCalledWith("env123");
+      // Sin `search`: la semantica de ese parametro no esta documentada para este
+      // endpoint (ver resolveContainerId). Solo start/limit/sort del paginador.
+      expect(mockClient.containers.list).toHaveBeenCalledWith("env123", { start: 0, limit: 200, sort: "name" });
     });
 
     it("throws with list of available names if no match found", async () => {
@@ -230,6 +244,64 @@ describe("resolve helpers", () => {
       await expect(resolveContainerId(mockClient, "env123", undefined, undefined)).rejects.toThrow(
         "Either containerId or containerName must be provided"
       );
+    });
+  });
+
+  describe("resolvers y truncamiento", () => {
+    /** Sirve `total` contenedores paginados, el buscado en la posicion `donde`. */
+    const containersPaginados = (total: number, donde: number, nombre: string) =>
+      vi.fn(async (envId: string, opts?: { start?: number; limit?: number }) => {
+        const start = opts?.start ?? 0;
+        const limit = opts?.limit ?? 20;
+        const data = Array.from({ length: Math.max(0, Math.min(limit, total - start)) }, (_, i) => {
+          const idx = start + i;
+          return { id: `c${idx}`, names: [`/${idx === donde ? nombre : `relleno${idx}`}`] };
+        });
+        return {
+          success: true,
+          data,
+          counts: { runningContainers: total, stoppedContainers: 0, totalContainers: total },
+          pagination: {
+            totalItems: total,
+            totalPages: Math.max(1, Math.ceil(total / limit)),
+            currentPage: Math.floor(start / limit) + 1,
+            itemsPerPage: limit,
+          },
+        };
+      });
+
+    it("encuentra un contenedor que cae fuera de la primera pagina", async () => {
+      const list = containersPaginados(500, 350, "buscado");
+      const mockClient = { containers: { list } } as unknown as ArcaneClient;
+
+      const id = await resolveContainerId(mockClient, "env1", undefined, "buscado");
+      expect(id).toBe("c350");
+      expect(list.mock.calls.length).toBeGreaterThan(1);
+    });
+
+    it("cuando agota el tope, el error dice que no ha mirado todo", async () => {
+      const list = containersPaginados(5000, 4999, "buscado");
+      const mockClient = { containers: { list } } as unknown as ArcaneClient;
+
+      await expect(resolveContainerId(mockClient, "env1", undefined, "buscado")).rejects.toThrow(
+        /among the first 2000 of 5000 containers/,
+      );
+    });
+
+    it("cuando la busqueda fue completa, el error dice que no existe", async () => {
+      const list = containersPaginados(30, -1, "buscado");
+      const mockClient = { containers: { list } } as unknown as ArcaneClient;
+
+      await expect(resolveContainerId(mockClient, "env1", undefined, "buscado")).rejects.toThrow(
+        /No container found with name 'buscado'/,
+      );
+    });
+
+    it("la lista de disponibles se capa y declara cuantos oculta", async () => {
+      const list = containersPaginados(100, -1, "buscado");
+      const mockClient = { containers: { list } } as unknown as ArcaneClient;
+
+      await expect(resolveContainerId(mockClient, "env1", undefined, "buscado")).rejects.toThrow(/and 70 more/);
     });
   });
 });

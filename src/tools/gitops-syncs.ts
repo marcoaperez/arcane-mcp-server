@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ArcaneClient } from "../arcane-client";
-import { resolveEnvironmentId } from "./resolve";
+import { resolveEnvironmentId, resolveIdByName } from "./resolve";
 import { withErrors, listResponse } from "./respond";
 
 const LIST_PARAMS = {
@@ -26,22 +26,24 @@ export async function resolveGitOpsSyncId(
     throw new Error("Either syncId or syncName must be provided");
   }
 
-  const result = await client.gitOpsSyncs.list(envId);
-  const matches = result.data?.filter((sync) => sync.name === syncName) ?? [];
-
-  if (matches.length === 0) {
-    const available = result.data?.map((sync) => sync.name).join(", ") ?? "none";
-    throw new Error(`No GitOps sync found with name '${syncName}' in environment '${envId}'. Available syncs: ${available}`);
-  }
-
-  if (matches.length > 1) {
-    const matchingIds = matches.map((sync) => sync.id).join(", ");
-    throw new Error(
-      `Multiple GitOps syncs found with name '${syncName}' in environment '${envId}'. Please use the sync ID instead. Matching IDs: ${matchingIds}`
-    );
-  }
-
-  return matches[0].id;
+  // Misma forma que los otros tres resolvers nombre->id (src/tools/resolve.ts):
+  // recorre la coleccion entera con collectAllPages en vez de mirar solo la
+  // primera pagina, para no concluir "no existe" sin haberlo mirado todo.
+  return resolveIdByName({
+    sort: "name",
+    fetchPage: (req) => client.gitOpsSyncs.list(envId, { search: syncName, ...req }),
+    isMatch: (sync) => sync.name === syncName,
+    getId: (sync) => sync.id,
+    namesOf: (items) => items.map((sync) => sync.name),
+    name: syncName,
+    labels: {
+      singular: "GitOps sync",
+      countNoun: "syncs",
+      foundNoun: "GitOps syncs",
+      idNoun: "sync ID",
+      scope: ` in environment '${envId}'`,
+    },
+  });
 }
 
 export function registerGitOpsSyncTools(server: McpServer, client: ArcaneClient): void {
