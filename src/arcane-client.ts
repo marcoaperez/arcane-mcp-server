@@ -440,6 +440,23 @@ export interface NetworkListOptions extends ListOptionsWithSort {
   inUse?: string;
 }
 
+export interface EnvironmentListOptions extends ListOptionsWithSort {
+  type?: string;
+}
+
+export interface ProjectListOptions extends ListOptionsWithSort {
+  /** Coma-separado: running, stopped, partially running. */
+  status?: string;
+  /** "true" (solo archivados) o "all" (incluirlos). Por defecto se excluyen. */
+  archived?: string;
+  /** Coma-separado, semantica OR. */
+  tags?: string;
+}
+
+export interface TemplateListOptions extends ListOptionsWithSort {
+  type?: string;
+}
+
 export interface GitRepository {
   id: string;
   name: string;
@@ -889,10 +906,10 @@ export interface ContainerCreateOptions {
 class EnvironmentsMethods {
   constructor(private client: ArcaneClient) {}
 
-  async list(opts?: ListOptions): Promise<PaginatedResponse<Environment>> {
+  async list(opts?: EnvironmentListOptions): Promise<PaginatedResponse<Environment>> {
     const params = new URLSearchParams();
-    if (opts?.search) params.set("search", opts.search);
-    if (opts?.limit) params.set("limit", String(opts.limit));
+    appendListParams(params, opts);
+    if (opts?.type) params.set("type", opts.type);
     const query = params.toString();
     return this.client.request<PaginatedResponse<Environment>>(
       "GET",
@@ -920,9 +937,12 @@ class EnvironmentsMethods {
 class StacksMethods {
   constructor(private client: ArcaneClient) {}
 
-  async list(envId: string, opts?: ListOptions): Promise<PaginatedResponse<Project>> {
+  async list(envId: string, opts?: ProjectListOptions): Promise<PaginatedResponse<Project>> {
     const params = new URLSearchParams();
-    if (opts?.search) params.set("search", opts.search);
+    appendListParams(params, opts);
+    if (opts?.status) params.set("status", opts.status);
+    if (opts?.archived) params.set("archived", opts.archived);
+    if (opts?.tags) params.set("tags", opts.tags);
     const query = params.toString();
     return this.client.request<PaginatedResponse<Project>>(
       "GET",
@@ -1103,11 +1123,12 @@ class NetworksMethods {
 class TemplatesMethods {
   constructor(private client: ArcaneClient) {}
 
-  async list(opts?: ListOptions): Promise<PaginatedResponse<Template>> {
+  async list(opts?: TemplateListOptions): Promise<PaginatedResponse<Template>> {
     const params = new URLSearchParams();
-    if (opts?.search) params.set("search", opts.search);
+    appendListParams(params, opts);
+    if (opts?.type) params.set("type", opts.type);
     const query = params.toString();
-    return this.client.request<PaginatedResponse<Template>>(`GET`, `/templates${query ? `?${query}` : ""}`);
+    return this.client.request<PaginatedResponse<Template>>("GET", `/templates${query ? `?${query}` : ""}`);
   }
 
   async get(id: string): Promise<{ success: boolean; data: Template }> {
@@ -1165,11 +1186,10 @@ class ActivitiesMethods {
 
   async list(envId: string, opts?: ActivityListOptions): Promise<PaginatedResponse<Activity>> {
     const params = new URLSearchParams();
-    if (opts?.search) params.set("search", opts.search);
+    appendListParams(params, opts);
     if (opts?.status) params.set("status", opts.status);
     if (opts?.type) params.set("type", opts.type);
     if (opts?.resourceType) params.set("resourceType", opts.resourceType);
-    if (opts?.limit) params.set("limit", String(opts.limit));
     const query = params.toString();
     return this.client.request<PaginatedResponse<Activity>>(
       "GET",
@@ -1216,10 +1236,9 @@ class EventsMethods {
 
   async list(opts?: EventListOptions): Promise<PaginatedResponse<Event>> {
     const params = new URLSearchParams();
-    if (opts?.search) params.set("search", opts.search);
+    appendListParams(params, opts);
     if (opts?.severity) params.set("severity", opts.severity);
     if (opts?.type) params.set("type", opts.type);
-    if (opts?.limit) params.set("limit", String(opts.limit));
     const query = params.toString();
     const base = opts?.environmentId ? `/events/environment/${encodeURIComponent(opts.environmentId)}` : "/events";
     return this.client.request<PaginatedResponse<Event>>("GET", `${base}${query ? `?${query}` : ""}`);

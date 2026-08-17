@@ -913,7 +913,7 @@ describe("ArcaneClient", () => {
       await client.activities.list("env123", { status: "failed", limit: 10 });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/activities?status=failed&limit=10",
+        "http://localhost:3552/api/environments/env123/activities?limit=10&status=failed",
         expect.objectContaining({ method: "GET" })
       );
     });
@@ -1000,7 +1000,7 @@ describe("ArcaneClient", () => {
       await client.events.list({ severity: "error", limit: 5 });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/events?severity=error&limit=5",
+        "http://localhost:3552/api/events?limit=5&severity=error",
         expect.objectContaining({ method: "GET" })
       );
     });
@@ -1420,6 +1420,84 @@ describe("ArcaneClient", () => {
       const r = await client.volumes.list("env1");
       expect(r.counts).toEqual({ inuse: 8, unused: 24, total: 32 });
       expect(r.pagination.totalItems).toBe(32);
+    });
+  });
+
+  describe("Parametros de listado descartados en silencio", () => {
+    const okVacio = () =>
+      ({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [],
+          pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+        }),
+      }) as Response;
+
+    it("stacks.list envia limit, que hasta ahora tiraba", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.stacks.list("env1", { search: "app", limit: 50 });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/projects?search=app&limit=50",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("stacks.list envia tambien sort, order, start y los filtros propios", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.stacks.list("env1", {
+        sort: "name", order: "desc", start: 20, limit: 10,
+        status: "running", archived: "all", tags: "prod,web",
+      });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/projects?sort=name&order=desc&start=20&limit=10&status=running&archived=all&tags=prod%2Cweb",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("templates.list envia limit, que hasta ahora tiraba", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.templates.list({ search: "nginx", limit: 50, type: "compose" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/templates?search=nginx&limit=50&type=compose",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("environments.list envia sort, order, start y type", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.environments.list({ sort: "name", order: "asc", start: 5, limit: 10, type: "local" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments?sort=name&order=asc&start=5&limit=10&type=local",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("activities.list reenvia sort, order y start, que declaraba y no mandaba", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.activities.list("env1", { sort: "createdAt", order: "desc", start: 50, limit: 10, status: "failed" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/activities?sort=createdAt&order=desc&start=50&limit=10&status=failed",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("events.list reenvia sort, order y start en la ruta global", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.events.list({ sort: "timestamp", order: "desc", start: 20, limit: 5, severity: "error" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/events?sort=timestamp&order=desc&start=20&limit=5&severity=error",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("events.list reenvia sort, order y start en la ruta por entorno", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.events.list({ environmentId: "env1", sort: "timestamp", start: 10 });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/events/environment/env1?sort=timestamp&start=10",
+        expect.objectContaining({ method: "GET" }),
+      );
     });
   });
 });
