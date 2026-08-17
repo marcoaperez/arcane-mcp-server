@@ -907,6 +907,26 @@ describe("MCP Tools", () => {
       expect(result.content[0].text).toContain("503");
     });
 
+    it("arcane_system_health distingue el 500 conocido de Arcane 2.8.0 de un fallo real de Docker", async () => {
+      // Contra Arcane 2.8.0 este endpoint devuelve 500 SIEMPRE (SystemHealthOutput.Status
+      // nunca se rellena en el handler), incluso con Docker perfectamente sano. Traducirlo
+      // sin mas a "System is not healthy" lleva al modelo a intentar remediar un Docker que
+      // no esta roto. El mensaje debe dejar claro que es un fallo conocido del endpoint, no
+      // un veredicto sobre Docker, y apuntar a arcane_system_docker_info para comprobarlo.
+      const mockClient = clienteConSystem();
+      mockClient.system.health.mockResolvedValue({ ok: false, status: 500 });
+      const server = createMockServer();
+      registerSystemTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_system_health");
+      const result = await handler({ environmentId: "env1" });
+
+      expect(result.content[0].text).not.toContain("not healthy");
+      expect(result.content[0].text.toLowerCase()).toContain("known");
+      expect(result.content[0].text).toContain("2.8.0");
+      expect(result.content[0].text).toContain("arcane_system_docker_info");
+    });
+
     it("arcane_system_prune solo envia los recursos indicados", async () => {
       const mockClient = clienteConSystem();
       const server = createMockServer();

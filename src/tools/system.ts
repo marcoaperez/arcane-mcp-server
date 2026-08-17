@@ -55,7 +55,10 @@ export function registerSystemTools(server: McpServer, client: ArcaneClient): vo
 
   server.tool(
     "arcane_system_health",
-    "Check whether the Docker system of an environment is healthy.",
+    "Check whether the Docker system of an environment is healthy. Known issue: against Arcane " +
+      "2.8.0 this endpoint always returns HTTP 500 (its Status field is never populated by the " +
+      "upstream handler), regardless of Docker's actual health — a 500 here is a known bug, not a " +
+      "verdict on Docker. Use arcane_system_docker_info to check Docker's status directly.",
     {
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
@@ -64,6 +67,24 @@ export function registerSystemTools(server: McpServer, client: ArcaneClient): vo
       try {
         const envId = await resolveEnvironmentId(client, environmentId, environmentName);
         const { ok, status } = await client.system.health(envId);
+        if (status === 500) {
+          // Arcane 2.8.0: SystemHealthOutput declara `Status int` en el spec, pero el
+          // handler nunca lo rellena, asi que este endpoint devuelve 500 SIEMPRE, incluso
+          // con Docker perfectamente sano (verificado en vivo contra la instancia). No es
+          // un veredicto sobre el estado de Docker: traducirlo a "not healthy" empujaria al
+          // modelo a intentar remediar un Docker que no esta roto. arcane_system_docker_info
+          // sobre el mismo entorno es la comprobacion real.
+          return {
+            content: [{
+              type: "text",
+              text:
+                "System health check returned HTTP 500 — this is a known bug in Arcane 2.8.0's " +
+                "/system/health endpoint (its Status field is never populated by the handler), NOT " +
+                "a verdict on Docker's health. Use arcane_system_docker_info on this environment to " +
+                "check the actual Docker status.",
+            }],
+          };
+        }
         if (!ok) {
           return {
             content: [{ type: "text", text: `System is not healthy (HTTP ${status})` }],
