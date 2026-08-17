@@ -128,3 +128,66 @@ describe("paginacion (e2e, Arcane 2.8.0)", () => {
     expect((r.data ?? []).length).toBeLessThanOrEqual(3);
   });
 });
+
+/**
+ * Cuatro superficies que recibieron parametros nuevos en esta rama
+ * (images.list, templates.list, gitRepositories.list, volumeBackups.list) y
+ * que hasta ahora solo estaban verificadas a mano por curl contra la
+ * instancia real (los cuatro devuelven 200 con paginacion correcta), sin
+ * ningun e2e que lo comprobara en la suite. Hallazgo 5 de la revision final.
+ *
+ * Todo es lectura: ninguna de estas comprobaciones muta nada. No se afirman
+ * cantidades concretas de la coleccion (numero de imagenes, templates,
+ * repos): eso envejeceria mal. Se comprueba forma de la respuesta e
+ * invariantes (un filtro que se cumple, un id que aparece).
+ */
+describe("paginacion (e2e, Arcane 2.8.0) — superficies nuevas de la tarea 6/F2", () => {
+  const client = e2eClient();
+  const envId = "0";
+
+  it("images.list acepta sort, order y start, y el filtro inUse se cumple en cada elemento", async () => {
+    const pagina = await client.images.list(envId, { sort: "size", order: "desc", start: 0, limit: 5 });
+    expect(pagina.success).toBe(true);
+    expect((pagina.data ?? []).length).toBeLessThanOrEqual(5);
+
+    const enUso = await client.images.list(envId, { inUse: "true", limit: 50 });
+    expect(enUso.success).toBe(true);
+    for (const img of enUso.data ?? []) {
+      expect(img.inUse).toBe(true);
+    }
+  });
+
+  it("templates.list acepta sort, order, start y type sin romperse", async () => {
+    const r = await client.templates.list({ sort: "name", order: "asc", start: 0, limit: 5, type: "compose" });
+    expect(r.success).toBe(true);
+    expect(r.pagination.itemsPerPage).toBe(5);
+    // No se afirma un total concreto: la coleccion de templates de esta
+    // instancia puede estar vacia ahora mismo sin que eso sea un fallo.
+    expect((r.data ?? []).length).toBeLessThanOrEqual(r.pagination.totalItems);
+  });
+
+  it("gitRepositories.list filtra por search y respeta sort/order/start", async () => {
+    const todos = await client.gitRepositories.list({ limit: 200 });
+    expect(todos.success).toBe(true);
+    const repos = todos.data ?? [];
+    // Si esta instancia no tuviera ningun repo configurado el filtro no
+    // probaria nada: entonces el test debe fallar, no pasar vacio.
+    expect(repos.length).toBeGreaterThan(0);
+
+    const objetivo = repos[0];
+    const filtrado = await client.gitRepositories.list({ search: objetivo.name, sort: "name", order: "asc", start: 0 });
+    expect(filtrado.success).toBe(true);
+    expect((filtrado.data ?? []).some((r) => r.id === objetivo.id)).toBe(true);
+  });
+
+  it("volumeBackups.list responde con el sobre paginado para un volumen real", async () => {
+    const volumenes = await client.volumes.list(envId, { limit: 1 });
+    const volumen = (volumenes.data ?? [])[0];
+    expect(volumen).toBeDefined();
+
+    const r = await client.volumeBackups.list(envId, volumen.name, { sort: "createdAt", order: "desc", start: 0, limit: 5 });
+    expect(r.success).toBe(true);
+    expect(r.pagination).toBeDefined();
+    expect(Array.isArray(r.data ?? [])).toBe(true);
+  });
+});
