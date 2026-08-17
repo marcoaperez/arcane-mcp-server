@@ -36,6 +36,16 @@ enlaza desde aquí.
   — causa raíz del redeploy de GitOps roto, su arreglo, y las 9 operaciones que 2.8.0
   elimina (2 de ellas en uso, migradas de `/browse` a `/workspace`).
 
+### Issues redactados para el upstream (sin publicar)
+
+- [Paginación sin `sort` pierde elementos (2026-08-17)](auditorias/2026-08-17-paginacion-sin-sort-upstream.md)
+  — recorrer una colección con `start` sin orden explícito devuelve un conjunto
+  incompleto y no determinista. Es el motivo de que `collectAllPages` exija `sort`.
+- [`image_update_check` falla siempre (2026-08-17)](auditorias/2026-08-17-image-update-check-arcane-local-upstream.md)
+  — Arcane no reconoce como locales las imágenes que ella misma etiqueta con el
+  prefijo `arcane.local/`, así que el job programado falla en todas sus ejecuciones.
+  No bloquea F3: los datos de actualizaciones sí llegan.
+
 ## Specs y planes
 
 - [Spec F0 + F1 (2026-08-16)](superpowers/specs/2026-08-16-fork-arcane-mcp-f0-f1-design.md)
