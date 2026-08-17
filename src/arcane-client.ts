@@ -404,6 +404,42 @@ export interface ListOptionsWithSort extends ListOptions {
   start?: number;
 }
 
+/**
+ * Escribe en la query los cinco parametros de listado que openapi.txt declara
+ * para practicamente todos los endpoints de coleccion.
+ *
+ * `start` se compara con undefined y no por veracidad: `start=0` es un valor
+ * valido, no una ausencia.
+ */
+function appendListParams(params: URLSearchParams, opts?: ListOptionsWithSort): void {
+  if (opts?.search) params.set("search", opts.search);
+  if (opts?.sort) params.set("sort", opts.sort);
+  if (opts?.order) params.set("order", opts.order);
+  if (opts?.start !== undefined) params.set("start", String(opts.start));
+  if (opts?.limit) params.set("limit", String(opts.limit));
+}
+
+export interface ContainerListOptions extends ListOptionsWithSort {
+  /** El spec lo declara boolean, con default false. */
+  includeInternal?: boolean;
+  /** El spec lo declara string: "true" | "false". */
+  standalone?: string;
+}
+
+export interface ImageListOptions extends ListOptionsWithSort {
+  /** El spec lo declara string: "true" | "false". */
+  inUse?: string;
+}
+
+export interface VolumeListOptions extends ListOptionsWithSort {
+  inUse?: string;
+  includeInternal?: boolean;
+}
+
+export interface NetworkListOptions extends ListOptionsWithSort {
+  inUse?: string;
+}
+
 export interface GitRepository {
   id: string;
   name: string;
@@ -943,8 +979,16 @@ class StacksMethods {
 class ContainersMethods {
   constructor(private client: ArcaneClient) {}
 
-  async list(envId: string): Promise<PaginatedResponse<ContainerSummary>> {
-    return this.client.request<PaginatedResponse<ContainerSummary>>("GET", `/environments/${encodeURIComponent(envId)}/containers`);
+  async list(envId: string, opts?: ContainerListOptions): Promise<PaginatedResponseWithCounts<ContainerSummary, ContainerStatusCounts>> {
+    const params = new URLSearchParams();
+    appendListParams(params, opts);
+    if (opts?.includeInternal !== undefined) params.set("includeInternal", String(opts.includeInternal));
+    if (opts?.standalone) params.set("standalone", opts.standalone);
+    const query = params.toString();
+    return this.client.request<PaginatedResponseWithCounts<ContainerSummary, ContainerStatusCounts>>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/containers${query ? `?${query}` : ""}`
+    );
   }
 
   async get(envId: string, containerId: string): Promise<{ success: boolean; data: ContainerDetails }> {
@@ -974,8 +1018,15 @@ class ContainersMethods {
 class ImagesMethods {
   constructor(private client: ArcaneClient) {}
 
-  async list(envId: string): Promise<PaginatedResponse<ImageSummary>> {
-    return this.client.request<PaginatedResponse<ImageSummary>>("GET", `/environments/${encodeURIComponent(envId)}/images`);
+  async list(envId: string, opts?: ImageListOptions): Promise<PaginatedResponse<ImageSummary>> {
+    const params = new URLSearchParams();
+    appendListParams(params, opts);
+    if (opts?.inUse) params.set("inUse", opts.inUse);
+    const query = params.toString();
+    return this.client.request<PaginatedResponse<ImageSummary>>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/images${query ? `?${query}` : ""}`
+    );
   }
 
   async pull(envId: string, dto: ImagePullOptions): Promise<ActionResponse> {
@@ -994,8 +1045,16 @@ class ImagesMethods {
 class VolumesMethods {
   constructor(private client: ArcaneClient) {}
 
-  async list(envId: string): Promise<PaginatedResponse<Volume>> {
-    return this.client.request<PaginatedResponse<Volume>>("GET", `/environments/${encodeURIComponent(envId)}/volumes`);
+  async list(envId: string, opts?: VolumeListOptions): Promise<PaginatedResponseWithCounts<Volume, VolumeUsageCounts>> {
+    const params = new URLSearchParams();
+    appendListParams(params, opts);
+    if (opts?.inUse) params.set("inUse", opts.inUse);
+    if (opts?.includeInternal !== undefined) params.set("includeInternal", String(opts.includeInternal));
+    const query = params.toString();
+    return this.client.request<PaginatedResponseWithCounts<Volume, VolumeUsageCounts>>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/volumes${query ? `?${query}` : ""}`
+    );
   }
 
   async inspect(envId: string, name: string): Promise<{ success: boolean; data: Volume }> {
@@ -1014,8 +1073,15 @@ class VolumesMethods {
 class NetworksMethods {
   constructor(private client: ArcaneClient) {}
 
-  async list(envId: string): Promise<PaginatedResponse<NetworkSummary>> {
-    return this.client.request<PaginatedResponse<NetworkSummary>>("GET", `/environments/${encodeURIComponent(envId)}/networks`);
+  async list(envId: string, opts?: NetworkListOptions): Promise<PaginatedResponseWithCounts<NetworkSummary, NetworkUsageCounts>> {
+    const params = new URLSearchParams();
+    appendListParams(params, opts);
+    if (opts?.inUse) params.set("inUse", opts.inUse);
+    const query = params.toString();
+    return this.client.request<PaginatedResponseWithCounts<NetworkSummary, NetworkUsageCounts>>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/networks${query ? `?${query}` : ""}`
+    );
   }
 
   async inspect(envId: string, networkId: string): Promise<{ success: boolean; data: NetworkInspect }> {

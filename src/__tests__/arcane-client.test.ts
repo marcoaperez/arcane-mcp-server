@@ -1337,4 +1337,89 @@ describe("ArcaneClient", () => {
       );
     });
   });
+
+  describe("Parametros de listado (containers, images, volumes, networks)", () => {
+    const okVacio = () =>
+      ({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [],
+          counts: {},
+          pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+        }),
+      }) as Response;
+
+    it("containers.list envia los cinco comunes mas includeInternal y standalone", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.containers.list("env1", {
+        search: "web", sort: "name", order: "asc", start: 20, limit: 50,
+        includeInternal: true, standalone: "false",
+      });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/containers?search=web&sort=name&order=asc&start=20&limit=50&includeInternal=true&standalone=false",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("containers.list sin opciones no anade query string", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.containers.list("env1");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/containers",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("start=0 se envia (es un valor valido, no una ausencia)", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.containers.list("env1", { start: 0 });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/containers?start=0",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("images.list envia los cinco comunes mas inUse", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.images.list("env1", { search: "nginx", sort: "size", order: "desc", start: 10, limit: 5, inUse: "true" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images?search=nginx&sort=size&order=desc&start=10&limit=5&inUse=true",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("volumes.list envia los cinco comunes mas inUse e includeInternal", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.volumes.list("env1", { limit: 200, inUse: "false", includeInternal: true });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/volumes?limit=200&inUse=false&includeInternal=true",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("networks.list envia los cinco comunes mas inUse", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.networks.list("env1", { search: "bridge", inUse: "true" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/networks?search=bridge&inUse=true",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("volumes.list devuelve el objeto counts que trae la API", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [],
+          counts: { inuse: 8, unused: 24, total: 32 },
+          pagination: { totalItems: 32, totalPages: 2, currentPage: 1, itemsPerPage: 20 },
+        }),
+      } as Response);
+      const r = await client.volumes.list("env1");
+      expect(r.counts).toEqual({ inuse: 8, unused: 24, total: 32 });
+      expect(r.pagination.totalItems).toBe(32);
+    });
+  });
 });
