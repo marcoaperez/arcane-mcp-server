@@ -617,6 +617,23 @@ describe("MCP Tools", () => {
       });
     });
 
+    it("arcane_event_list sin environmentId consulta la ruta global, con environmentId: undefined", async () => {
+      const mockClient = clienteConEvents();
+      const server = createMockServer();
+      registerEventTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_event_list");
+      await handler({ severity: "error" });
+
+      expect(mockClient.events.list).toHaveBeenCalledWith({
+        environmentId: undefined,
+        severity: "error",
+        type: undefined,
+        search: undefined,
+        limit: undefined,
+      });
+    });
+
     it("arcane_event_stats devuelve los recuentos", async () => {
       const mockClient = clienteConEvents();
       const server = createMockServer();
@@ -673,6 +690,19 @@ describe("MCP Tools", () => {
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("prerequisites not met");
+    });
+
+    it("arcane_job_schedules_update devuelve isError con success:false", async () => {
+      const mockClient = clienteConJobs();
+      mockClient.jobs.updateSchedules.mockResolvedValue({ success: false });
+      const server = createMockServer();
+      registerJobTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_job_schedules_update");
+      const result = await handler({ environmentId: "env1", autoHealInterval: "45s" });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Job schedules update failed");
     });
 
     it("arcane_job_schedules_update envia solo los intervalos indicados y devuelve la config aplicada", async () => {
