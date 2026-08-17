@@ -80,6 +80,8 @@ export interface Project {
   overrideFileName?: string;
   redeployDisabled?: boolean;
   relativePath?: string;
+  /** Estado de actualizacion del proyecto (spec: ProjectDetails.updateInfo). */
+  updateInfo?: ProjectUpdateInfo;
 }
 
 export interface ProjectCreate {
@@ -146,6 +148,13 @@ export interface ImageSummary {
   repo: string;
   tag: string;
   updateInfo?: any;
+  /**
+   * Que usa esta imagen. La instancia ya lo devolvia y el tipo lo descartaba:
+   * era una de las desalineaciones FALTA-EN-TS-OPCIONAL de la auditoria.
+   * Es lo que separa "esta imagen tiene actualizacion" de "actualizarla
+   * reinicia el proyecto arcane-mcp".
+   */
+  usedBy?: ImageUsedBy[] | null;
 }
 
 export interface ImagePullOptions {
@@ -155,6 +164,132 @@ export interface ImagePullOptions {
 export interface ImagePruneReport {
   imagesDeleted: number;
   spaceReclaimed: number;
+}
+
+/** Respuesta de una comprobación en vivo (spec: ImageupdateResponse). */
+export interface ImageUpdateResponse {
+  checkTime: string;
+  currentVersion: string;
+  hasUpdate: boolean;
+  responseTimeMs: number;
+  updateType: string;
+  activityId?: string;
+  authMethod?: string;
+  authRegistry?: string;
+  authUsername?: string;
+  currentDigest?: string;
+  error?: string;
+  latestDigest?: string;
+  latestVersion?: string;
+  usedCredential?: boolean;
+}
+
+/**
+ * Informacion persistida de actualizacion (spec: ImageUpdateInfo).
+ *
+ * Mismos campos que ImageUpdateResponse pero MAS estrictos: el spec marca
+ * currentDigest, latestDigest, latestVersion y error como obligatorios aqui y
+ * opcionales alli. No unificar los dos tipos.
+ */
+export interface ImageUpdateInfo {
+  checkTime: string;
+  currentDigest: string;
+  currentVersion: string;
+  error: string;
+  hasUpdate: boolean;
+  latestDigest: string;
+  latestVersion: string;
+  responseTimeMs: number;
+  updateType: string;
+  authMethod?: string;
+  authRegistry?: string;
+  authUsername?: string;
+  usedCredential?: boolean;
+}
+
+/** Recuento agregado (spec: ImageupdateSummary). */
+export interface ImageUpdateSummary {
+  digestUpdates: number;
+  errorsCount: number;
+  imagesWithUpdates: number;
+  totalImages: number;
+}
+
+/** Quien usa una imagen (spec: ImageUsedBy). */
+export interface ImageUsedBy {
+  name: string;
+  type: string;
+  id?: string;
+}
+
+/** Estado de actualizacion de un proyecto (spec: ProjectUpdateInfo). */
+export interface ProjectUpdateInfo {
+  checkedImageCount: number;
+  errorCount: number;
+  hasUpdate: boolean;
+  imageCount: number;
+  imagesWithUpdates: number;
+  status: string;
+  errorMessage?: string;
+  imageRefs?: string[] | null;
+  lastCheckedAt?: string;
+  updatedImageRefs?: string[] | null;
+}
+
+/** Resultado por recurso de una pasada del updater (spec: UpdaterResourceResult). */
+export interface UpdaterResourceResult {
+  resourceId: string;
+  resourceType: string;
+  status: string;
+  details?: Record<string, unknown>;
+  error?: string;
+  newImages?: Record<string, unknown>;
+  oldImages?: Record<string, unknown>;
+  resourceName?: string;
+  updateApplied?: boolean;
+  updateAvailable?: boolean;
+}
+
+/** Resultado de POST /updater/run (spec: UpdaterResult). */
+export interface UpdaterResult {
+  checked: number;
+  duration: string;
+  failed: number;
+  items: UpdaterResourceResult[] | null;
+  skipped: number;
+  updated: number;
+  activityId?: string;
+  endTime?: string;
+  restarted?: number;
+  startTime?: string;
+  success?: boolean;
+}
+
+/** Que se esta actualizando ahora mismo (spec: UpdaterStatus). */
+export interface UpdaterStatus {
+  containerIds: string[] | null;
+  projectIds: string[] | null;
+  updatingContainers: number;
+  updatingProjects: number;
+}
+
+/** Entrada del historial del updater (spec: AutoUpdateRecord). */
+export interface AutoUpdateRecord {
+  createdAt: string;
+  id: string;
+  resourceId: string;
+  resourceName: string;
+  resourceType: string;
+  startTime: string;
+  status: string;
+  updateApplied: boolean;
+  updateAvailable: boolean;
+  details?: Record<string, unknown>;
+  endTime?: string;
+  error?: string;
+  newImageVersions?: Record<string, unknown>;
+  oldImageVersions?: Record<string, unknown>;
+  updatedAt?: string;
 }
 
 export interface Volume {
