@@ -3,6 +3,14 @@
 Punto de entrada a la documentación del fork. Toda documentación nueva se
 enlaza desde aquí.
 
+## Arquitectura
+
+- [Criterio de exposición](arquitectura/criterio-exposicion.md) — **documento vivo**:
+  qué expone este fork y qué no, con los tres motivos de exclusión (radio de daño,
+  infraestructura inexistente, destrucción de evidencia), las cifras medidas y el
+  denominador honesto de cobertura (249 operaciones, no 347). Releva a la §2 del
+  spec de F2 como referencia.
+
 ## Desarrollo
 
 - [Cómo añadir una tool](desarrollo/anadir-una-tool.md) — procedimiento estándar

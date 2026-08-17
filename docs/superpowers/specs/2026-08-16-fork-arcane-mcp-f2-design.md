@@ -24,6 +24,13 @@ F2 cubre el hueco: qué está pasando en el host, qué ha pasado, y por qué fal
 
 ## 2. Criterio de exposición (aplica a F2–F5, no solo a F2)
 
+> **Nota del 2026-08-17.** Esta sección queda como registro histórico de cuándo se
+> tomó la decisión. La referencia vigente es
+> [`docs/arquitectura/criterio-exposicion.md`](../../arquitectura/criterio-exposicion.md),
+> que además corrige la cifra de «66 operaciones» de más abajo (son 47 escrituras
+> excluidas y 19 lecturas admitidas), resuelve el pendiente de `swarm` y fija el
+> denominador de cobertura.
+
 Esta decisión se tomó antes de listar ninguna tool porque condiciona todas las fases
 siguientes.
 
