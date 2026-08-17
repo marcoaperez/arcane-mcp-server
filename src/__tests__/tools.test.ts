@@ -17,6 +17,7 @@ import { registerEventTools } from "../tools/events";
 import { registerJobTools } from "../tools/jobs";
 import { registerGitRepositoryTools } from "../tools/git-repositories";
 import { registerGitOpsSyncTools } from "../tools/gitops-syncs";
+import { registerVolumeBackupTools } from "../tools/volume-backups";
 
 type MockedFunction<T extends (...args: any[]) => any> = {
   (...args: Parameters<T>): ReturnType<T>;
@@ -1421,6 +1422,123 @@ describe("MCP Tools", () => {
       await handler({});
 
       expect(mockClient.gitRepositories.list).toHaveBeenCalledWith(expect.objectContaining({ limit: undefined }));
+    });
+
+    it("arcane_gitops_sync_list pasa los parametros de paginacion al cliente", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerGitOpsSyncTools(server as any, mockClient);
+
+      (mockClient.gitOpsSyncs.list as any).mockResolvedValue({
+        success: true,
+        data: [],
+        counts: { totalSyncs: 0, activeSyncs: 0, successfulSyncs: 0 },
+        pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_gitops_sync_list");
+      await handler({ environmentId: "env1", search: "infra", sort: "name", order: "asc", start: 20, limit: 50 });
+
+      expect(mockClient.gitOpsSyncs.list).toHaveBeenCalledWith("env1", {
+        search: "infra", sort: "name", order: "asc", start: 20, limit: 50,
+      });
+    });
+
+    it("arcane_gitops_sync_list incluye counts en el cuerpo, tal como exige el spec (GitopsSyncCounts es required)", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerGitOpsSyncTools(server as any, mockClient);
+
+      (mockClient.gitOpsSyncs.list as any).mockResolvedValue({
+        success: true,
+        data: [{ id: "sync1", name: "infra-sync" }],
+        counts: { totalSyncs: 5, activeSyncs: 2, successfulSyncs: 4 },
+        pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_gitops_sync_list");
+      const result = await handler({ environmentId: "env1" });
+      const body = JSON.parse(result.content[0].text);
+
+      expect(body.counts).toEqual({ totalSyncs: 5, activeSyncs: 2, successfulSyncs: 4 });
+      expect(body.pagination.totalItems).toBe(1);
+      expect(body.data).toEqual([{ id: "sync1", name: "infra-sync" }]);
+    });
+
+    it("arcane_gitops_sync_list avisa en prosa cuando la lista viene truncada", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerGitOpsSyncTools(server as any, mockClient);
+
+      (mockClient.gitOpsSyncs.list as any).mockResolvedValue({
+        success: true,
+        data: Array.from({ length: 20 }, (_, i) => ({ id: `sync${i}` })),
+        counts: { totalSyncs: 32, activeSyncs: 10, successfulSyncs: 28 },
+        pagination: { totalItems: 32, totalPages: 2, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_gitops_sync_list");
+      const result = await handler({ environmentId: "env1" });
+
+      const [primera] = result.content[0].text.split("\n");
+      expect(primera).toBe("Showing 20 of 32 GitOps syncs (page 1 of 2). Pass start=20 to see the rest.");
+      expect(result.isError).toBeUndefined();
+    });
+
+    it("arcane_volume_backup_list pasa volumeName y los parametros de paginacion al cliente", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerVolumeBackupTools(server as any, mockClient);
+
+      (mockClient.volumeBackups.list as any).mockResolvedValue({
+        success: true,
+        data: [],
+        pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_volume_backup_list");
+      await handler({ environmentId: "env1", volumeName: "data-vol", search: "nightly", sort: "createdAt", order: "desc", start: 20, limit: 50 });
+
+      expect(mockClient.volumeBackups.list).toHaveBeenCalledWith("env1", "data-vol", {
+        search: "nightly", sort: "createdAt", order: "desc", start: 20, limit: 50,
+      });
+    });
+
+    it("arcane_volume_backup_list devuelve el sobre con paginacion", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerVolumeBackupTools(server as any, mockClient);
+
+      (mockClient.volumeBackups.list as any).mockResolvedValue({
+        success: true,
+        data: [{ id: "backup1", volumeName: "data-vol", size: 1024, createdAt: "2024-01-01" }],
+        pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_volume_backup_list");
+      const result = await handler({ environmentId: "env1", volumeName: "data-vol" });
+      const body = JSON.parse(result.content[0].text);
+
+      expect(body.pagination.totalItems).toBe(1);
+      expect(body.data).toEqual([{ id: "backup1", volumeName: "data-vol", size: 1024, createdAt: "2024-01-01" }]);
+    });
+
+    it("arcane_volume_backup_list avisa en prosa cuando la lista viene truncada", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerVolumeBackupTools(server as any, mockClient);
+
+      (mockClient.volumeBackups.list as any).mockResolvedValue({
+        success: true,
+        data: Array.from({ length: 20 }, (_, i) => ({ id: `backup${i}` })),
+        pagination: { totalItems: 45, totalPages: 3, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const handler = server.getHandler("arcane_volume_backup_list");
+      const result = await handler({ environmentId: "env1", volumeName: "data-vol" });
+
+      const [primera] = result.content[0].text.split("\n");
+      expect(primera).toBe("Showing 20 of 45 volume backups (page 1 of 3). Pass start=20 to see the rest.");
     });
 
     it("arcane_job_list con jobs:null devuelve una lista vacia, no el texto 'null'", async () => {
