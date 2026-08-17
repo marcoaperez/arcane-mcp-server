@@ -18,7 +18,7 @@ const BEGIN = "<!-- BEGIN TOOLS -->";
 const END = "<!-- END TOOLS -->";
 
 // Fichero de src/tools/ -> título de sección. El orden define el orden del README.
-// `resolve.ts` no registra tools: son helpers de resolución nombre->id.
+// Los ficheros sin tools estan en NON_TOOL_FILES, mas abajo.
 const GROUPS = [
   ["environments.ts", "Environments"],
   ["stacks.ts", "Compose stacks"],
@@ -120,7 +120,11 @@ function extractTools(file) {
 }
 
 const known = new Set(GROUPS.map(([f]) => f));
-const present = readdirSync("src/tools").filter(f => f.endsWith(".ts") && f !== "resolve.ts");
+// Ficheros de src/tools/ que no registran tools: helpers compartidos.
+// `resolve.ts` resuelve nombre->id; `respond.ts` construye la respuesta de una
+// tool; `paging.ts` recorre colecciones paginadas.
+const NON_TOOL_FILES = new Set(["resolve.ts", "respond.ts", "paging.ts"]);
+const present = readdirSync("src/tools").filter(f => f.endsWith(".ts") && !NON_TOOL_FILES.has(f));
 const unmapped = present.filter(f => !known.has(f));
 if (unmapped.length > 0) {
   console.error(`ERROR: ficheros de src/tools/ sin sección asignada: ${unmapped.join(", ")}`);
