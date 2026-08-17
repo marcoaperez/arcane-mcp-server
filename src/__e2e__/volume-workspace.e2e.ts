@@ -36,6 +36,11 @@ describe("volume workspace (e2e, Arcane 2.8.0)", () => {
     expect(typeof ws.data.fileTreeRevision).toBe("string");
     expect(ws.data.fileTreeRevision.length).toBeGreaterThan(0);
     expect(ws.data.files ?? []).toEqual([]);
+
+    // El spec declara fileTreeTruncated como obligatorio. Si la API dejara de
+    // enviarlo, `arcane_volume_browse` no podria avisar de un arbol recortado y
+    // volveria a prometer algo que no puede garantizar, en silencio.
+    expect(typeof ws.data.fileTreeTruncated).toBe("boolean");
   });
 
   it("uploadFile escribe el fichero y el árbol lo refleja", async () => {

@@ -128,7 +128,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_volume_browse` | List the full file tree of a Docker volume. | `environmentId?`, `environmentName?`, `volumeName` |
+| `arcane_volume_browse` | List the file tree of a Docker volume. The server may truncate the tree: check fileTreeTruncated before concluding a file does not exist. | `environmentId?`, `environmentName?`, `volumeName` |
 | `arcane_volume_upload_file` | Upload a file to a Docker volume. | `environmentId?`, `environmentName?`, `volumeName`, `filename`, `content`, `path?` |
 
 ### Networks (4)
