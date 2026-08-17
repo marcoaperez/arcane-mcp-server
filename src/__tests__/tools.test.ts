@@ -1033,5 +1033,53 @@ describe("MCP Tools", () => {
 
       expect(result.content[0].text).toContain("29.2.1");
     });
+
+    it("arcane_system_docker_info sin full devuelve el resumen, no el objeto completo", async () => {
+      const mockClient = clienteConSystem();
+      mockClient.system.dockerInfo.mockResolvedValue({
+        success: true,
+        ServerVersion: "29.2.1",
+        Containers: 16,
+        Images: 8,
+        Plugins: { Volume: ["local"], Network: ["bridge", "host"] },
+        Swarm: { NodeID: "", LocalNodeState: "inactive" },
+        RegistryConfig: { IndexConfigs: {} },
+      });
+      const server = createMockServer();
+      registerSystemTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_system_docker_info");
+      const result = await handler({ environmentId: "env1" });
+
+      expect(result.content[0].text).toContain("29.2.1");
+      expect(result.content[0].text).toContain("16");
+      expect(result.content[0].text).toContain('"images": 8');
+      expect(result.content[0].text).not.toContain("Plugins");
+      expect(result.content[0].text).not.toContain("Swarm");
+      expect(result.content[0].text).not.toContain("RegistryConfig");
+    });
+
+    it("arcane_system_docker_info con full:true devuelve el objeto completo", async () => {
+      const mockClient = clienteConSystem();
+      mockClient.system.dockerInfo.mockResolvedValue({
+        success: true,
+        ServerVersion: "29.2.1",
+        Containers: 16,
+        Images: 8,
+        Plugins: { Volume: ["local"], Network: ["bridge", "host"] },
+        Swarm: { NodeID: "", LocalNodeState: "inactive" },
+        RegistryConfig: { IndexConfigs: {} },
+      });
+      const server = createMockServer();
+      registerSystemTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_system_docker_info");
+      const result = await handler({ environmentId: "env1", full: true });
+
+      expect(result.content[0].text).toContain("29.2.1");
+      expect(result.content[0].text).toContain("Plugins");
+      expect(result.content[0].text).toContain("Swarm");
+      expect(result.content[0].text).toContain("RegistryConfig");
+    });
   });
 });
