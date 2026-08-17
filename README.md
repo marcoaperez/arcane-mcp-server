@@ -32,7 +32,7 @@ Built on Cloudflare Workers using the official Cloudflare `agents` package, this
 | Compatibilidad de shapes | Escrito contra Arcane v1.x | Interfaces alineadas con v2.8.0 y auditadas por `scripts/audit-schema-drift.mjs` |
 | Despliegue | Solo Cloudflare Workers | Cloudflare Workers **o** contenedor Docker autoalojado (`docker-compose.yml` + `wrangler.local.jsonc`) |
 | Cliente | `baseUrl` fijo hacia el binding VPC | Modo dual: binding VPC en Workers, URL real en local/Docker |
-| Verificación | Sin runner de tests funcional | 144 tests unitarios + 19 tests e2e contra una instancia Arcane real |
+| Verificación | Sin runner de tests funcional | 214 tests unitarios + 32 tests e2e contra una instancia Arcane real |
 
 El fix de los endpoints NDJSON se ha ofrecido al upstream como PR autocontenido.
 
@@ -48,7 +48,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_environment_list` | List all Docker environments managed by Arcane. Returns environment IDs, names, and connection status. | `search?`, `limit?` |
+| `arcane_environment_list` | List Docker environments managed by Arcane. Returns environment IDs, names, connection status and pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `search?`, `sort?`, `order?`, `start?`, `limit?`, `type?` |
 | `arcane_environment_get` | Get details of a specific Docker environment by ID or name. | `environmentId?`, `environmentName?` |
 | `arcane_environment_create` | Create a new Docker environment in Arcane. | `name`, `apiUrl`, `accessToken?`, `bootstrapToken?`, `enabled?`, `isEdge?`, `useApiKey?` |
 | `arcane_environment_update` | Update an existing Docker environment. | `environmentId?`, `environmentName?`, `name?`, `apiUrl?`, `accessToken?`, `bootstrapToken?`, `enabled?`, `regenerateApiKey?` |
@@ -58,7 +58,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_stack_list` | List all Docker Compose stacks (projects) in an environment. | `environmentId?`, `environmentName?`, `search?`, `limit?` |
+| `arcane_stack_list` | List Docker Compose stacks (projects) in an environment. Returns pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `status?`, `archived?`, `tags?` |
 | `arcane_stack_get` | Get details of a specific Docker Compose stack by ID or name. | `environmentId?`, `environmentName?`, `stackId?`, `stackName?` |
 | `arcane_stack_deploy` | Deploy a new Docker Compose stack to an environment. | `environmentId?`, `environmentName?`, `name`, `composeContent`, `envContent?` |
 | `arcane_stack_update` | Update an existing Docker Compose stack. | `environmentId?`, `environmentName?`, `stackId?`, `stackName?`, `name?`, `composeContent?`, `envContent?` |
@@ -81,7 +81,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_container_list` | List all Docker containers in an environment. | `environmentId?`, `environmentName?` |
+| `arcane_container_list` | List Docker containers in an environment. Returns pagination and running/stopped counts; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `includeInternal?`, `standalone?` |
 | `arcane_container_get` | Get details of a specific Docker container by ID or name. | `environmentId?`, `environmentName?`, `containerId?`, `containerName?` |
 | `arcane_container_start` | Start a Docker container. | `environmentId?`, `environmentName?`, `containerId?`, `containerName?` |
 | `arcane_container_stop` | Stop a Docker container. | `environmentId?`, `environmentName?`, `containerId?`, `containerName?` |
@@ -100,7 +100,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_image_list` | List all Docker images in an environment. | `environmentId?`, `environmentName?` |
+| `arcane_image_list` | List Docker images in an environment. Returns pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `inUse?` |
 | `arcane_image_pull` | Pull a Docker image in an environment. | `environmentId?`, `environmentName?`, `imageName` |
 | `arcane_image_remove` | Remove a Docker image from an environment. | `environmentId?`, `environmentName?`, `imageId` |
 | `arcane_image_prune` | Remove unused Docker images from an environment. | `environmentId?`, `environmentName?` |
@@ -109,7 +109,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_volume_list` | List all Docker volumes in an environment. | `environmentId?`, `environmentName?` |
+| `arcane_volume_list` | List Docker volumes in an environment. Returns pagination and in-use counts; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `inUse?`, `includeInternal?` |
 | `arcane_volume_inspect` | Get details of a specific Docker volume. | `environmentId?`, `environmentName?`, `volumeName` |
 | `arcane_volume_remove` | Remove a Docker volume from an environment. | `environmentId?`, `environmentName?`, `volumeName` |
 | `arcane_volume_prune` | Remove unused Docker volumes from an environment. | `environmentId?`, `environmentName?` |
@@ -119,7 +119,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | Tool | Description | Inputs |
 |---|---|---|
 | `arcane_volume_backup_create` | Create a backup of a Docker volume. | `environmentId?`, `environmentName?`, `volumeName` |
-| `arcane_volume_backup_list` | List all backups for a Docker volume. | `environmentId?`, `environmentName?`, `volumeName`, `search?`, `sort?`, `order?`, `start?`, `limit?` |
+| `arcane_volume_backup_list` | List backups of a Docker volume. Returns pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `volumeName`, `search?`, `sort?`, `order?`, `start?`, `limit?` |
 | `arcane_volume_backup_delete` | Delete a volume backup. | `environmentId?`, `environmentName?`, `backupId` |
 | `arcane_volume_backup_download` | Download a volume backup. Returns download URL or instructions. | `environmentId?`, `environmentName?`, `backupId` |
 | `arcane_volume_backup_restore` | Restore a volume from a backup. | `environmentId?`, `environmentName?`, `volumeName`, `backupId` |
@@ -135,7 +135,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_network_list` | List all Docker networks in an environment. | `environmentId?`, `environmentName?` |
+| `arcane_network_list` | List Docker networks in an environment. Returns pagination and in-use counts; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `inUse?` |
 | `arcane_network_inspect` | Get details of a specific Docker network. | `environmentId?`, `environmentName?`, `networkId` |
 | `arcane_network_remove` | Remove a Docker network from an environment. | `environmentId?`, `environmentName?`, `networkId` |
 | `arcane_network_prune` | Remove unused Docker networks from an environment. | `environmentId?`, `environmentName?` |
@@ -144,7 +144,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_template_list` | List all Docker Compose templates. | `search?`, `limit?` |
+| `arcane_template_list` | List Docker Compose templates. Returns pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `search?`, `sort?`, `order?`, `start?`, `limit?`, `type?` |
 | `arcane_template_get` | Get details of a specific template. | `templateId` |
 | `arcane_template_create` | Create a new Docker Compose template. | `name`, `description`, `content`, `envContent` |
 | `arcane_template_update` | Update an existing template. The API replaces the whole template, so all fields are required. | `templateId`, `name`, `description`, `content`, `envContent` |
@@ -154,7 +154,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_git_repository_list` | List all git repositories configured in Arcane. Returns repository IDs, names, URLs, and authentication details. | `search?`, `sort?`, `order?`, `start?`, `limit?` |
+| `arcane_git_repository_list` | List git repositories configured in Arcane. Returns repository IDs, names, URLs, authentication details and pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `search?`, `sort?`, `order?`, `start?`, `limit?` |
 | `arcane_git_repository_get` | Get details of a specific git repository by ID. | `id` |
 | `arcane_git_repository_create` | Create a new git repository in Arcane. | `name`, `url`, `authType`, `description?`, `enabled?`, `username?`, `token?`, `sshKey?`, `sshHostKeyVerification?` |
 | `arcane_git_repository_update` | Update an existing git repository. | `id`, `name?`, `url?`, `authType?`, `description?`, `enabled?`, `username?`, `token?`, `sshKey?`, `sshHostKeyVerification?` |
@@ -167,7 +167,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_gitops_sync_list` | List all GitOps syncs in an environment. GitOps syncs automatically deploy stacks from git repositories. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?` |
+| `arcane_gitops_sync_list` | List GitOps syncs in an environment. Returns pagination and total/active/successful counts; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?` |
 | `arcane_gitops_sync_get` | Get details of a specific GitOps sync by ID or name. | `environmentId?`, `environmentName?`, `syncId?`, `syncName?` |
 | `arcane_gitops_sync_create` | Create a GitOps sync configuration for automatic deployment from a git repository. | `environmentId?`, `environmentName?`, `name`, `repositoryId`, `branch`, `composePath`, `projectName?`, `autoSync?`, `syncInterval?` |
 | `arcane_gitops_sync_update` | Update an existing GitOps sync. | `environmentId?`, `environmentName?`, `syncId?`, `syncName?`, `name?`, `repositoryId?`, `branch?`, `composePath?`, `projectName?`, `autoSync?`, `syncInterval?` |
@@ -190,7 +190,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_activity_list` | List background activities (deployments, pulls, scans) with optional filters. | `environmentId?`, `environmentName?`, `status?`, `type?`, `resourceType?`, `search?`, `limit?` |
+| `arcane_activity_list` | List background activities (deployments, pulls, scans) with optional filters. Returns pagination; if the response says there are more pages, pass start to see the rest before concluding an activity did not happen. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `status?`, `type?`, `resourceType?` |
 | `arcane_activity_get` | Get a background activity with its full message log. Use this to resolve the activityId returned by deploy, redeploy and pull operations. The server truncates the message log to 500 entries by default; pass limit to raise that. | `environmentId?`, `environmentName?`, `activityId`, `limit?` |
 | `arcane_activity_cancel` | Cancel a running background activity. | `environmentId?`, `environmentName?`, `activityId`, `requestedBy?` |
 
@@ -198,7 +198,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_event_list` | List audit events. Without environmentId returns events from all environments. | `environmentId?`, `severity?`, `type?`, `search?`, `limit?` |
+| `arcane_event_list` | List audit log events. Returns pagination; if the response says there are more pages, pass start to see the rest before concluding an event was not recorded. | `environmentId?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `severity?`, `type?` |
 | `arcane_event_stats` | Get event counts by severity across all environments. | — |
 
 ### Jobs (4)

@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ArcaneClient } from "../arcane-client";
 import { resolveEnvironmentId, resolveStackId } from "./resolve";
+import { withErrors } from "./respond";
 
 export function registerProjectAdditionalTools(server: McpServer, client: ArcaneClient): void {
   server.tool(
@@ -13,22 +14,15 @@ export function registerProjectAdditionalTools(server: McpServer, client: Arcane
       projectId: z.string().optional().describe("Project ID (use if known)"),
       projectName: z.string().optional().describe("Project name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName, projectId, projectName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const pId = await resolveStackId(client, envId, projectId, projectName);
-        const project = await client.stacks.get(envId, pId);
-        const result = await client.projectAdditional.down(envId, pId);
-        return {
-          content: [{ type: "text", text: `Project '${project.data.name}' stopped successfully` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, projectId, projectName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const pId = await resolveStackId(client, envId, projectId, projectName);
+      const project = await client.stacks.get(envId, pId);
+      const result = await client.projectAdditional.down(envId, pId);
+      return {
+        content: [{ type: "text", text: `Project '${project.data.name}' stopped successfully` }],
+      };
+    }),
   );
 
   server.tool(
@@ -40,28 +34,21 @@ export function registerProjectAdditionalTools(server: McpServer, client: Arcane
       projectId: z.string().optional().describe("Project ID (use if known)"),
       projectName: z.string().optional().describe("Project name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName, projectId, projectName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const pId = await resolveStackId(client, envId, projectId, projectName);
-        const project = await client.stacks.get(envId, pId);
-        const result = await client.projectAdditional.pullImages(envId, pId);
-        if (result.success === false) {
-          return {
-            content: [{ type: "text", text: `Pull failed for project '${project.data.name}': ${result.message}` }],
-            isError: true,
-          };
-        }
+    withErrors(async ({ environmentId, environmentName, projectId, projectName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const pId = await resolveStackId(client, envId, projectId, projectName);
+      const project = await client.stacks.get(envId, pId);
+      const result = await client.projectAdditional.pullImages(envId, pId);
+      if (result.success === false) {
         return {
-          content: [{ type: "text", text: `Images pulled successfully for project '${project.data.name}'. ${result.message}` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+          content: [{ type: "text" as const, text: `Pull failed for project '${project.data.name}': ${result.message}` }],
           isError: true,
         };
       }
-    },
+      return {
+        content: [{ type: "text", text: `Images pulled successfully for project '${project.data.name}'. ${result.message}` }],
+      };
+    }),
   );
 
   server.tool(
@@ -73,28 +60,21 @@ export function registerProjectAdditionalTools(server: McpServer, client: Arcane
       projectId: z.string().optional().describe("Project ID (use if known)"),
       projectName: z.string().optional().describe("Project name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName, projectId, projectName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const pId = await resolveStackId(client, envId, projectId, projectName);
-        const project = await client.stacks.get(envId, pId);
-        const result = await client.projectAdditional.redeploy(envId, pId);
-        if (result.success === false) {
-          return {
-            content: [{ type: "text", text: `Failed to redeploy project '${project.data.name}': ${result.message}` }],
-            isError: true,
-          };
-        }
+    withErrors(async ({ environmentId, environmentName, projectId, projectName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const pId = await resolveStackId(client, envId, projectId, projectName);
+      const project = await client.stacks.get(envId, pId);
+      const result = await client.projectAdditional.redeploy(envId, pId);
+      if (result.success === false) {
         return {
-          content: [{ type: "text", text: `Project '${project.data.name}' redeployed successfully. ${result.message}` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+          content: [{ type: "text" as const, text: `Failed to redeploy project '${project.data.name}': ${result.message}` }],
           isError: true,
         };
       }
-    },
+      return {
+        content: [{ type: "text", text: `Project '${project.data.name}' redeployed successfully. ${result.message}` }],
+      };
+    }),
   );
 
   server.tool(
@@ -108,21 +88,14 @@ export function registerProjectAdditionalTools(server: McpServer, client: Arcane
       removeFiles: z.boolean().optional().describe("Remove project files"),
       removeVolumes: z.boolean().optional().describe("Remove associated volumes"),
     },
-    async ({ environmentId, environmentName, projectId, projectName, removeFiles, removeVolumes }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const pId = await resolveStackId(client, envId, projectId, projectName);
-        const project = await client.stacks.get(envId, pId);
-        const result = await client.projectAdditional.destroy(envId, pId, removeFiles, removeVolumes);
-        return {
-          content: [{ type: "text", text: `Project '${project.data.name}' destroyed successfully` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, projectId, projectName, removeFiles, removeVolumes }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const pId = await resolveStackId(client, envId, projectId, projectName);
+      const project = await client.stacks.get(envId, pId);
+      const result = await client.projectAdditional.destroy(envId, pId, removeFiles, removeVolumes);
+      return {
+        content: [{ type: "text", text: `Project '${project.data.name}' destroyed successfully` }],
+      };
+    }),
   );
 }

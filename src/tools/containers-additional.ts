@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ArcaneClient } from "../arcane-client";
 import { resolveEnvironmentId } from "./resolve";
+import { withErrors } from "./respond";
 
 export function registerContainerAdditionalTools(server: McpServer, client: ArcaneClient): void {
   server.tool(
@@ -20,28 +21,21 @@ export function registerContainerAdditionalTools(server: McpServer, client: Arca
       restartPolicy: z.string().optional().describe("Restart policy (e.g., 'always', 'on-failure')"),
       detach: z.boolean().optional().describe("Run container in background"),
     },
-    async ({ environmentId, environmentName, name, image, cmd, env, ports, volumes, networks, restartPolicy, detach }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const dto: any = { name, image };
-        if (cmd) dto.cmd = cmd;
-        if (env) dto.env = env;
-        if (ports) dto.ports = typeof ports === 'string' ? JSON.parse(ports) : ports;
-        if (volumes) dto.volumes = volumes;
-        if (networks) dto.networks = networks;
-        if (restartPolicy) dto.restartPolicy = restartPolicy;
-        if (detach !== undefined) dto.detach = detach;
-        const result = await client.containerAdditional.create(envId, dto);
-        return {
-          content: [{ type: "text", text: `Container created successfully:\n${JSON.stringify(result.data, null, 2)}` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ environmentId, environmentName, name, image, cmd, env, ports, volumes, networks, restartPolicy, detach }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const dto: any = { name, image };
+      if (cmd) dto.cmd = cmd;
+      if (env) dto.env = env;
+      if (ports) dto.ports = typeof ports === 'string' ? JSON.parse(ports) : ports;
+      if (volumes) dto.volumes = volumes;
+      if (networks) dto.networks = networks;
+      if (restartPolicy) dto.restartPolicy = restartPolicy;
+      if (detach !== undefined) dto.detach = detach;
+      const result = await client.containerAdditional.create(envId, dto);
+      return {
+        content: [{ type: "text", text: `Container created successfully:\n${JSON.stringify(result.data, null, 2)}` }],
+      };
+    }),
   );
 
   server.tool(
@@ -55,24 +49,17 @@ export function registerContainerAdditionalTools(server: McpServer, client: Arca
       force: z.boolean().optional().describe("Force remove running container"),
       volumes: z.boolean().optional().describe("Remove associated volumes"),
     },
-    async ({ environmentId, environmentName, containerId, containerName, force, volumes }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const cid = containerId || containerName;
-        if (!cid) {
-          throw new Error("Either containerId or containerName must be provided");
-        }
-        const result = await client.containerAdditional.delete(envId, cid, force, volumes);
-        return {
-          content: [{ type: "text", text: result.message || "Container deleted successfully" }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
+    withErrors(async ({ environmentId, environmentName, containerId, containerName, force, volumes }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const cid = containerId || containerName;
+      if (!cid) {
+        throw new Error("Either containerId or containerName must be provided");
       }
-    },
+      const result = await client.containerAdditional.delete(envId, cid, force, volumes);
+      return {
+        content: [{ type: "text", text: result.message || "Container deleted successfully" }],
+      };
+    }),
   );
 
   server.tool(
@@ -84,23 +71,16 @@ export function registerContainerAdditionalTools(server: McpServer, client: Arca
       containerId: z.string().optional().describe("Container ID (use if known)"),
       containerName: z.string().optional().describe("Container name (alternative to ID)"),
     },
-    async ({ environmentId, environmentName, containerId, containerName }) => {
-      try {
-        const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-        const cid = containerId || containerName;
-        if (!cid) {
-          throw new Error("Either containerId or containerName must be provided");
-        }
-        const result = await client.containerAdditional.update(envId, cid);
-        return {
-          content: [{ type: "text", text: result.message || "Container updated successfully" }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
+    withErrors(async ({ environmentId, environmentName, containerId, containerName }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const cid = containerId || containerName;
+      if (!cid) {
+        throw new Error("Either containerId or containerName must be provided");
       }
-    },
+      const result = await client.containerAdditional.update(envId, cid);
+      return {
+        content: [{ type: "text", text: result.message || "Container updated successfully" }],
+      };
+    }),
   );
 }

@@ -913,7 +913,7 @@ describe("ArcaneClient", () => {
       await client.activities.list("env123", { status: "failed", limit: 10 });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env123/activities?status=failed&limit=10",
+        "http://localhost:3552/api/environments/env123/activities?limit=10&status=failed",
         expect.objectContaining({ method: "GET" })
       );
     });
@@ -1000,7 +1000,7 @@ describe("ArcaneClient", () => {
       await client.events.list({ severity: "error", limit: 5 });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/events?severity=error&limit=5",
+        "http://localhost:3552/api/events?limit=5&severity=error",
         expect.objectContaining({ method: "GET" })
       );
     });
@@ -1155,6 +1155,25 @@ describe("ArcaneClient", () => {
         "http://localhost:3552/api/environments/env123/networks/prune",
         expect.objectContaining({ method: "POST" })
       );
+    });
+  });
+
+  describe("gitOpsSyncs", () => {
+    it(".list(envId) devuelve el objeto counts que trae la API (cuarto endpoint con counts, hallazgo 3)", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [],
+          counts: { totalSyncs: 5, activeSyncs: 3, successfulSyncs: 4 },
+          pagination: { totalItems: 5, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+        }),
+      } as Response);
+
+      const r = await client.gitOpsSyncs.list("env123");
+
+      expect(r.counts).toEqual({ totalSyncs: 5, activeSyncs: 3, successfulSyncs: 4 });
+      expect(r.pagination.totalItems).toBe(5);
     });
   });
 
@@ -1334,6 +1353,199 @@ describe("ArcaneClient", () => {
           method: "POST",
           body: JSON.stringify({ dockerRunCommand: "docker run -d nginx" }),
         })
+      );
+    });
+  });
+
+  describe("Parametros de listado (containers, images, volumes, networks)", () => {
+    const okVacio = () =>
+      ({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [],
+          counts: {},
+          pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+        }),
+      }) as Response;
+
+    it("containers.list envia los cinco comunes mas includeInternal y standalone", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.containers.list("env1", {
+        search: "web", sort: "name", order: "asc", start: 20, limit: 50,
+        includeInternal: true, standalone: "false",
+      });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/containers?search=web&sort=name&order=asc&start=20&limit=50&includeInternal=true&standalone=false",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("containers.list sin opciones no anade query string", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.containers.list("env1");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/containers",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("start=0 se envia (es un valor valido, no una ausencia)", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.containers.list("env1", { start: 0 });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/containers?start=0",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    // gitRepositories, gitOpsSyncs y volumeBackups construian su query a mano
+    // con `if (opts?.start)` en vez de usar appendListParams: start=0 se
+    // perdia por veracidad. Ahora los tres usan el helper, igual que el resto.
+    it("gitRepositories.list: start=0 se envia (es un valor valido, no una ausencia)", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.gitRepositories.list({ start: 0 });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/customize/git-repositories?start=0",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("gitOpsSyncs.list: start=0 se envia (es un valor valido, no una ausencia)", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.gitOpsSyncs.list("env1", { start: 0 });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/gitops-syncs?start=0",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("volumeBackups.list: start=0 se envia (es un valor valido, no una ausencia)", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.volumeBackups.list("env1", "data-vol", { start: 0 });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/volumes/data-vol/backups?start=0",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("images.list envia los cinco comunes mas inUse", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.images.list("env1", { search: "nginx", sort: "size", order: "desc", start: 10, limit: 5, inUse: "true" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images?search=nginx&sort=size&order=desc&start=10&limit=5&inUse=true",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("volumes.list envia los cinco comunes mas inUse e includeInternal", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.volumes.list("env1", { limit: 200, inUse: "false", includeInternal: true });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/volumes?limit=200&inUse=false&includeInternal=true",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("networks.list envia los cinco comunes mas inUse", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.networks.list("env1", { search: "bridge", inUse: "true" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/networks?search=bridge&inUse=true",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("volumes.list devuelve el objeto counts que trae la API", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [],
+          counts: { inuse: 8, unused: 24, total: 32 },
+          pagination: { totalItems: 32, totalPages: 2, currentPage: 1, itemsPerPage: 20 },
+        }),
+      } as Response);
+      const r = await client.volumes.list("env1");
+      expect(r.counts).toEqual({ inuse: 8, unused: 24, total: 32 });
+      expect(r.pagination.totalItems).toBe(32);
+    });
+  });
+
+  describe("Parametros de listado descartados en silencio", () => {
+    const okVacio = () =>
+      ({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [],
+          pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+        }),
+      }) as Response;
+
+    it("stacks.list envia limit, que hasta ahora tiraba", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.stacks.list("env1", { search: "app", limit: 50 });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/projects?search=app&limit=50",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("stacks.list envia tambien sort, order, start y los filtros propios", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.stacks.list("env1", {
+        sort: "name", order: "desc", start: 20, limit: 10,
+        status: "running", archived: "all", tags: "prod,web",
+      });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/projects?sort=name&order=desc&start=20&limit=10&status=running&archived=all&tags=prod%2Cweb",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("templates.list envia limit, que hasta ahora tiraba", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.templates.list({ search: "nginx", limit: 50, type: "compose" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/templates?search=nginx&limit=50&type=compose",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("environments.list envia sort, order, start y type", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.environments.list({ sort: "name", order: "asc", start: 5, limit: 10, type: "local" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments?sort=name&order=asc&start=5&limit=10&type=local",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("activities.list reenvia sort, order y start, que declaraba y no mandaba", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.activities.list("env1", { sort: "createdAt", order: "desc", start: 50, limit: 10, status: "failed" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/activities?sort=createdAt&order=desc&start=50&limit=10&status=failed",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("events.list reenvia sort, order y start en la ruta global", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.events.list({ sort: "timestamp", order: "desc", start: 20, limit: 5, severity: "error" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/events?sort=timestamp&order=desc&start=20&limit=5&severity=error",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("events.list reenvia sort, order y start en la ruta por entorno", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.events.list({ environmentId: "env1", sort: "timestamp", start: 10 });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/events/environment/env1?sort=timestamp&start=10",
+        expect.objectContaining({ method: "GET" }),
       );
     });
   });

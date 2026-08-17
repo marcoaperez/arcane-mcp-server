@@ -41,6 +41,10 @@ const MAP = {
   SystemPruneResult: "SystemPruneAllResult",
   SystemConvertResult: "SystemConvertDockerRunResponse",
   DockerInfo: "DockerinfoInfo",
+  ContainerStatusCounts: "ContainerStatusCounts",
+  VolumeUsageCounts: "DockerVolumeVolumeUsageCountsData",
+  NetworkUsageCounts: "NetworkUsageCounts",
+  GitopsSyncCounts: "GitopsSyncCounts",
 };
 
 function tsInterfaceProps(file) {

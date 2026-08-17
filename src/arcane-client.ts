@@ -257,6 +257,52 @@ export interface PaginatedResponse<T> {
   pagination: Pagination;
 }
 
+/**
+ * Sobre paginado que ademas trae agregados de la coleccion filtrada.
+ *
+ * El spec lo separa igual: `BasePaginated...` frente a
+ * `BasePaginatedWithCounts...`. `counts` va sin `?` porque openapi.txt lo
+ * declara en `required` en los cuatro schemas que lo usan (containers,
+ * volumes, networks y gitops-syncs).
+ */
+export interface PaginatedResponseWithCounts<T, C> extends PaginatedResponse<T> {
+  counts: C;
+}
+
+/** Agregados de `GET /environments/{id}/containers` (spec: ContainerStatusCounts). */
+export interface ContainerStatusCounts {
+  runningContainers: number;
+  stoppedContainers: number;
+  totalContainers: number;
+}
+
+/** Agregados de `GET /environments/{id}/volumes` (spec: DockerVolumeVolumeUsageCountsData). */
+export interface VolumeUsageCounts {
+  inuse: number;
+  unused: number;
+  total: number;
+}
+
+/** Agregados de `GET /environments/{id}/networks` (spec: NetworkUsageCounts). */
+export interface NetworkUsageCounts {
+  inuse: number;
+  unused: number;
+  total: number;
+}
+
+/**
+ * Agregados de `GET /environments/{id}/gitops-syncs` (spec: GitopsSyncCounts).
+ *
+ * El inventario original del plan solo contaba tres endpoints con `counts`
+ * (containers, volumes, networks); `BasePaginatedWithCountsGitopsGitOpsSyncGitopsSyncCounts`
+ * en openapi.txt declara este cuarto tambien con `counts` en `required`.
+ */
+export interface GitopsSyncCounts {
+  totalSyncs: number;
+  activeSyncs: number;
+  successfulSyncs: number;
+}
+
 export interface ActionResponse {
   success: boolean;
   message: string;
@@ -370,6 +416,59 @@ export interface ListOptionsWithSort extends ListOptions {
   sort?: string;
   order?: string;
   start?: number;
+}
+
+/**
+ * Escribe en la query los cinco parametros de listado que openapi.txt declara
+ * para practicamente todos los endpoints de coleccion.
+ *
+ * `start` se compara con undefined y no por veracidad: `start=0` es un valor
+ * valido, no una ausencia.
+ */
+function appendListParams(params: URLSearchParams, opts?: ListOptionsWithSort): void {
+  if (opts?.search) params.set("search", opts.search);
+  if (opts?.sort) params.set("sort", opts.sort);
+  if (opts?.order) params.set("order", opts.order);
+  if (opts?.start !== undefined) params.set("start", String(opts.start));
+  if (opts?.limit) params.set("limit", String(opts.limit));
+}
+
+export interface ContainerListOptions extends ListOptionsWithSort {
+  /** El spec lo declara boolean, con default false. */
+  includeInternal?: boolean;
+  /** El spec lo declara string: "true" | "false". */
+  standalone?: string;
+}
+
+export interface ImageListOptions extends ListOptionsWithSort {
+  /** El spec lo declara string: "true" | "false". */
+  inUse?: string;
+}
+
+export interface VolumeListOptions extends ListOptionsWithSort {
+  inUse?: string;
+  includeInternal?: boolean;
+}
+
+export interface NetworkListOptions extends ListOptionsWithSort {
+  inUse?: string;
+}
+
+export interface EnvironmentListOptions extends ListOptionsWithSort {
+  type?: string;
+}
+
+export interface ProjectListOptions extends ListOptionsWithSort {
+  /** Coma-separado: running, stopped, partially running. */
+  status?: string;
+  /** "true" (solo archivados) o "all" (incluirlos). Por defecto se excluyen. */
+  archived?: string;
+  /** Coma-separado, semantica OR. */
+  tags?: string;
+}
+
+export interface TemplateListOptions extends ListOptionsWithSort {
+  type?: string;
 }
 
 export interface GitRepository {
@@ -821,10 +920,10 @@ export interface ContainerCreateOptions {
 class EnvironmentsMethods {
   constructor(private client: ArcaneClient) {}
 
-  async list(opts?: ListOptions): Promise<PaginatedResponse<Environment>> {
+  async list(opts?: EnvironmentListOptions): Promise<PaginatedResponse<Environment>> {
     const params = new URLSearchParams();
-    if (opts?.search) params.set("search", opts.search);
-    if (opts?.limit) params.set("limit", String(opts.limit));
+    appendListParams(params, opts);
+    if (opts?.type) params.set("type", opts.type);
     const query = params.toString();
     return this.client.request<PaginatedResponse<Environment>>(
       "GET",
@@ -852,9 +951,12 @@ class EnvironmentsMethods {
 class StacksMethods {
   constructor(private client: ArcaneClient) {}
 
-  async list(envId: string, opts?: ListOptions): Promise<PaginatedResponse<Project>> {
+  async list(envId: string, opts?: ProjectListOptions): Promise<PaginatedResponse<Project>> {
     const params = new URLSearchParams();
-    if (opts?.search) params.set("search", opts.search);
+    appendListParams(params, opts);
+    if (opts?.status) params.set("status", opts.status);
+    if (opts?.archived) params.set("archived", opts.archived);
+    if (opts?.tags) params.set("tags", opts.tags);
     const query = params.toString();
     return this.client.request<PaginatedResponse<Project>>(
       "GET",
@@ -911,8 +1013,16 @@ class StacksMethods {
 class ContainersMethods {
   constructor(private client: ArcaneClient) {}
 
-  async list(envId: string): Promise<PaginatedResponse<ContainerSummary>> {
-    return this.client.request<PaginatedResponse<ContainerSummary>>("GET", `/environments/${encodeURIComponent(envId)}/containers`);
+  async list(envId: string, opts?: ContainerListOptions): Promise<PaginatedResponseWithCounts<ContainerSummary, ContainerStatusCounts>> {
+    const params = new URLSearchParams();
+    appendListParams(params, opts);
+    if (opts?.includeInternal !== undefined) params.set("includeInternal", String(opts.includeInternal));
+    if (opts?.standalone) params.set("standalone", opts.standalone);
+    const query = params.toString();
+    return this.client.request<PaginatedResponseWithCounts<ContainerSummary, ContainerStatusCounts>>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/containers${query ? `?${query}` : ""}`
+    );
   }
 
   async get(envId: string, containerId: string): Promise<{ success: boolean; data: ContainerDetails }> {
@@ -942,8 +1052,15 @@ class ContainersMethods {
 class ImagesMethods {
   constructor(private client: ArcaneClient) {}
 
-  async list(envId: string): Promise<PaginatedResponse<ImageSummary>> {
-    return this.client.request<PaginatedResponse<ImageSummary>>("GET", `/environments/${encodeURIComponent(envId)}/images`);
+  async list(envId: string, opts?: ImageListOptions): Promise<PaginatedResponse<ImageSummary>> {
+    const params = new URLSearchParams();
+    appendListParams(params, opts);
+    if (opts?.inUse) params.set("inUse", opts.inUse);
+    const query = params.toString();
+    return this.client.request<PaginatedResponse<ImageSummary>>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/images${query ? `?${query}` : ""}`
+    );
   }
 
   async pull(envId: string, dto: ImagePullOptions): Promise<ActionResponse> {
@@ -962,8 +1079,16 @@ class ImagesMethods {
 class VolumesMethods {
   constructor(private client: ArcaneClient) {}
 
-  async list(envId: string): Promise<PaginatedResponse<Volume>> {
-    return this.client.request<PaginatedResponse<Volume>>("GET", `/environments/${encodeURIComponent(envId)}/volumes`);
+  async list(envId: string, opts?: VolumeListOptions): Promise<PaginatedResponseWithCounts<Volume, VolumeUsageCounts>> {
+    const params = new URLSearchParams();
+    appendListParams(params, opts);
+    if (opts?.inUse) params.set("inUse", opts.inUse);
+    if (opts?.includeInternal !== undefined) params.set("includeInternal", String(opts.includeInternal));
+    const query = params.toString();
+    return this.client.request<PaginatedResponseWithCounts<Volume, VolumeUsageCounts>>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/volumes${query ? `?${query}` : ""}`
+    );
   }
 
   async inspect(envId: string, name: string): Promise<{ success: boolean; data: Volume }> {
@@ -982,8 +1107,15 @@ class VolumesMethods {
 class NetworksMethods {
   constructor(private client: ArcaneClient) {}
 
-  async list(envId: string): Promise<PaginatedResponse<NetworkSummary>> {
-    return this.client.request<PaginatedResponse<NetworkSummary>>("GET", `/environments/${encodeURIComponent(envId)}/networks`);
+  async list(envId: string, opts?: NetworkListOptions): Promise<PaginatedResponseWithCounts<NetworkSummary, NetworkUsageCounts>> {
+    const params = new URLSearchParams();
+    appendListParams(params, opts);
+    if (opts?.inUse) params.set("inUse", opts.inUse);
+    const query = params.toString();
+    return this.client.request<PaginatedResponseWithCounts<NetworkSummary, NetworkUsageCounts>>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/networks${query ? `?${query}` : ""}`
+    );
   }
 
   async inspect(envId: string, networkId: string): Promise<{ success: boolean; data: NetworkInspect }> {
@@ -1005,11 +1137,12 @@ class NetworksMethods {
 class TemplatesMethods {
   constructor(private client: ArcaneClient) {}
 
-  async list(opts?: ListOptions): Promise<PaginatedResponse<Template>> {
+  async list(opts?: TemplateListOptions): Promise<PaginatedResponse<Template>> {
     const params = new URLSearchParams();
-    if (opts?.search) params.set("search", opts.search);
+    appendListParams(params, opts);
+    if (opts?.type) params.set("type", opts.type);
     const query = params.toString();
-    return this.client.request<PaginatedResponse<Template>>(`GET`, `/templates${query ? `?${query}` : ""}`);
+    return this.client.request<PaginatedResponse<Template>>("GET", `/templates${query ? `?${query}` : ""}`);
   }
 
   async get(id: string): Promise<{ success: boolean; data: Template }> {
@@ -1067,11 +1200,10 @@ class ActivitiesMethods {
 
   async list(envId: string, opts?: ActivityListOptions): Promise<PaginatedResponse<Activity>> {
     const params = new URLSearchParams();
-    if (opts?.search) params.set("search", opts.search);
+    appendListParams(params, opts);
     if (opts?.status) params.set("status", opts.status);
     if (opts?.type) params.set("type", opts.type);
     if (opts?.resourceType) params.set("resourceType", opts.resourceType);
-    if (opts?.limit) params.set("limit", String(opts.limit));
     const query = params.toString();
     return this.client.request<PaginatedResponse<Activity>>(
       "GET",
@@ -1118,10 +1250,9 @@ class EventsMethods {
 
   async list(opts?: EventListOptions): Promise<PaginatedResponse<Event>> {
     const params = new URLSearchParams();
-    if (opts?.search) params.set("search", opts.search);
+    appendListParams(params, opts);
     if (opts?.severity) params.set("severity", opts.severity);
     if (opts?.type) params.set("type", opts.type);
-    if (opts?.limit) params.set("limit", String(opts.limit));
     const query = params.toString();
     const base = opts?.environmentId ? `/events/environment/${encodeURIComponent(opts.environmentId)}` : "/events";
     return this.client.request<PaginatedResponse<Event>>("GET", `${base}${query ? `?${query}` : ""}`);
@@ -1170,11 +1301,7 @@ class GitRepositoriesMethods {
 
   async list(opts?: ListOptionsWithSort): Promise<PaginatedResponse<GitRepository>> {
     const params = new URLSearchParams();
-    if (opts?.search) params.set("search", opts.search);
-    if (opts?.sort) params.set("sort", opts.sort);
-    if (opts?.order) params.set("order", opts.order);
-    if (opts?.start) params.set("start", String(opts.start));
-    if (opts?.limit) params.set("limit", String(opts.limit));
+    appendListParams(params, opts);
     const query = params.toString();
     return this.client.request<PaginatedResponse<GitRepository>>(
       "GET",
@@ -1222,15 +1349,11 @@ class GitRepositoriesMethods {
 class GitOpsSyncsMethods {
   constructor(private client: ArcaneClient) {}
 
-  async list(envId: string, opts?: ListOptionsWithSort): Promise<PaginatedResponse<GitOpsSync>> {
+  async list(envId: string, opts?: ListOptionsWithSort): Promise<PaginatedResponseWithCounts<GitOpsSync, GitopsSyncCounts>> {
     const params = new URLSearchParams();
-    if (opts?.search) params.set("search", opts.search);
-    if (opts?.sort) params.set("sort", opts.sort);
-    if (opts?.order) params.set("order", opts.order);
-    if (opts?.start) params.set("start", String(opts.start));
-    if (opts?.limit) params.set("limit", String(opts.limit));
+    appendListParams(params, opts);
     const query = params.toString();
-    return this.client.request<PaginatedResponse<GitOpsSync>>(
+    return this.client.request<PaginatedResponseWithCounts<GitOpsSync, GitopsSyncCounts>>(
       "GET",
       `/environments/${encodeURIComponent(envId)}/gitops-syncs${query ? `?${query}` : ""}`
     );
@@ -1356,11 +1479,7 @@ class VolumeBackupsMethods {
 
   async list(envId: string, volumeName: string, opts?: ListOptionsWithSort): Promise<PaginatedResponse<VolumeBackup>> {
     const params = new URLSearchParams();
-    if (opts?.search) params.set("search", opts.search);
-    if (opts?.sort) params.set("sort", opts.sort);
-    if (opts?.order) params.set("order", opts.order);
-    if (opts?.start) params.set("start", String(opts.start));
-    if (opts?.limit) params.set("limit", String(opts.limit));
+    appendListParams(params, opts);
     const query = params.toString();
     return this.client.request<PaginatedResponse<VolumeBackup>>(
       "GET",

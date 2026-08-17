@@ -1,31 +1,25 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ArcaneClient } from "../arcane-client";
+import { withErrors, listResponse } from "./respond";
+
+const LIST_PARAMS = {
+  search: z.string().optional().describe("Free-text search over repository names and URLs"),
+  sort: z.string().optional().describe("Column to sort by, e.g. name, url, createdAt"),
+  order: z.string().optional().describe("Sort direction: asc or desc"),
+  start: z.number().int().min(0).optional().describe("Start index for pagination (server default: 0)"),
+  limit: z.number().int().min(1).optional().describe("Items per page (server default: 20)"),
+};
 
 export function registerGitRepositoryTools(server: McpServer, client: ArcaneClient): void {
   server.tool(
     "arcane_git_repository_list",
-    "List all git repositories configured in Arcane. Returns repository IDs, names, URLs, and authentication details.",
-    {
-      search: z.string().optional().describe("Search query"),
-      sort: z.string().optional().describe("Column to sort by"),
-      order: z.string().optional().describe("Sort direction (asc/desc)"),
-      start: z.number().int().optional().describe("Start index"),
-      limit: z.number().int().min(1).max(100).optional().default(50),
-    },
-    async ({ search, sort, order, start, limit = 50 }) => {
-      try {
-        const result = await client.gitRepositories.list({ search, sort, order, start, limit });
-        return {
-          content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    "List git repositories configured in Arcane. Returns repository IDs, names, URLs, authentication details and pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists.",
+    { ...LIST_PARAMS },
+    withErrors(async ({ search, sort, order, start, limit }) => {
+      const result = await client.gitRepositories.list({ search, sort, order, start, limit });
+      return listResponse(result, "git repositories");
+    }),
   );
 
   server.tool(
@@ -34,19 +28,12 @@ export function registerGitRepositoryTools(server: McpServer, client: ArcaneClie
     {
       id: z.string().describe("Repository ID"),
     },
-    async ({ id }) => {
-      try {
-        const result = await client.gitRepositories.get(id);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ id }) => {
+      const result = await client.gitRepositories.get(id);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
+      };
+    }),
   );
 
   server.tool(
@@ -63,19 +50,12 @@ export function registerGitRepositoryTools(server: McpServer, client: ArcaneClie
       sshKey: z.string().optional().describe("SSH private key for SSH auth"),
       sshHostKeyVerification: z.string().optional().describe("SSH host key verification setting"),
     },
-    async (dto) => {
-      try {
-        const result = await client.gitRepositories.create(dto);
-        return {
-          content: [{ type: "text", text: `Git repository created successfully:\n${JSON.stringify(result.data, null, 2)}` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async (dto) => {
+      const result = await client.gitRepositories.create(dto);
+      return {
+        content: [{ type: "text", text: `Git repository created successfully:\n${JSON.stringify(result.data, null, 2)}` }],
+      };
+    }),
   );
 
   server.tool(
@@ -93,19 +73,12 @@ export function registerGitRepositoryTools(server: McpServer, client: ArcaneClie
       sshKey: z.string().optional().describe("New SSH private key"),
       sshHostKeyVerification: z.string().optional().describe("New SSH host key verification setting"),
     },
-    async ({ id, ...dto }) => {
-      try {
-        const result = await client.gitRepositories.update(id, dto);
-        return {
-          content: [{ type: "text", text: `Git repository updated successfully:\n${JSON.stringify(result.data, null, 2)}` }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ id, ...dto }) => {
+      const result = await client.gitRepositories.update(id, dto);
+      return {
+        content: [{ type: "text", text: `Git repository updated successfully:\n${JSON.stringify(result.data, null, 2)}` }],
+      };
+    }),
   );
 
   server.tool(
@@ -114,19 +87,12 @@ export function registerGitRepositoryTools(server: McpServer, client: ArcaneClie
     {
       id: z.string().describe("Repository ID"),
     },
-    async ({ id }) => {
-      try {
-        const result = await client.gitRepositories.delete(id);
-        return {
-          content: [{ type: "text", text: result.message || "Git repository deleted successfully" }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ id }) => {
+      const result = await client.gitRepositories.delete(id);
+      return {
+        content: [{ type: "text", text: result.message || "Git repository deleted successfully" }],
+      };
+    }),
   );
 
   server.tool(
@@ -135,19 +101,12 @@ export function registerGitRepositoryTools(server: McpServer, client: ArcaneClie
     {
       id: z.string().describe("Repository ID"),
     },
-    async ({ id }) => {
-      try {
-        const result = await client.gitRepositories.listBranches(id);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ id }) => {
+      const result = await client.gitRepositories.listBranches(id);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
+      };
+    }),
   );
 
   server.tool(
@@ -158,19 +117,12 @@ export function registerGitRepositoryTools(server: McpServer, client: ArcaneClie
       branch: z.string().optional().describe("Branch to browse (defaults to default branch)"),
       path: z.string().optional().describe("Path within repository (defaults to root)"),
     },
-    async ({ id, branch, path }) => {
-      try {
-        const result = await client.gitRepositories.browseFiles(id, branch, path);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ id, branch, path }) => {
+      const result = await client.gitRepositories.browseFiles(id, branch, path);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
+      };
+    }),
   );
 
   server.tool(
@@ -180,18 +132,11 @@ export function registerGitRepositoryTools(server: McpServer, client: ArcaneClie
       id: z.string().describe("Repository ID"),
       branch: z.string().optional().describe("Branch to test (defaults to default branch)"),
     },
-    async ({ id, branch }) => {
-      try {
-        const result = await client.gitRepositories.test(id, branch);
-        return {
-          content: [{ type: "text", text: result.message || "Git repository connection test successful" }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-    },
+    withErrors(async ({ id, branch }) => {
+      const result = await client.gitRepositories.test(id, branch);
+      return {
+        content: [{ type: "text", text: result.message || "Git repository connection test successful" }],
+      };
+    }),
   );
 }
