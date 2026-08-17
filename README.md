@@ -208,7 +208,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | `arcane_job_list` | List background jobs with their schedule, whether they are enabled, and whether they can be run manually. | `environmentId?`, `environmentName?` |
 | `arcane_job_run` | Run a background job immediately. Jobs with unmet prerequisites will not execute. | `environmentId?`, `environmentName?`, `jobId` |
 | `arcane_job_schedules_get` | Get the configured intervals for scheduled background jobs. | `environmentId?`, `environmentName?` |
-| `arcane_job_schedules_update` | Update one or more scheduled job intervals. Only the intervals provided are changed. | `environmentId?`, `environmentName?` |
+| `arcane_job_schedules_update` | Update one or more scheduled job intervals. Only the intervals provided are changed. | `environmentId?`, `environmentName?`, `autoHealInterval?`, `autoUpdateInterval?`, `dockerClientRefreshInterval?`, `environmentHealthInterval?`, `eventCleanupInterval?`, `expiredSessionsCleanupInterval?`, `pollingInterval?`, `scheduledPruneInterval?`, `vulnerabilityScanInterval?` |
 
 <!-- END TOOLS -->
 

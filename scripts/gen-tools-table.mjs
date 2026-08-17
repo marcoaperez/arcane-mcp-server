@@ -45,6 +45,57 @@ function extractTools(file) {
   const src = ts.createSourceFile(path, readFileSync(path, "utf8"), ts.ScriptTarget.Latest, true);
   const tools = [];
 
+  // Declaraciones `const X = {...}` de nivel superior, para poder resolver los
+  // `...X` (spreads) que aparezcan dentro del objeto de parametros de una tool.
+  // Caso real: jobs.ts declara `const INTERVALOS = {...}` y lo esparce en el
+  // shape de arcane_job_schedules_update.
+  const topLevelObjectConsts = new Map();
+  for (const stmt of src.statements) {
+    if (!ts.isVariableStatement(stmt)) continue;
+    for (const decl of stmt.declarationList.declarations) {
+      if (ts.isIdentifier(decl.name) && decl.initializer && ts.isObjectLiteralExpression(decl.initializer)) {
+        topLevelObjectConsts.set(decl.name.getText(src), decl.initializer);
+      }
+    }
+  }
+
+  /**
+   * Extrae los parametros {name, optional} de un objeto literal de shape zod,
+   * resolviendo los `...CONST` que referencien una constante de objeto literal
+   * del mismo fichero. Ante cualquier elemento que no sepa resolver, ABORTA en
+   * vez de omitirlo: el fallo silencioso anterior (un `continue` ante
+   * SpreadAssignment) es justo lo que dejó pasar `arcane_job_schedules_update`
+   * al README con 2 parámetros de los 11 reales, sin que `--check` lo detectara.
+   */
+  const extractParams = (objectLiteral, toolName) => {
+    const params = [];
+    for (const p of objectLiteral.properties) {
+      if (ts.isPropertyAssignment(p)) {
+        params.push({
+          name: p.name.getText(src),
+          optional: p.initializer.getText(src).includes(".optional()"),
+        });
+      } else if (ts.isSpreadAssignment(p) && ts.isIdentifier(p.expression)) {
+        const constName = p.expression.getText(src);
+        const resolved = topLevelObjectConsts.get(constName);
+        if (!resolved) {
+          throw new Error(
+            `${path}: la tool "${toolName}" esparce "...${constName}" pero no hay una constante ` +
+            `de objeto literal "${constName}" en el mismo fichero que se pueda resolver.`
+          );
+        }
+        params.push(...extractParams(resolved, toolName));
+      } else {
+        throw new Error(
+          `${path}: la tool "${toolName}" tiene en su objeto de parámetros un elemento que este ` +
+          `generador no sabe resolver (${ts.SyntaxKind[p.kind]}). Antes se omitía en silencio; ` +
+          `ahora aborta para que el README no publique una tool con parámetros incompletos.`
+        );
+      }
+    }
+    return params;
+  };
+
   const visit = (node) => {
     if (
       ts.isCallExpression(node) &&
@@ -53,19 +104,11 @@ function extractTools(file) {
       node.arguments.length >= 3 &&
       ts.isStringLiteral(node.arguments[0])
     ) {
-      const params = [];
+      const toolName = node.arguments[0].text;
       const shape = node.arguments[2];
-      if (ts.isObjectLiteralExpression(shape)) {
-        for (const p of shape.properties) {
-          if (!ts.isPropertyAssignment(p)) continue;
-          params.push({
-            name: p.name.getText(src),
-            optional: p.initializer.getText(src).includes(".optional()"),
-          });
-        }
-      }
+      const params = ts.isObjectLiteralExpression(shape) ? extractParams(shape, toolName) : [];
       tools.push({
-        name: node.arguments[0].text,
+        name: toolName,
         desc: ts.isStringLiteral(node.arguments[1]) ? node.arguments[1].text : "",
         params,
       });
