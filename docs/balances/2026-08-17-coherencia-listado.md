@@ -12,14 +12,15 @@
 
 ## 1. Resumen en una frase
 
-Las once tareas de implementación dan a las nueve tools de listado un
+Las once tareas de implementación dan a las trece tools de listado un
 contrato de salida uniforme (`{pagination, counts?, data}`) con `sort`,
 `order`, `start` y `limit` reenviados de verdad al servidor, corrigen de paso
 un bug de la propia API de Arcane 2.8.0 que hacía perder elementos al paginar
-sin orden explícito, y sustituyen 25 `try/catch` repetidos por un único
-sobre de error para las 81 tools — con cuatro defectos reales encontrados
-midiendo (no en el encargo original) y un quinto endpoint con `counts` que
-el inventario del plan no había contado.
+sin orden explícito, y sustituyen 80 `try/catch` repetidos (81 → 1, medido
+con `git grep -c '} catch' -- 'src/tools/*.ts'`) por un único sobre de error
+para las 81 tools — con cuatro defectos reales encontrados midiendo (no en el
+encargo original) y un quinto endpoint con `counts` que el inventario del
+plan no había contado.
 
 ## 2. Cifras medidas hoy
 
@@ -47,7 +48,7 @@ npm run gen-tools-table -- --check          → OK: la tabla del README.md está
 node scripts/audit-schema-drift.mjs         → Total: 23 desalineaciones (0 graves: las 23 son FALTA-EN-TS-OPCIONAL)
 ```
 
-### 3.2 Tests e2e: 5 intentos con `ECONNREFUSED` antes del run limpio
+### 3.2 Tests e2e: varios intentos con `ECONNREFUSED` antes del run limpio
 
 ```
 set -a; . ./.dev.vars; set +a
@@ -55,14 +56,18 @@ ARCANE_BASE_URL=http://192.168.180.210:3552 npm run test:e2e -- --reporter=verbo
 ```
 
 La instancia tiene los cortes de red intermitentes que ya avisaba el brief.
-De siete ejecuciones completas en esta sesión, las seis primeras tuvieron
-entre 1 y 3 tests con `TypeError: fetch failed / ECONNREFUSED` — nunca un
-fallo de aserción, siempre el mismo `connect ECONNREFUSED
-192.168.180.210:3552` en un test distinto cada vez. La séptima ejecución dio
-**Test Files 5 passed (5); Tests 32 passed (32)**, contada línea a línea con
-`grep -c "✓"` sobre la salida cruda (32, coincide con el recuento agregado
-de vitest) y verificado que no hay ninguna línea `skip`. Los 32 nombres de
-test son únicos: no hay duplicados que inflen el recuento.
+No hay un número fijo de intentos: es un rango observado, no una cifra
+exacta. En esta sesión hicieron falta siete ejecuciones completas antes de
+una limpia; en la revisión final de la rama hicieron falta nueve. En ambos
+casos, cada intento fallido tuvo entre 1 y 5 tests con `TypeError: fetch
+failed / ECONNREFUSED` — nunca un fallo de aserción, siempre el mismo
+`connect ECONNREFUSED 192.168.180.210:3552` en un test distinto cada vez, a
+veces en cascada sobre tests posteriores del mismo fichero que dependían del
+resultado del que falló. La última ejecución dio **Test Files 5 passed (5);
+Tests 32 passed (32)**, contada línea a línea con `grep -c "✓"` sobre la
+salida cruda (32, coincide con el recuento agregado de vitest) y verificado
+que no hay ninguna línea `skip`. Los 32 nombres de test son únicos: no hay
+duplicados que inflen el recuento.
 
 ### 3.3 Cobertura de operaciones método+ruta
 
@@ -135,7 +140,17 @@ Las once tareas de implementación, en orden:
 | 8 | Las 5 tools de listado parciales completas, retirados `.max(100)` y `.default(50)` | `afd218a` |
 | 9 | Los 4 listados restantes (`activities`, `events`, `jobs`, `system` — donde aplica) con el mismo contrato + tests para `gitops_sync_list` y `volume_backup_list` (huecos sin cubrir del Step 1 original) | `9c64d32`, `f61becf` |
 | 10 | Helper `resolveIdByName`, los cuatro resolvers nombre→id dejan de concluir "no existe" sobre una página incompleta, `src/__e2e__/resolvers.e2e.ts` (5 tests, cobertura e2e que no existía) | `f5086d5`, `2f6ffe2`, `bb2e1e3`, `12e1a86` |
-| 11 | 25 `try/catch` eliminados de `activities.ts`, `events.ts`, `jobs.ts`, `system.ts` → un solo sobre de error (`withErrors`) para las 81 tools | `533477f` |
+| 11 | 44 `try/catch` eliminados en 11 ficheros (`containers-additional.ts`, `containers.ts`, `environments.ts`, `images.ts`, `networks.ts`, `projects-additional.ts`, `stacks.ts`, `system.ts`, `templates.ts`, `volume-files.ts`, `volumes.ts`) — consolidación final del sobre de error único (`withErrors`) para las 81 tools | `533477f` |
+
+El total de `try/catch` eliminados en toda la rama es 80 (81 → 1 en
+`src/tools/*.ts`, medido con `git grep -c '} catch'`), repartidos entre
+varios commits a medida que cada tool se migraba a `withErrors`; `533477f`
+es solo el commit de cierre que consolidó los 11 ficheros que aún no lo
+usaban (44 de los 80). La fila 9 de esta tabla (`9c64d32`) ya había quitado
+los 4 de `jobs.ts` como parte de darle el contrato de salida común; los de
+`system.ts` (5) siguieron intactos hasta `533477f`, y `activities.ts` y
+`events.ts` no tenían ninguno en ninguno de los dos puntos — no 25, y no
+atribuible a un único commit.
 
 Cuentas de partida verificadas: 152 tests / 19 e2e / 81 tools antes de la
 Tarea 1 → **214 tests / 32 e2e / 81 tools** hoy (81 tools no cambia: este
@@ -259,19 +274,37 @@ necesitado otro diseño si la inferencia se hubiera perdido.
   del proyecto.
 - **El issue del upstream sobre la paginación sin `sort` está redactado pero
   sin publicar** (sección 5.1) — lo publica el propietario, no este agente.
-- Deudas menores heredadas de tareas anteriores de esta misma rama, sin
-  tocar en esta tarea de cierre porque no formaban parte de su alcance:
-  - `src/arcane-client.ts:265`, el comentario de `PaginatedResponseWithCounts`
-    todavía dice "los tres schemas que lo usan"; ya son cuatro
-    (`GitopsSyncCounts` incluido) — comentario desactualizado, sin efecto en
-    comportamiento.
-  - El test de `arcane_environment_list` (Tarea 8) solo comprueba el sobre
-    de salida, a diferencia de sus hermanos no verifica que
-    `sort`/`order`/`start`/`type` se reenvíen — no hay bug (el revisor lo
-    comprobó leyendo el código), pero es más débil ante regresiones futuras.
+- Deudas menores heredadas de tareas anteriores de esta misma rama. Dos de
+  las tres que quedaron sin tocar en la tarea de cierre se arreglaron en la
+  ronda de arreglos de la revisión final:
+  - ~~`src/arcane-client.ts:265`, el comentario de `PaginatedResponseWithCounts`
+    todavía dice "los tres schemas que lo usan"~~ — corregido: ya dice
+    "cuatro".
+  - ~~El test de `arcane_environment_list` (Tarea 8) solo comprueba el sobre
+    de salida... no verifica que `sort`/`order`/`start`/`type` se
+    reenvíen~~ — corregido: las trece tools de listado tienen ahora al
+    menos un test que falla si dejan de reenviar `sort`/`order`/`start` con
+    valores reales, y otro que falla si dejan de usar `listResponse` (ver
+    la revisión final de la rama). Se encontró además que el mismo problema
+    afectaba a `container`, `image`, `network`, `stack`, `template` y
+    `git_repository`, no solo a `environment`: las aserciones que los
+    cubrían comparaban contra `undefined`, que `toHaveBeenCalledWith`
+    considera igual a una clave ausente, así que no cazaban una regresión
+    real.
   - El cap de "Available containers" en los mensajes de resolución cuenta
     nombres, no contenedores (un contenedor puede repetir nombre entre
-    proyectos) — literal del diseño, no un defecto.
+    proyectos) — literal del diseño, no un defecto. Sigue sin tocar.
+- **`arcane_volume_browse` puede devolver una colección recortada sin
+  avisarlo** (`src/tools/volume-files.ts:10`): su descripción promete "the
+  full file tree", pero el spec declara `fileTreeTruncated` como `required`
+  en la respuesta y la tool vuelca el JSON tal cual, sin ninguna línea en
+  prosa que señale el campo cuando viene `true`. Es el único camino que esta
+  revisión encontró por el que el modelo puede recibir una colección
+  recortada sin que nada se lo advierta — la misma conclusión falsa por
+  omisión que el resto de esta rama corrige en las tools de listado
+  paginadas. Queda **fuera del alcance de esta rama** (no es una tool de
+  listado paginado; es la única superficie de árbol de ficheros del
+  proyecto) y sin arreglar a propósito.
 - No se ha vuelto a capturar el stream real de `/pull` con imágenes de
   registro grandes ni otros escenarios de red distintos a los ya
   documentados en F0/F1; fuera del alcance de esta tarea, que es solo de
