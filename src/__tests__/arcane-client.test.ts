@@ -102,6 +102,26 @@ describe("ArcaneClient", () => {
 
       await expect(client.environments.get("123")).rejects.toThrow("Internal Server Error");
     });
+
+    it("requestHead() no parsea cuerpo y devuelve el codigo de estado", async () => {
+      mockFetch.mockResolvedValue({ ok: true, status: 200 } as Response);
+
+      const resultado = await client.requestHead("HEAD", "/environments/env123/system/health");
+
+      expect(resultado).toEqual({ ok: true, status: 200 });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/system/health",
+        expect.objectContaining({ method: "HEAD" })
+      );
+    });
+
+    it("requestHead() devuelve ok:false en vez de lanzar cuando el estado no es 2xx", async () => {
+      mockFetch.mockResolvedValue({ ok: false, status: 503 } as Response);
+
+      const resultado = await client.requestHead("HEAD", "/environments/env123/system/health");
+
+      expect(resultado).toEqual({ ok: false, status: 503 });
+    });
   });
 
   describe("environments", () => {
@@ -883,6 +903,203 @@ describe("ArcaneClient", () => {
     });
   });
 
+  describe("activities", () => {
+    it(".list(envId, opts) - GET /environments/{envId}/activities con filtros", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: { totalItems: 0 } }),
+      } as Response);
+
+      await client.activities.list("env123", { status: "failed", limit: 10 });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/activities?status=failed&limit=10",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".get(envId, activityId) - GET /environments/{envId}/activities/{activityId}", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { activity: { id: "act1" }, messages: [] } }),
+      } as Response);
+
+      await client.activities.get("env123", "act1");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/activities/act1",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".get(envId, activityId, limit) - añade ?limit= para no truncar el log en el default de 500 del servidor", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { activity: { id: "act1" }, messages: [] } }),
+      } as Response);
+
+      await client.activities.get("env123", "act1", 2000);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/activities/act1?limit=2000",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".cancel(envId, activityId) - POST /environments/{envId}/activities/{activityId}/cancel", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: {
+            id: "act1",
+            status: "cancelled",
+            type: "deploy",
+            environmentId: "env1",
+            startedAt: "2026-08-16T10:00:00Z",
+            createdAt: "2026-08-16T10:00:00Z",
+          },
+        }),
+      } as Response);
+
+      await client.activities.cancel("env123", "act1");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/activities/act1/cancel",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+
+    it(".get(envId, activityId) codifica un activityId hostil en vez de dejarlo saltar de ruta", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { activity: { id: "act1" }, messages: [] } }),
+      } as Response);
+
+      // Un activityId adversario que, sin encodeURIComponent, escaparia de
+      // /activities/ y aterrizaria en /api/users (dominio de administracion
+      // fuera de la superficie de escritura del MCP).
+      await client.activities.get("env123", "../../../users?");
+
+      const calledUrl = mockFetch.mock.calls[0][0] as string;
+      expect(calledUrl).toContain("/activities/");
+      expect(calledUrl).not.toContain("/api/users");
+      expect(calledUrl).toBe(
+        "http://localhost:3552/api/environments/env123/activities/..%2F..%2F..%2Fusers%3F"
+      );
+    });
+  });
+
+  describe("events", () => {
+    it(".list() sin environmentId - GET /events", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: { totalItems: 0 } }),
+      } as Response);
+
+      await client.events.list({ severity: "error", limit: 5 });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/events?severity=error&limit=5",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".list() con environmentId - GET /events/environment/{envId}", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: { totalItems: 0 } }),
+      } as Response);
+
+      await client.events.list({ environmentId: "env123", limit: 5 });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/events/environment/env123?limit=5",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".stats() - GET /events/stats", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { total: 0, info: 0, success: 0, warning: 0, error: 0 } }),
+      } as Response);
+
+      await client.events.stats();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/events/stats",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+  });
+
+  describe("jobs", () => {
+    it(".list(envId) - GET /environments/{envId}/jobs con el sobre {jobs}", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ isAgent: false, jobs: [{ id: "auto-heal", name: "Auto Heal" }] }),
+      } as Response);
+
+      const resultado = await client.jobs.list("env123");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/jobs",
+        expect.objectContaining({ method: "GET" })
+      );
+      // El sobre NO es {data,pagination}: leerlo como paginado devolveria vacio.
+      expect(resultado.jobs?.[0].id).toBe("auto-heal");
+    });
+
+    it(".run(envId, jobId) - POST /environments/{envId}/jobs/{jobId}/run", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, message: "Job started" }),
+      } as Response);
+
+      await client.jobs.run("env123", "auto-heal");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/jobs/auto-heal/run",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+
+    it(".getSchedules(envId) - GET /environments/{envId}/job-schedules", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ autoHealInterval: "30s" }),
+      } as Response);
+
+      await client.jobs.getSchedules("env123");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/job-schedules",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".updateSchedules(envId, cambios) - PUT con el cuerpo recibido, devuelve {success,data}", async () => {
+      // El spec declara BaseApiResponseJobscheduleConfig: {success, data: JobSchedulesConfig}.
+      // No hay campo `message` en ningun nivel (verificado contra openapi.txt).
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { autoHealInterval: "30s" } }),
+      } as Response);
+
+      const resultado = await client.jobs.updateSchedules("env123", { autoHealInterval: "30s" });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/job-schedules",
+        expect.objectContaining({
+          method: "PUT",
+          body: JSON.stringify({ autoHealInterval: "30s" }),
+        })
+      );
+      expect(resultado.data.autoHealInterval).toBe("30s");
+    });
+  });
+
   describe("networks", () => {
     it(".list(envId) - GET /environments/{envId}/networks", async () => {
       mockFetch.mockResolvedValue({
@@ -1056,6 +1273,68 @@ describe("ArcaneClient", () => {
 
       expect(info.currentVersion).toBe("v2.7.0");
       expect(info.updateAvailable).toBe(true);
+    });
+  });
+
+  describe("system (F2)", () => {
+    it(".dockerInfo(envId) - GET /environments/{envId}/system/docker/info", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, ServerVersion: "29.2.1" }),
+      } as Response);
+
+      await client.system.dockerInfo("env123");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/system/docker/info",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".health(envId) - HEAD, sin parsear cuerpo", async () => {
+      mockFetch.mockResolvedValue({ ok: true, status: 200 } as Response);
+
+      const resultado = await client.system.health("env123");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/system/health",
+        expect.objectContaining({ method: "HEAD" })
+      );
+      expect(resultado).toEqual({ ok: true, status: 200 });
+    });
+
+    it(".prune(envId, opciones) - POST con las opciones como cuerpo", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { success: true, spaceReclaimed: 0 } }),
+      } as Response);
+
+      await client.system.prune("env123", { buildCache: { mode: "dangling" } });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/system/prune",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ buildCache: { mode: "dangling" } }),
+        })
+      );
+    });
+
+    it(".convert(envId, comando) - POST /system/convert", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, dockerCompose: "services:", envVars: "", serviceName: "nginx" }),
+      } as Response);
+
+      await client.system.convert("env123", "docker run -d nginx");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/system/convert",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ dockerRunCommand: "docker run -d nginx" }),
+        })
+      );
     });
   });
 });

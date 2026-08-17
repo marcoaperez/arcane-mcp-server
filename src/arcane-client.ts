@@ -539,6 +539,255 @@ export interface WorkspaceUpdateManifest {
   fileChanges: WorkspaceFileChange[];
 }
 
+// ---------------------------------------------------------------------------
+// F2 — observabilidad: activities, events, jobs y system
+// ---------------------------------------------------------------------------
+
+export interface ActivityStartedBy {
+  displayName?: string;
+  userId?: string;
+  username: string;
+}
+
+export interface ActivityMessage {
+  activityId: string;
+  createdAt: string;
+  id: string;
+  level: string;
+  message: string;
+  payload?: Record<string, unknown>;
+}
+
+export interface Activity {
+  batchId?: string;
+  createdAt: string;
+  durationMs?: number;
+  endedAt?: string;
+  environmentId: string;
+  error?: string;
+  id: string;
+  latestMessage?: string;
+  metadata?: Record<string, unknown>;
+  progress?: number;
+  resourceId?: string;
+  resourceName?: string;
+  resourceType?: string;
+  sourceEnvironmentId?: string;
+  sourceEnvironmentName?: string;
+  startedAt: string;
+  startedBy?: ActivityStartedBy;
+  status: string;
+  step?: string;
+  type: string;
+  updatedAt?: string;
+}
+
+export interface ActivityDetail {
+  activity: Activity;
+  messages: ActivityMessage[] | null;
+}
+
+export interface Event {
+  createdAt: string;
+  description?: string;
+  environmentId?: string;
+  id: string;
+  metadata?: Record<string, unknown>;
+  resourceId?: string;
+  resourceName?: string;
+  resourceType?: string;
+  severity: string;
+  timestamp: string;
+  title: string;
+  type: string;
+  updatedAt?: string;
+  userId?: string;
+  username?: string;
+}
+
+export interface EventSeverityCounts {
+  error: number;
+  info: number;
+  success: number;
+  total: number;
+  warning: number;
+}
+
+export interface JobPrerequisite {
+  isMet: boolean;
+  label: string;
+  settingKey: string;
+  settingsUrl?: string;
+}
+
+export interface JobStatus {
+  canRunManually: boolean;
+  category: string;
+  description: string;
+  enabled: boolean;
+  id: string;
+  isContinuous: boolean;
+  managerOnly: boolean;
+  name: string;
+  nextRun?: string;
+  prerequisites: JobPrerequisite[] | null;
+  schedule: string;
+  settingsKey?: string;
+}
+
+/**
+ * OJO: este endpoint NO usa el sobre paginado `{data, pagination}` del resto
+ * de la API, sino `{jobs, isAgent}`. Tratarlo como paginado devuelve vacio
+ * en silencio. Verificado en vivo contra la instancia el 2026-08-16.
+ */
+export interface JobListResponse {
+  isAgent: boolean;
+  jobs: JobStatus[] | null;
+}
+
+export interface JobSchedulesConfig {
+  autoHealInterval: string;
+  autoUpdateInterval: string;
+  dockerClientRefreshInterval: string;
+  environmentHealthInterval: string;
+  eventCleanupInterval: string;
+  expiredSessionsCleanupInterval: string;
+  pollingInterval: string;
+  scheduledPruneInterval: string;
+  vulnerabilityScanInterval: string;
+}
+
+/** Todos los campos son opcionales: el spec declara `required: []`. */
+export interface JobSchedulesUpdate {
+  autoHealInterval?: string;
+  autoUpdateInterval?: string;
+  dockerClientRefreshInterval?: string;
+  environmentHealthInterval?: string;
+  eventCleanupInterval?: string;
+  expiredSessionsCleanupInterval?: string;
+  pollingInterval?: string;
+  scheduledPruneInterval?: string;
+  vulnerabilityScanInterval?: string;
+}
+
+/** Opciones de poda por recurso. `mode` es obligatorio en cada bloque. */
+export interface SystemPruneResourceOptions {
+  mode: string;
+  until?: string;
+}
+
+export interface SystemPruneRequest {
+  buildCache?: SystemPruneResourceOptions;
+  containers?: SystemPruneResourceOptions;
+  images?: SystemPruneResourceOptions;
+  networks?: SystemPruneResourceOptions;
+  /** `SystemPruneVolumesOptions` es el unico que NO admite `until` en el spec. */
+  volumes?: { mode: string };
+}
+
+export interface SystemPruneResult {
+  activityId?: string;
+  buildCacheSpaceReclaimed?: number;
+  containerSpaceReclaimed?: number;
+  containersPruned?: string[] | null;
+  errors?: string[] | null;
+  imageSpaceReclaimed?: number;
+  imagesDeleted?: string[] | null;
+  networksDeleted?: string[] | null;
+  spaceReclaimed: number;
+  success: boolean;
+  volumeSpaceReclaimed?: number;
+  volumesDeleted?: string[] | null;
+}
+
+export interface SystemConvertResult {
+  dockerCompose: string;
+  envVars: string;
+  serviceName: string;
+  success: boolean;
+}
+
+/**
+ * Respuesta de `GET /system/docker/info`. Es un reenvio del `info` de Docker:
+ * ninguna tool lee sus campos, se serializa entero. Se declara completo para
+ * que la auditoria de drift lo vigile. Los campos anidados propios de Docker
+ * (`Plugins`, `Swarm`, `RegistryConfig`...) se dejan como `unknown`: la
+ * auditoria compara presencia y opcionalidad de campos, no tipos, asi que
+ * declararlos no aportaria nada y arrastraria una docena de interfaces mas.
+ */
+export interface DockerInfo {
+  Architecture: string;
+  CDISpecDirs: string[] | null;
+  CPUSet: boolean;
+  CPUShares: boolean;
+  CgroupDriver: string;
+  CgroupVersion?: string;
+  Containerd?: unknown;
+  ContainerdCommit: unknown;
+  Containers: number;
+  ContainersPaused: number;
+  ContainersRunning: number;
+  ContainersStopped: number;
+  CpuCfsPeriod: boolean;
+  CpuCfsQuota: boolean;
+  Debug: boolean;
+  DefaultAddressPools?: unknown[] | null;
+  DefaultRuntime: string;
+  DiscoveredDevices?: unknown[] | null;
+  DockerRootDir: string;
+  Driver: string;
+  DriverStatus: (string[] | null)[] | null;
+  ExperimentalBuild: boolean;
+  FirewallBackend?: unknown;
+  GenericResources: unknown[] | null;
+  HttpProxy: string;
+  HttpsProxy: string;
+  ID: string;
+  IPv4Forwarding: boolean;
+  Images: number;
+  IndexServerAddress: string;
+  InitBinary: string;
+  InitCommit: unknown;
+  Isolation: string;
+  KernelVersion: string;
+  Labels: string[] | null;
+  LiveRestoreEnabled: boolean;
+  LoggingDriver: string;
+  MemTotal: number;
+  MemoryLimit: boolean;
+  NCPU: number;
+  NEventsListener: number;
+  NFd: number;
+  NGoroutines: number;
+  NRI?: unknown;
+  Name: string;
+  NoProxy: string;
+  OSType: string;
+  OSVersion: string;
+  OomKillDisable: boolean;
+  OperatingSystem: string;
+  PidsLimit: boolean;
+  Plugins: unknown;
+  ProductLicense?: string;
+  RegistryConfig: unknown;
+  RuncCommit: unknown;
+  Runtimes: Record<string, unknown>;
+  SecurityOptions: string[] | null;
+  ServerVersion: string;
+  SwapLimit: boolean;
+  Swarm: unknown;
+  SystemStatus?: (string[] | null)[] | null;
+  SystemTime: string;
+  Warnings: string[] | null;
+  apiVersion: string;
+  arch: string;
+  buildTime: string;
+  gitCommit: string;
+  goVersion: string;
+  os: string;
+  success: boolean;
+}
+
 export interface ProjectUpdateExtended extends ProjectUpdate {
   removeFiles?: boolean;
   removeVolumes?: boolean;
@@ -571,7 +820,7 @@ class EnvironmentsMethods {
   }
 
   async get(id: string): Promise<{ success: boolean; data: Environment }> {
-    return this.client.request<{ success: boolean; data: Environment }>("GET", `/environments/${id}`);
+    return this.client.request<{ success: boolean; data: Environment }>("GET", `/environments/${encodeURIComponent(id)}`);
   }
 
   async create(dto: EnvironmentCreate): Promise<{ success: boolean; data: Environment }> {
@@ -579,11 +828,11 @@ class EnvironmentsMethods {
   }
 
   async update(id: string, dto: EnvironmentUpdate): Promise<{ success: boolean; data: Environment }> {
-    return this.client.request<{ success: boolean; data: Environment }>("PUT", `/environments/${id}`, dto);
+    return this.client.request<{ success: boolean; data: Environment }>("PUT", `/environments/${encodeURIComponent(id)}`, dto);
   }
 
   async delete(id: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("DELETE", `/environments/${id}`);
+    return this.client.request<ActionResponse>("DELETE", `/environments/${encodeURIComponent(id)}`);
   }
 }
 
@@ -596,24 +845,24 @@ class StacksMethods {
     const query = params.toString();
     return this.client.request<PaginatedResponse<Project>>(
       "GET",
-      `/environments/${envId}/projects${query ? `?${query}` : ""}`
+      `/environments/${encodeURIComponent(envId)}/projects${query ? `?${query}` : ""}`
     );
   }
 
   async get(envId: string, stackId: string): Promise<{ success: boolean; data: Project }> {
-    return this.client.request<{ success: boolean; data: Project }>("GET", `/environments/${envId}/projects/${stackId}`);
+    return this.client.request<{ success: boolean; data: Project }>("GET", `/environments/${encodeURIComponent(envId)}/projects/${encodeURIComponent(stackId)}`);
   }
 
   async deploy(envId: string, dto: ProjectCreate): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("POST", `/environments/${envId}/projects`, dto);
+    return this.client.request<ActionResponse>("POST", `/environments/${encodeURIComponent(envId)}/projects`, dto);
   }
 
   async update(envId: string, stackId: string, dto: ProjectUpdate): Promise<{ success: boolean; data: Project }> {
-    return this.client.request<{ success: boolean; data: Project }>("PUT", `/environments/${envId}/projects/${stackId}`, dto);
+    return this.client.request<{ success: boolean; data: Project }>("PUT", `/environments/${encodeURIComponent(envId)}/projects/${encodeURIComponent(stackId)}`, dto);
   }
 
   async delete(envId: string, stackId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("DELETE", `/environments/${envId}/projects/${stackId}/destroy`);
+    return this.client.request<ActionResponse>("DELETE", `/environments/${encodeURIComponent(envId)}/projects/${encodeURIComponent(stackId)}/destroy`);
   }
 
   async start(envId: string, stackId: string): Promise<ActionResponse> {
@@ -621,17 +870,17 @@ class StacksMethods {
     // Parse the stream and summarize it as an ActionResponse.
     const events = await this.client.requestNdjson<ComposeStreamEvent>(
       "POST",
-      `/environments/${envId}/projects/${stackId}/up`
+      `/environments/${encodeURIComponent(envId)}/projects/${encodeURIComponent(stackId)}/up`
     );
     return summarizeComposeStream(events, "Start");
   }
 
   async stop(envId: string, stackId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("POST", `/environments/${envId}/projects/${stackId}/down`);
+    return this.client.request<ActionResponse>("POST", `/environments/${encodeURIComponent(envId)}/projects/${encodeURIComponent(stackId)}/down`);
   }
 
   async restart(envId: string, stackId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("POST", `/environments/${envId}/projects/${stackId}/restart`);
+    return this.client.request<ActionResponse>("POST", `/environments/${encodeURIComponent(envId)}/projects/${encodeURIComponent(stackId)}/restart`);
   }
 
   async pull(envId: string, stackId: string): Promise<ActionResponse> {
@@ -640,7 +889,7 @@ class StacksMethods {
     // not docker-pull-style {status,id}). Parse and summarize the same way.
     const events = await this.client.requestNdjson<ComposeStreamEvent>(
       "POST",
-      `/environments/${envId}/projects/${stackId}/pull`
+      `/environments/${encodeURIComponent(envId)}/projects/${encodeURIComponent(stackId)}/pull`
     );
     return summarizeComposeStream(events, "Pull");
   }
@@ -650,30 +899,30 @@ class ContainersMethods {
   constructor(private client: ArcaneClient) {}
 
   async list(envId: string): Promise<PaginatedResponse<ContainerSummary>> {
-    return this.client.request<PaginatedResponse<ContainerSummary>>("GET", `/environments/${envId}/containers`);
+    return this.client.request<PaginatedResponse<ContainerSummary>>("GET", `/environments/${encodeURIComponent(envId)}/containers`);
   }
 
   async get(envId: string, containerId: string): Promise<{ success: boolean; data: ContainerDetails }> {
     return this.client.request<{ success: boolean; data: ContainerDetails }>(
       "GET",
-      `/environments/${envId}/containers/${containerId}`
+      `/environments/${encodeURIComponent(envId)}/containers/${encodeURIComponent(containerId)}`
     );
   }
 
   async start(envId: string, containerId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("POST", `/environments/${envId}/containers/${containerId}/start`);
+    return this.client.request<ActionResponse>("POST", `/environments/${encodeURIComponent(envId)}/containers/${encodeURIComponent(containerId)}/start`);
   }
 
   async stop(envId: string, containerId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("POST", `/environments/${envId}/containers/${containerId}/stop`);
+    return this.client.request<ActionResponse>("POST", `/environments/${encodeURIComponent(envId)}/containers/${encodeURIComponent(containerId)}/stop`);
   }
 
   async restart(envId: string, containerId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("POST", `/environments/${envId}/containers/${containerId}/restart`);
+    return this.client.request<ActionResponse>("POST", `/environments/${encodeURIComponent(envId)}/containers/${encodeURIComponent(containerId)}/restart`);
   }
 
   async kill(envId: string, containerId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("POST", `/environments/${envId}/containers/${containerId}/update`, { action: "kill" });
+    return this.client.request<ActionResponse>("POST", `/environments/${encodeURIComponent(envId)}/containers/${encodeURIComponent(containerId)}/update`, { action: "kill" });
   }
 }
 
@@ -681,19 +930,19 @@ class ImagesMethods {
   constructor(private client: ArcaneClient) {}
 
   async list(envId: string): Promise<PaginatedResponse<ImageSummary>> {
-    return this.client.request<PaginatedResponse<ImageSummary>>("GET", `/environments/${envId}/images`);
+    return this.client.request<PaginatedResponse<ImageSummary>>("GET", `/environments/${encodeURIComponent(envId)}/images`);
   }
 
   async pull(envId: string, dto: ImagePullOptions): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("POST", `/environments/${envId}/images/pull`, dto);
+    return this.client.request<ActionResponse>("POST", `/environments/${encodeURIComponent(envId)}/images/pull`, dto);
   }
 
   async remove(envId: string, imageId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("DELETE", `/environments/${envId}/images/${imageId}`);
+    return this.client.request<ActionResponse>("DELETE", `/environments/${encodeURIComponent(envId)}/images/${encodeURIComponent(imageId)}`);
   }
 
   async prune(envId: string): Promise<{ success: boolean; data: ImagePruneReport }> {
-    return this.client.request<{ success: boolean; data: ImagePruneReport }>("POST", `/environments/${envId}/images/prune`);
+    return this.client.request<{ success: boolean; data: ImagePruneReport }>("POST", `/environments/${encodeURIComponent(envId)}/images/prune`);
   }
 }
 
@@ -701,19 +950,19 @@ class VolumesMethods {
   constructor(private client: ArcaneClient) {}
 
   async list(envId: string): Promise<PaginatedResponse<Volume>> {
-    return this.client.request<PaginatedResponse<Volume>>("GET", `/environments/${envId}/volumes`);
+    return this.client.request<PaginatedResponse<Volume>>("GET", `/environments/${encodeURIComponent(envId)}/volumes`);
   }
 
   async inspect(envId: string, name: string): Promise<{ success: boolean; data: Volume }> {
-    return this.client.request<{ success: boolean; data: Volume }>("GET", `/environments/${envId}/volumes/${name}`);
+    return this.client.request<{ success: boolean; data: Volume }>("GET", `/environments/${encodeURIComponent(envId)}/volumes/${encodeURIComponent(name)}`);
   }
 
   async remove(envId: string, name: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("DELETE", `/environments/${envId}/volumes/${name}`);
+    return this.client.request<ActionResponse>("DELETE", `/environments/${encodeURIComponent(envId)}/volumes/${encodeURIComponent(name)}`);
   }
 
   async prune(envId: string): Promise<{ success: boolean; data: VolumePruneReport }> {
-    return this.client.request<{ success: boolean; data: VolumePruneReport }>("POST", `/environments/${envId}/volumes/prune`);
+    return this.client.request<{ success: boolean; data: VolumePruneReport }>("POST", `/environments/${encodeURIComponent(envId)}/volumes/prune`);
   }
 }
 
@@ -721,22 +970,22 @@ class NetworksMethods {
   constructor(private client: ArcaneClient) {}
 
   async list(envId: string): Promise<PaginatedResponse<NetworkSummary>> {
-    return this.client.request<PaginatedResponse<NetworkSummary>>("GET", `/environments/${envId}/networks`);
+    return this.client.request<PaginatedResponse<NetworkSummary>>("GET", `/environments/${encodeURIComponent(envId)}/networks`);
   }
 
   async inspect(envId: string, networkId: string): Promise<{ success: boolean; data: NetworkInspect }> {
     return this.client.request<{ success: boolean; data: NetworkInspect }>(
       "GET",
-      `/environments/${envId}/networks/${networkId}`
+      `/environments/${encodeURIComponent(envId)}/networks/${encodeURIComponent(networkId)}`
     );
   }
 
   async remove(envId: string, networkId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("DELETE", `/environments/${envId}/networks/${networkId}`);
+    return this.client.request<ActionResponse>("DELETE", `/environments/${encodeURIComponent(envId)}/networks/${encodeURIComponent(networkId)}`);
   }
 
   async prune(envId: string): Promise<{ success: boolean; data: NetworkPruneReport }> {
-    return this.client.request<{ success: boolean; data: NetworkPruneReport }>("POST", `/environments/${envId}/networks/prune`);
+    return this.client.request<{ success: boolean; data: NetworkPruneReport }>("POST", `/environments/${encodeURIComponent(envId)}/networks/prune`);
   }
 }
 
@@ -751,7 +1000,7 @@ class TemplatesMethods {
   }
 
   async get(id: string): Promise<{ success: boolean; data: Template }> {
-    return this.client.request<{ success: boolean; data: Template }>("GET", `/templates/${id}`);
+    return this.client.request<{ success: boolean; data: Template }>("GET", `/templates/${encodeURIComponent(id)}`);
   }
 
   async create(dto: TemplateCreate): Promise<{ success: boolean; data: Template }> {
@@ -759,11 +1008,11 @@ class TemplatesMethods {
   }
 
   async update(id: string, dto: TemplateUpdate): Promise<{ success: boolean; data: Template }> {
-    return this.client.request<{ success: boolean; data: Template }>("PUT", `/templates/${id}`, dto);
+    return this.client.request<{ success: boolean; data: Template }>("PUT", `/templates/${encodeURIComponent(id)}`, dto);
   }
 
   async delete(id: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("DELETE", `/templates/${id}`);
+    return this.client.request<ActionResponse>("DELETE", `/templates/${encodeURIComponent(id)}`);
   }
 }
 
@@ -772,6 +1021,147 @@ class SystemMethods {
 
   async version(): Promise<VersionInfo> {
     return this.client.request<VersionInfo>("GET", "/app-version");
+  }
+
+  async dockerInfo(envId: string): Promise<DockerInfo> {
+    return this.client.request<DockerInfo>("GET", `/environments/${encodeURIComponent(envId)}/system/docker/info`);
+  }
+
+  /** HEAD sin cuerpo: el veredicto es el codigo de estado. */
+  async health(envId: string): Promise<{ ok: boolean; status: number }> {
+    return this.client.requestHead("HEAD", `/environments/${encodeURIComponent(envId)}/system/health`);
+  }
+
+  async prune(envId: string, opciones: SystemPruneRequest): Promise<{ success: boolean; data: SystemPruneResult }> {
+    return this.client.request<{ success: boolean; data: SystemPruneResult }>(
+      "POST",
+      `/environments/${encodeURIComponent(envId)}/system/prune`,
+      opciones
+    );
+  }
+
+  async convert(envId: string, dockerRunCommand: string): Promise<SystemConvertResult> {
+    return this.client.request<SystemConvertResult>(
+      "POST",
+      `/environments/${encodeURIComponent(envId)}/system/convert`,
+      { dockerRunCommand }
+    );
+  }
+}
+
+export interface ActivityListOptions extends ListOptionsWithSort {
+  status?: string;
+  type?: string;
+  resourceType?: string;
+}
+
+class ActivitiesMethods {
+  constructor(private client: ArcaneClient) {}
+
+  async list(envId: string, opts?: ActivityListOptions): Promise<PaginatedResponse<Activity>> {
+    const params = new URLSearchParams();
+    if (opts?.search) params.set("search", opts.search);
+    if (opts?.status) params.set("status", opts.status);
+    if (opts?.type) params.set("type", opts.type);
+    if (opts?.resourceType) params.set("resourceType", opts.resourceType);
+    if (opts?.limit) params.set("limit", String(opts.limit));
+    const query = params.toString();
+    return this.client.request<PaginatedResponse<Activity>>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/activities${query ? `?${query}` : ""}`
+    );
+  }
+
+  /**
+   * `limit` es el maximo de mensajes del log a devolver. openapi.txt lo declara
+   * `default: 500` en el propio servidor: sin pasarlo explicitamente, un log
+   * mas largo que eso llega truncado sin ningun aviso.
+   */
+  async get(envId: string, activityId: string, limit?: number): Promise<{ success: boolean; data: ActivityDetail }> {
+    const params = new URLSearchParams();
+    if (limit !== undefined) params.set("limit", String(limit));
+    const query = params.toString();
+    return this.client.request<{ success: boolean; data: ActivityDetail }>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/activities/${encodeURIComponent(activityId)}${query ? `?${query}` : ""}`
+    );
+  }
+
+  /**
+   * OJO: NO devuelve ActionResponse. El spec declara BaseApiResponseActivityActivity,
+   * es decir `{success, data: Activity}`: no hay campo `message` en ningun nivel.
+   */
+  async cancel(
+    envId: string,
+    activityId: string,
+    requestedBy?: string
+  ): Promise<{ success: boolean; data: Activity }> {
+    const params = new URLSearchParams();
+    if (requestedBy) params.set("requestedBy", requestedBy);
+    const query = params.toString();
+    return this.client.request<{ success: boolean; data: Activity }>(
+      "POST",
+      `/environments/${encodeURIComponent(envId)}/activities/${encodeURIComponent(activityId)}/cancel${query ? `?${query}` : ""}`
+    );
+  }
+}
+
+export interface EventListOptions extends ListOptionsWithSort {
+  /** Si viene, la consulta va a la ruta por entorno en vez de a la global. */
+  environmentId?: string;
+  severity?: string;
+  type?: string;
+}
+
+class EventsMethods {
+  constructor(private client: ArcaneClient) {}
+
+  async list(opts?: EventListOptions): Promise<PaginatedResponse<Event>> {
+    const params = new URLSearchParams();
+    if (opts?.search) params.set("search", opts.search);
+    if (opts?.severity) params.set("severity", opts.severity);
+    if (opts?.type) params.set("type", opts.type);
+    if (opts?.limit) params.set("limit", String(opts.limit));
+    const query = params.toString();
+    const base = opts?.environmentId ? `/events/environment/${encodeURIComponent(opts.environmentId)}` : "/events";
+    return this.client.request<PaginatedResponse<Event>>("GET", `${base}${query ? `?${query}` : ""}`);
+  }
+
+  async stats(): Promise<{ success: boolean; data: EventSeverityCounts }> {
+    return this.client.request<{ success: boolean; data: EventSeverityCounts }>("GET", "/events/stats");
+  }
+}
+
+class JobsMethods {
+  constructor(private client: ArcaneClient) {}
+
+  /** Devuelve el sobre `{jobs, isAgent}` tal cual: NO es el paginado del resto de la API. */
+  async list(envId: string): Promise<JobListResponse> {
+    return this.client.request<JobListResponse>("GET", `/environments/${encodeURIComponent(envId)}/jobs`);
+  }
+
+  async run(envId: string, jobId: string): Promise<ActionResponse> {
+    return this.client.request<ActionResponse>("POST", `/environments/${encodeURIComponent(envId)}/jobs/${encodeURIComponent(jobId)}/run`);
+  }
+
+  async getSchedules(envId: string): Promise<JobSchedulesConfig> {
+    return this.client.request<JobSchedulesConfig>("GET", `/environments/${encodeURIComponent(envId)}/job-schedules`);
+  }
+
+  /**
+   * OJO: NO devuelve ActionResponse. El spec declara BaseApiResponseJobscheduleConfig,
+   * es decir `{success, data: JobSchedulesConfig}`: devuelve la configuracion ya
+   * aplicada, y no hay campo `message` en ningun nivel.
+   */
+  async updateSchedules(
+    envId: string,
+    cambios: JobSchedulesUpdate
+  ): Promise<{ success: boolean; data: JobSchedulesConfig }> {
+    return this.client.request<{ success: boolean; data: JobSchedulesConfig }>(
+      "PUT",
+      `/environments/${encodeURIComponent(envId)}/job-schedules`,
+      cambios
+    );
   }
 }
 
@@ -793,7 +1183,7 @@ class GitRepositoriesMethods {
   }
 
   async get(id: string): Promise<{ success: boolean; data: GitRepository }> {
-    return this.client.request<{ success: boolean; data: GitRepository }>("GET", `/customize/git-repositories/${id}`);
+    return this.client.request<{ success: boolean; data: GitRepository }>("GET", `/customize/git-repositories/${encodeURIComponent(id)}`);
   }
 
   async create(dto: GitRepositoryCreate): Promise<{ success: boolean; data: GitRepository }> {
@@ -801,15 +1191,15 @@ class GitRepositoriesMethods {
   }
 
   async update(id: string, dto: GitRepositoryUpdate): Promise<{ success: boolean; data: GitRepository }> {
-    return this.client.request<{ success: boolean; data: GitRepository }>("PUT", `/customize/git-repositories/${id}`, dto);
+    return this.client.request<{ success: boolean; data: GitRepository }>("PUT", `/customize/git-repositories/${encodeURIComponent(id)}`, dto);
   }
 
   async delete(id: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("DELETE", `/customize/git-repositories/${id}`);
+    return this.client.request<ActionResponse>("DELETE", `/customize/git-repositories/${encodeURIComponent(id)}`);
   }
 
   async listBranches(id: string): Promise<{ success: boolean; data: GitBranch[] }> {
-    return this.client.request<{ success: boolean; data: GitBranch[] }>("GET", `/customize/git-repositories/${id}/branches`);
+    return this.client.request<{ success: boolean; data: GitBranch[] }>("GET", `/customize/git-repositories/${encodeURIComponent(id)}/branches`);
   }
 
   async browseFiles(id: string, branch?: string, path?: string): Promise<{ success: boolean; data: GitFileNode[] }> {
@@ -819,13 +1209,13 @@ class GitRepositoriesMethods {
     const query = params.toString();
     return this.client.request<{ success: boolean; data: GitFileNode[] }>(
       "GET",
-      `/customize/git-repositories/${id}/files${query ? `?${query}` : ""}`
+      `/customize/git-repositories/${encodeURIComponent(id)}/files${query ? `?${query}` : ""}`
     );
   }
 
   async test(id: string, branch?: string): Promise<ActionResponse> {
     const body = branch ? { branch } : undefined;
-    return this.client.request<ActionResponse>("POST", `/customize/git-repositories/${id}/test`, body);
+    return this.client.request<ActionResponse>("POST", `/customize/git-repositories/${encodeURIComponent(id)}/test`, body);
   }
 }
 
@@ -842,21 +1232,21 @@ class GitOpsSyncsMethods {
     const query = params.toString();
     return this.client.request<PaginatedResponse<GitOpsSync>>(
       "GET",
-      `/environments/${envId}/gitops-syncs${query ? `?${query}` : ""}`
+      `/environments/${encodeURIComponent(envId)}/gitops-syncs${query ? `?${query}` : ""}`
     );
   }
 
   async get(envId: string, syncId: string): Promise<{ success: boolean; data: GitOpsSync }> {
     return this.client.request<{ success: boolean; data: GitOpsSync }>(
       "GET",
-      `/environments/${envId}/gitops-syncs/${syncId}`
+      `/environments/${encodeURIComponent(envId)}/gitops-syncs/${encodeURIComponent(syncId)}`
     );
   }
 
   async create(envId: string, dto: GitOpsSyncCreate): Promise<{ success: boolean; data: GitOpsSync }> {
     return this.client.request<{ success: boolean; data: GitOpsSync }>(
       "POST",
-      `/environments/${envId}/gitops-syncs`,
+      `/environments/${encodeURIComponent(envId)}/gitops-syncs`,
       dto
     );
   }
@@ -864,13 +1254,13 @@ class GitOpsSyncsMethods {
   async update(envId: string, syncId: string, dto: GitOpsSyncUpdate): Promise<{ success: boolean; data: GitOpsSync }> {
     return this.client.request<{ success: boolean; data: GitOpsSync }>(
       "PUT",
-      `/environments/${envId}/gitops-syncs/${syncId}`,
+      `/environments/${encodeURIComponent(envId)}/gitops-syncs/${encodeURIComponent(syncId)}`,
       dto
     );
   }
 
   async delete(envId: string, syncId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("DELETE", `/environments/${envId}/gitops-syncs/${syncId}`);
+    return this.client.request<ActionResponse>("DELETE", `/environments/${encodeURIComponent(envId)}/gitops-syncs/${encodeURIComponent(syncId)}`);
   }
 
   async browseFiles(envId: string, syncId: string, path?: string): Promise<{ success: boolean; data: GitFileNode[] }> {
@@ -879,19 +1269,19 @@ class GitOpsSyncsMethods {
     const query = params.toString();
     return this.client.request<{ success: boolean; data: GitFileNode[] }>(
       "GET",
-      `/environments/${envId}/gitops-syncs/${syncId}/files${query ? `?${query}` : ""}`
+      `/environments/${encodeURIComponent(envId)}/gitops-syncs/${encodeURIComponent(syncId)}/files${query ? `?${query}` : ""}`
     );
   }
 
   async getStatus(envId: string, syncId: string): Promise<{ success: boolean; data: GitOpsSyncStatus }> {
     return this.client.request<{ success: boolean; data: GitOpsSyncStatus }>(
       "GET",
-      `/environments/${envId}/gitops-syncs/${syncId}/status`
+      `/environments/${encodeURIComponent(envId)}/gitops-syncs/${encodeURIComponent(syncId)}/status`
     );
   }
 
   async performSync(envId: string, syncId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("POST", `/environments/${envId}/gitops-syncs/${syncId}/sync`);
+    return this.client.request<ActionResponse>("POST", `/environments/${encodeURIComponent(envId)}/gitops-syncs/${encodeURIComponent(syncId)}/sync`);
   }
 }
 
@@ -899,7 +1289,7 @@ class ProjectAdditionalMethods {
   constructor(private client: ArcaneClient) {}
 
   async down(envId: string, projectId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("POST", `/environments/${envId}/projects/${projectId}/down`);
+    return this.client.request<ActionResponse>("POST", `/environments/${encodeURIComponent(envId)}/projects/${encodeURIComponent(projectId)}/down`);
   }
 
   async pullImages(envId: string, projectId: string): Promise<ActionResponse> {
@@ -908,7 +1298,7 @@ class ProjectAdditionalMethods {
     // not docker-pull-style {status,id}). Parse and summarize the same way.
     const events = await this.client.requestNdjson<ComposeStreamEvent>(
       "POST",
-      `/environments/${envId}/projects/${projectId}/pull`
+      `/environments/${encodeURIComponent(envId)}/projects/${encodeURIComponent(projectId)}/pull`
     );
     return summarizeComposeStream(events, "Pull");
   }
@@ -918,7 +1308,7 @@ class ProjectAdditionalMethods {
     // Parse the stream and summarize it as an ActionResponse.
     const events = await this.client.requestNdjson<ComposeStreamEvent>(
       "POST",
-      `/environments/${envId}/projects/${projectId}/redeploy`
+      `/environments/${encodeURIComponent(envId)}/projects/${encodeURIComponent(projectId)}/redeploy`
     );
     return summarizeComposeStream(events, "Redeploy");
   }
@@ -926,7 +1316,7 @@ class ProjectAdditionalMethods {
   async destroy(envId: string, projectId: string, removeFiles?: boolean, removeVolumes?: boolean): Promise<ActionResponse> {
     return this.client.request<ActionResponse>(
       "DELETE",
-      `/environments/${envId}/projects/${projectId}/destroy?removeFiles=${removeFiles ?? false}&removeVolumes=${removeVolumes ?? false}`
+      `/environments/${encodeURIComponent(envId)}/projects/${encodeURIComponent(projectId)}/destroy?removeFiles=${removeFiles ?? false}&removeVolumes=${removeVolumes ?? false}`
     );
   }
 }
@@ -935,7 +1325,7 @@ class ContainerAdditionalMethods {
   constructor(private client: ArcaneClient) {}
 
   async create(envId: string, dto: ContainerCreateOptions): Promise<{ success: boolean; data: ContainerDetails }> {
-    return this.client.request<{ success: boolean; data: ContainerDetails }>("POST", `/environments/${envId}/containers`, dto);
+    return this.client.request<{ success: boolean; data: ContainerDetails }>("POST", `/environments/${encodeURIComponent(envId)}/containers`, dto);
   }
 
   async delete(envId: string, containerId: string, force?: boolean, volumes?: boolean): Promise<ActionResponse> {
@@ -945,12 +1335,12 @@ class ContainerAdditionalMethods {
     const query = params.toString();
     return this.client.request<ActionResponse>(
       "DELETE",
-      `/environments/${envId}/containers/${containerId}${query ? `?${query}` : ""}`
+      `/environments/${encodeURIComponent(envId)}/containers/${encodeURIComponent(containerId)}${query ? `?${query}` : ""}`
     );
   }
 
   async update(envId: string, containerId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("POST", `/environments/${envId}/containers/${containerId}/update`);
+    return this.client.request<ActionResponse>("POST", `/environments/${encodeURIComponent(envId)}/containers/${encodeURIComponent(containerId)}/update`);
   }
 }
 
@@ -960,7 +1350,7 @@ class VolumeBackupsMethods {
   async create(envId: string, volumeName: string): Promise<{ success: boolean; data: VolumeBackup }> {
     return this.client.request<{ success: boolean; data: VolumeBackup }>(
       "POST",
-      `/environments/${envId}/volumes/${volumeName}/backups`
+      `/environments/${encodeURIComponent(envId)}/volumes/${encodeURIComponent(volumeName)}/backups`
     );
   }
 
@@ -974,16 +1364,16 @@ class VolumeBackupsMethods {
     const query = params.toString();
     return this.client.request<PaginatedResponse<VolumeBackup>>(
       "GET",
-      `/environments/${envId}/volumes/${volumeName}/backups${query ? `?${query}` : ""}`
+      `/environments/${encodeURIComponent(envId)}/volumes/${encodeURIComponent(volumeName)}/backups${query ? `?${query}` : ""}`
     );
   }
 
   async delete(envId: string, backupId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("DELETE", `/environments/${envId}/volumes/backups/${backupId}`);
+    return this.client.request<ActionResponse>("DELETE", `/environments/${encodeURIComponent(envId)}/volumes/backups/${encodeURIComponent(backupId)}`);
   }
 
   async download(envId: string, backupId: string): Promise<Blob> {
-    const response = await this.client.fetchFn(`${this.client.getBaseUrl()}/environments/${envId}/volumes/backups/${backupId}/download`, {
+    const response = await this.client.fetchFn(`${this.client.getBaseUrl()}/environments/${encodeURIComponent(envId)}/volumes/backups/${encodeURIComponent(backupId)}/download`, {
       method: "GET",
       headers: {
         "X-API-Key": this.client.getApiKey(),
@@ -1005,7 +1395,7 @@ class VolumeBackupsMethods {
   async restore(envId: string, volumeName: string, backupId: string): Promise<ActionResponse> {
     return this.client.request<ActionResponse>(
       "POST",
-      `/environments/${envId}/volumes/${volumeName}/backups/${backupId}/restore`
+      `/environments/${encodeURIComponent(envId)}/volumes/${encodeURIComponent(volumeName)}/backups/${encodeURIComponent(backupId)}/restore`
     );
   }
 }
@@ -1021,7 +1411,7 @@ class VolumeFilesMethods {
   async getWorkspace(envId: string, volumeName: string): Promise<{ success: boolean; data: VolumeWorkspace }> {
     return this.client.request<{ success: boolean; data: VolumeWorkspace }>(
       "GET",
-      `/environments/${envId}/volumes/${volumeName}/workspace`
+      `/environments/${encodeURIComponent(envId)}/volumes/${encodeURIComponent(volumeName)}/workspace`
     );
   }
 
@@ -1049,7 +1439,7 @@ class VolumeFilesMethods {
 
     return this.client.requestMultipart<ActionResponse>(
       "PUT",
-      `/environments/${envId}/volumes/${volumeName}/workspace`,
+      `/environments/${encodeURIComponent(envId)}/volumes/${encodeURIComponent(volumeName)}/workspace`,
       form
     );
   }
@@ -1068,6 +1458,9 @@ export class ArcaneClient {
   readonly networks: NetworksMethods;
   readonly templates: TemplatesMethods;
   readonly system: SystemMethods;
+  readonly activities: ActivitiesMethods;
+  readonly events: EventsMethods;
+  readonly jobs: JobsMethods;
   readonly gitRepositories: GitRepositoriesMethods;
   readonly gitOpsSyncs: GitOpsSyncsMethods;
   readonly projectAdditional: ProjectAdditionalMethods;
@@ -1098,6 +1491,9 @@ export class ArcaneClient {
     this.networks = new NetworksMethods(this);
     this.templates = new TemplatesMethods(this);
     this.system = new SystemMethods(this);
+    this.activities = new ActivitiesMethods(this);
+    this.events = new EventsMethods(this);
+    this.jobs = new JobsMethods(this);
     this.gitRepositories = new GitRepositoriesMethods(this);
     this.gitOpsSyncs = new GitOpsSyncsMethods(this);
     this.projectAdditional = new ProjectAdditionalMethods(this);
@@ -1139,6 +1535,21 @@ export class ArcaneClient {
     }
 
     return response.json() as Promise<T>;
+  }
+
+  /**
+   * Como `request<T>`, pero para endpoints que no devuelven cuerpo (HEAD).
+   *
+   * `request()` termina en `response.json()`, que con un cuerpo vacio lanza.
+   * Aqui el veredicto es el codigo de estado, y un estado de error NO lanza:
+   * "el sistema no esta sano" es una respuesta valida, no un fallo de la llamada.
+   */
+  async requestHead(method: string, path: string): Promise<{ ok: boolean; status: number }> {
+    const response = await this._fetch(`${this.baseUrl}${path}`, {
+      method,
+      headers: { "X-API-Key": this.apiKey },
+    });
+    return { ok: response.ok, status: response.status };
   }
 
   /**

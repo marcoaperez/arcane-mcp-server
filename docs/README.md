@@ -11,6 +11,11 @@ enlaza desde aquí.
 
 ## Balances de fase
 
+- [F2 (observabilidad y núcleo del host) — 2026-08-17](balances/2026-08-16-f2.md)
+  — 13 tools nuevas, cinco defectos de fidelidad al spec cazados por la revisión,
+  una contradicción interna del plan, un test tautológico corregido, un bug del
+  upstream diagnosticado y las cifras medidas (144 tests, 19 e2e, 81 tools,
+  78/347 operaciones cubiertas).
 - [F0 (cimientos) + F1 (visibilidad) — 2026-08-16](balances/2026-08-16-f0-f1.md)
   — qué se entregó, los tres hallazgos que no estaban en el plan, los datos heredados
   que resultaron falsos, y qué queda pendiente antes de F2.

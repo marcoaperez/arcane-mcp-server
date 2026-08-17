@@ -12,6 +12,9 @@ import { registerNetworkTools } from "../tools/networks";
 import { registerTemplateTools } from "../tools/templates";
 import { registerSystemTools } from "../tools/system";
 import { registerVolumeFileTools } from "../tools/volume-files";
+import { registerActivityTools } from "../tools/activities";
+import { registerEventTools } from "../tools/events";
+import { registerJobTools } from "../tools/jobs";
 
 type MockedFunction<T extends (...args: any[]) => any> = {
   (...args: Parameters<T>): ReturnType<T>;
@@ -483,6 +486,221 @@ describe("MCP Tools", () => {
     });
   });
 
+  describe("activity tools", () => {
+    const clienteConActivities = () => {
+      const mockClient = createMockClient() as any;
+      mockClient.activities = {
+        list: vi.fn().mockResolvedValue({ success: true, data: [], pagination: { totalItems: 0 } }),
+        get: vi.fn().mockResolvedValue({
+          success: true,
+          data: { activity: { id: "act1", status: "failed" }, messages: [] },
+        }),
+        cancel: vi.fn().mockResolvedValue({
+          success: true,
+          data: {
+            id: "act1",
+            status: "cancelled",
+            type: "deploy",
+            environmentId: "env1",
+            startedAt: "2026-08-16T10:00:00Z",
+            createdAt: "2026-08-16T10:00:00Z",
+          },
+        }),
+      };
+      return mockClient;
+    };
+
+    it("arcane_activity_list pasa los filtros al cliente", async () => {
+      const mockClient = clienteConActivities();
+      const server = createMockServer();
+      registerActivityTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_activity_list");
+      await handler({ environmentId: "env1", status: "failed", limit: 10 });
+
+      expect(mockClient.activities.list).toHaveBeenCalledWith("env1", {
+        search: undefined,
+        status: "failed",
+        type: undefined,
+        resourceType: undefined,
+        limit: 10,
+      });
+    });
+
+    it("arcane_activity_get resuelve un activityId", async () => {
+      const mockClient = clienteConActivities();
+      const server = createMockServer();
+      registerActivityTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_activity_get");
+      const result = await handler({ environmentId: "env1", activityId: "act1" });
+
+      expect(mockClient.activities.get).toHaveBeenCalledWith("env1", "act1", undefined);
+      expect(result.isError).toBeUndefined();
+    });
+
+    it("arcane_activity_get pasa limit al cliente para no truncar el log en el default de 500 del servidor", async () => {
+      const mockClient = clienteConActivities();
+      const server = createMockServer();
+      registerActivityTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_activity_get");
+      await handler({ environmentId: "env1", activityId: "act1", limit: 2000 });
+
+      expect(mockClient.activities.get).toHaveBeenCalledWith("env1", "act1", 2000);
+    });
+
+    it("arcane_activity_cancel devuelve isError con success:false", async () => {
+      const mockClient = clienteConActivities();
+      mockClient.activities.cancel.mockResolvedValue({
+        success: false,
+        data: {
+          id: "act1",
+          status: "success",
+          error: "already finished",
+          type: "deploy",
+          environmentId: "env1",
+          startedAt: "2026-08-16T10:00:00Z",
+          createdAt: "2026-08-16T10:00:00Z",
+        },
+      });
+      const server = createMockServer();
+      registerActivityTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_activity_cancel");
+      const result = await handler({ environmentId: "env1", activityId: "act1" });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("already finished");
+    });
+
+    it("arcane_activity_cancel refleja el estado real de la activity al tener exito", async () => {
+      const mockClient = clienteConActivities();
+      const server = createMockServer();
+      registerActivityTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_activity_cancel");
+      const result = await handler({ environmentId: "env1", activityId: "act1" });
+
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0].text).toContain("cancelled");
+    });
+  });
+
+  describe("event tools", () => {
+    const clienteConEvents = () => {
+      const mockClient = createMockClient() as any;
+      mockClient.events = {
+        list: vi.fn().mockResolvedValue({ success: true, data: [], pagination: { totalItems: 0 } }),
+        stats: vi.fn().mockResolvedValue({
+          success: true,
+          data: { total: 3, info: 1, success: 1, warning: 0, error: 1 },
+        }),
+      };
+      return mockClient;
+    };
+
+    it("arcane_event_list pasa environmentId como filtro, sin resolverlo", async () => {
+      const mockClient = clienteConEvents();
+      const server = createMockServer();
+      registerEventTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_event_list");
+      await handler({ environmentId: "env1", severity: "error" });
+
+      expect(mockClient.events.list).toHaveBeenCalledWith({
+        environmentId: "env1",
+        severity: "error",
+        type: undefined,
+        search: undefined,
+        limit: undefined,
+      });
+    });
+
+    it("arcane_event_stats devuelve los recuentos", async () => {
+      const mockClient = clienteConEvents();
+      const server = createMockServer();
+      registerEventTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_event_stats");
+      const result = await handler({});
+
+      expect(mockClient.events.stats).toHaveBeenCalled();
+      expect(result.content[0].text).toContain("3");
+    });
+  });
+
+  describe("job tools", () => {
+    const clienteConJobs = () => {
+      const mockClient = createMockClient() as any;
+      mockClient.jobs = {
+        list: vi.fn().mockResolvedValue({
+          isAgent: false,
+          jobs: [{ id: "auto-heal", name: "Auto Heal", canRunManually: true }],
+        }),
+        run: vi.fn().mockResolvedValue({ success: true, message: "Job started" }),
+        getSchedules: vi.fn().mockResolvedValue({ autoHealInterval: "30s" }),
+        // El spec declara BaseApiResponseJobscheduleConfig: {success, data: JobSchedulesConfig}.
+        // No hay campo `message`; el mock refleja la forma real de la API.
+        updateSchedules: vi.fn().mockResolvedValue({
+          success: true,
+          data: { autoHealInterval: "45s", autoUpdateInterval: "24h" },
+        }),
+      };
+      return mockClient;
+    };
+
+    it("arcane_job_list serializa el contenido de {jobs}, no el sobre", async () => {
+      const mockClient = clienteConJobs();
+      const server = createMockServer();
+      registerJobTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_job_list");
+      const result = await handler({ environmentId: "env1" });
+
+      expect(mockClient.jobs.list).toHaveBeenCalledWith("env1");
+      expect(result.content[0].text).toContain("auto-heal");
+    });
+
+    it("arcane_job_run devuelve isError con success:false", async () => {
+      const mockClient = clienteConJobs();
+      mockClient.jobs.run.mockResolvedValue({ success: false, message: "prerequisites not met" });
+      const server = createMockServer();
+      registerJobTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_job_run");
+      const result = await handler({ environmentId: "env1", jobId: "analytics-heartbeat" });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("prerequisites not met");
+    });
+
+    it("arcane_job_schedules_update envia solo los intervalos indicados y devuelve la config aplicada", async () => {
+      const mockClient = clienteConJobs();
+      const server = createMockServer();
+      registerJobTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_job_schedules_update");
+      const result = await handler({ environmentId: "env1", autoHealInterval: "45s" });
+
+      expect(mockClient.jobs.updateSchedules).toHaveBeenCalledWith("env1", { autoHealInterval: "45s" });
+      // La tool devuelve la configuracion aplicada que responde el servidor, no un texto fijo.
+      expect(result.content[0].text).toContain("45s");
+    });
+
+    it("arcane_job_schedules_get devuelve la configuracion", async () => {
+      const mockClient = clienteConJobs();
+      const server = createMockServer();
+      registerJobTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_job_schedules_get");
+      const result = await handler({ environmentId: "env1" });
+
+      expect(mockClient.jobs.getSchedules).toHaveBeenCalledWith("env1");
+      expect(result.content[0].text).toContain("30s");
+    });
+  });
+
   describe("network tools", () => {
     it("registers arcane_network_list tool", () => {
       const mockClient = createMockClient();
@@ -654,6 +872,131 @@ describe("MCP Tools", () => {
 
       expect(mockClient.system.version).toHaveBeenCalled();
       expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
+    });
+  });
+
+  describe("system tools (F2)", () => {
+    const clienteConSystem = () => {
+      const mockClient = createMockClient() as any;
+      mockClient.system = {
+        version: vi.fn(),
+        dockerInfo: vi.fn().mockResolvedValue({ success: true, ServerVersion: "29.2.1", Containers: 16 }),
+        health: vi.fn().mockResolvedValue({ ok: true, status: 200 }),
+        prune: vi.fn().mockResolvedValue({ success: true, data: { success: true, spaceReclaimed: 1024 } }),
+        convert: vi.fn().mockResolvedValue({
+          success: true,
+          dockerCompose: "services:\n  nginx:",
+          envVars: "",
+          serviceName: "nginx",
+        }),
+      };
+      return mockClient;
+    };
+
+    it("arcane_system_health traduce el estado a un mensaje legible", async () => {
+      const mockClient = clienteConSystem();
+      const server = createMockServer();
+      registerSystemTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_system_health");
+      const result = await handler({ environmentId: "env1" });
+
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0].text).toContain("healthy");
+    });
+
+    it("arcane_system_health marca isError cuando el estado no es 2xx", async () => {
+      const mockClient = clienteConSystem();
+      mockClient.system.health.mockResolvedValue({ ok: false, status: 503 });
+      const server = createMockServer();
+      registerSystemTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_system_health");
+      const result = await handler({ environmentId: "env1" });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("503");
+    });
+
+    it("arcane_system_health distingue el 500 conocido de Arcane 2.8.0 de un fallo real de Docker", async () => {
+      // Contra Arcane 2.8.0 este endpoint devuelve 500 SIEMPRE (SystemHealthOutput.Status
+      // nunca se rellena en el handler), incluso con Docker perfectamente sano. Traducirlo
+      // sin mas a "System is not healthy" lleva al modelo a intentar remediar un Docker que
+      // no esta roto. El mensaje debe dejar claro que es un fallo conocido del endpoint, no
+      // un veredicto sobre Docker, y apuntar a arcane_system_docker_info para comprobarlo.
+      const mockClient = clienteConSystem();
+      mockClient.system.health.mockResolvedValue({ ok: false, status: 500 });
+      const server = createMockServer();
+      registerSystemTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_system_health");
+      const result = await handler({ environmentId: "env1" });
+
+      expect(result.content[0].text).not.toContain("not healthy");
+      expect(result.content[0].text.toLowerCase()).toContain("known");
+      expect(result.content[0].text).toContain("2.8.0");
+      expect(result.content[0].text).toContain("arcane_system_docker_info");
+    });
+
+    it("arcane_system_prune solo envia los recursos indicados", async () => {
+      const mockClient = clienteConSystem();
+      const server = createMockServer();
+      registerSystemTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_system_prune");
+      await handler({ environmentId: "env1", buildCache: "dangling" });
+
+      expect(mockClient.system.prune).toHaveBeenCalledWith("env1", { buildCache: { mode: "dangling" } });
+    });
+
+    it("arcane_system_prune sin ningun recurso devuelve isError en vez de podar todo", async () => {
+      const mockClient = clienteConSystem();
+      const server = createMockServer();
+      registerSystemTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_system_prune");
+      const result = await handler({ environmentId: "env1" });
+
+      expect(result.isError).toBe(true);
+      expect(mockClient.system.prune).not.toHaveBeenCalled();
+    });
+
+    it("arcane_system_prune propaga success:false del host como isError", async () => {
+      const mockClient = clienteConSystem();
+      mockClient.system.prune.mockResolvedValue({
+        success: false,
+        data: { success: false, spaceReclaimed: 0, errors: ["permission denied"] },
+      });
+      const server = createMockServer();
+      registerSystemTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_system_prune");
+      const result = await handler({ environmentId: "env1", buildCache: "dangling" });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("permission denied");
+    });
+
+    it("arcane_system_convert devuelve el compose", async () => {
+      const mockClient = clienteConSystem();
+      const server = createMockServer();
+      registerSystemTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_system_convert");
+      const result = await handler({ environmentId: "env1", dockerRunCommand: "docker run -d nginx" });
+
+      expect(result.content[0].text).toContain("services:");
+    });
+
+    it("arcane_system_docker_info devuelve la informacion del demonio", async () => {
+      const mockClient = clienteConSystem();
+      const server = createMockServer();
+      registerSystemTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_system_docker_info");
+      const result = await handler({ environmentId: "env1" });
+
+      expect(result.content[0].text).toContain("29.2.1");
     });
   });
 });

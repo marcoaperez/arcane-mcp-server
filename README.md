@@ -1,16 +1,16 @@
 # Arcane Docker MCP Server
 
 > **Fork mantenido activamente por [Taiko Solutions](https://taikosolutions.com).**
-> Verificado contra **Arcane v2.8.0**: las **63** combinaciones método+ruta que usa el
-> cliente existen en el spec de la instancia, sin ausencias. Origen del fork:
-> [`cougz/arcane-mcp-server`](https://github.com/cougz/arcane-mcp-server), inactivo
-> desde marzo de 2026.
+> Verificado contra **Arcane v2.8.0**: las **78** combinaciones método+ruta que usa el
+> cliente existen en el spec de la instancia (de 347 operaciones), sin ausencias.
+> Origen del fork: [`cougz/arcane-mcp-server`](https://github.com/cougz/arcane-mcp-server),
+> inactivo desde marzo de 2026.
 >
 > | | |
 > |---|---|
 > | **Compatibilidad** | Arcane v2.x (probado contra v2.8.0) |
 > | **Spec de referencia** | [`openapi.txt`](openapi.txt) — descargado de la instancia con `npm run update-api-spec` |
-> | **Tools** | 68 |
+> | **Tools** | 81 |
 > | **Documentación** | [`docs/`](docs/README.md) |
 
 A Model Context Protocol (MCP) server for managing Docker environments through [Arcane](https://getarcane.app/), deployed on Cloudflare Workers.
@@ -32,7 +32,7 @@ Built on Cloudflare Workers using the official Cloudflare `agents` package, this
 | Compatibilidad de shapes | Escrito contra Arcane v1.x | Interfaces alineadas con v2.8.0 y auditadas por `scripts/audit-schema-drift.mjs` |
 | Despliegue | Solo Cloudflare Workers | Cloudflare Workers **o** contenedor Docker autoalojado (`docker-compose.yml` + `wrangler.local.jsonc`) |
 | Cliente | `baseUrl` fijo hacia el binding VPC | Modo dual: binding VPC en Workers, URL real en local/Docker |
-| Verificación | Sin runner de tests funcional | 111 tests unitarios + 6 tests e2e contra una instancia Arcane real |
+| Verificación | Sin runner de tests funcional | 144 tests unitarios + 19 tests e2e contra una instancia Arcane real |
 
 El fix de los endpoints NDJSON se ha ofrecido al upstream como PR autocontenido.
 
@@ -40,7 +40,7 @@ El fix de los endpoints NDJSON se ha ofrecido al upstream como PR autocontenido.
 
 <!-- BEGIN TOOLS -->
 
-Las **68** tools que expone el servidor, agrupadas por dominio. Esta tabla la
+Las **81** tools que expone el servidor, agrupadas por dominio. Esta tabla la
 genera `npm run gen-tools-table` a partir de `src/tools/`: las descripciones y los
 parámetros son los que registra el código, no una copia mantenida a mano.
 
@@ -176,11 +176,39 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | `arcane_gitops_sync_get_status` | Get the current sync status of a GitOps sync. | `environmentId?`, `environmentName?`, `syncId?`, `syncName?` |
 | `arcane_gitops_sync_perform_sync` | Manually trigger a sync for a GitOps sync. | `environmentId?`, `environmentName?`, `syncId?`, `syncName?` |
 
-### System (1)
+### System (5)
 
 | Tool | Description | Inputs |
 |---|---|---|
 | `arcane_version` | Get the Arcane server version information. | — |
+| `arcane_system_docker_info` | Get Docker daemon and host information: versions, container and image counts, storage driver, resources. | `environmentId?`, `environmentName?` |
+| `arcane_system_health` | Check whether the Docker system of an environment is healthy. Known issue: against Arcane 2.8.0 this endpoint always returns HTTP 500 (its Status field is never populated by the upstream handler), regardless of Docker's actual health — a 500 here is a known bug, not a verdict on Docker. Use arcane_system_docker_info to check Docker's status directly. | `environmentId?`, `environmentName?` |
+| `arcane_system_prune` | Prune unused Docker resources. You must explicitly choose which resources to prune; nothing is pruned by default. | `environmentId?`, `environmentName?`, `buildCache?`, `images?`, `containers?`, `volumes?`, `networks?` |
+| `arcane_system_convert` | Convert a docker run command into a Docker Compose service definition. | `environmentId?`, `environmentName?`, `dockerRunCommand` |
+
+### Activities (3)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_activity_list` | List background activities (deployments, pulls, scans) with optional filters. | `environmentId?`, `environmentName?`, `status?`, `type?`, `resourceType?`, `search?`, `limit?` |
+| `arcane_activity_get` | Get a background activity with its full message log. Use this to resolve the activityId returned by deploy, redeploy and pull operations. The server truncates the message log to 500 entries by default; pass limit to raise that. | `environmentId?`, `environmentName?`, `activityId`, `limit?` |
+| `arcane_activity_cancel` | Cancel a running background activity. | `environmentId?`, `environmentName?`, `activityId`, `requestedBy?` |
+
+### Events (2)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_event_list` | List audit events. Without environmentId returns events from all environments. | `environmentId?`, `severity?`, `type?`, `search?`, `limit?` |
+| `arcane_event_stats` | Get event counts by severity across all environments. | — |
+
+### Jobs (4)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_job_list` | List background jobs with their schedule, whether they are enabled, and whether they can be run manually. | `environmentId?`, `environmentName?` |
+| `arcane_job_run` | Run a background job immediately. Jobs with unmet prerequisites will not execute. | `environmentId?`, `environmentName?`, `jobId` |
+| `arcane_job_schedules_get` | Get the configured intervals for scheduled background jobs. | `environmentId?`, `environmentName?` |
+| `arcane_job_schedules_update` | Update one or more scheduled job intervals. Only the intervals provided are changed. | `environmentId?`, `environmentName?`, `autoHealInterval?`, `autoUpdateInterval?`, `dockerClientRefreshInterval?`, `environmentHealthInterval?`, `eventCleanupInterval?`, `expiredSessionsCleanupInterval?`, `pollingInterval?`, `scheduledPruneInterval?`, `vulnerabilityScanInterval?` |
 
 <!-- END TOOLS -->
 
