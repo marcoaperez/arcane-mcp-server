@@ -2,12 +2,12 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { ArcaneClient } from "../arcane-client";
 import { resolveEnvironmentId } from "./resolve";
-import { withErrors } from "./respond";
+import { withErrors, textResponse } from "./respond";
 
 export function registerVolumeFileTools(server: McpServer, client: ArcaneClient): void {
   server.tool(
     "arcane_volume_browse",
-    "List the full file tree of a Docker volume.",
+    "List the file tree of a Docker volume. The server may truncate the tree: check fileTreeTruncated before concluding a file does not exist.",
     {
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
@@ -16,9 +16,26 @@ export function registerVolumeFileTools(server: McpServer, client: ArcaneClient)
     withErrors(async ({ environmentId, environmentName, volumeName }) => {
       const envId = await resolveEnvironmentId(client, environmentId, environmentName);
       const result = await client.volumeFiles.getWorkspace(envId, volumeName);
-      return {
-        content: [{ type: "text", text: JSON.stringify(result.data, null, 2) }],
-      };
+
+      // `files` admite null en el spec; sin esto se serializaria como el texto
+      // "null", que no es ni una lista vacia ni un error. Misma deuda que tuvo
+      // arcane_job_list.
+      const cuerpo = { ...result.data, files: result.data.files ?? [] };
+      const texto = JSON.stringify(cuerpo, null, 2);
+
+      // El spec declara fileTreeTruncated como obligatorio: la propia API
+      // contempla devolver un arbol recortado. Enterrado entre cientos de
+      // entradas es facil de saltarse leyendo, asi que cuando ocurre se dice
+      // en prosa, igual que hace listResponse con las listas paginadas.
+      if (result.data.fileTreeTruncated) {
+        return textResponse(
+          "This file tree is TRUNCATED: it does not list every file in the volume. " +
+            "Do not conclude a file is absent from what is missing here.\n" +
+            texto,
+        );
+      }
+
+      return textResponse(texto);
     }),
   );
 

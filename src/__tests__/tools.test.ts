@@ -510,6 +510,61 @@ describe("MCP Tools", () => {
       expect(result.isError).toBeUndefined();
     });
 
+    it("arcane_volume_browse avisa en prosa cuando el arbol viene recortado", async () => {
+      const mockClient = clienteConWorkspace();
+      mockClient.volumeFiles.getWorkspace.mockResolvedValue({
+        success: true,
+        data: {
+          files: [{ path: "a.txt", size: 1 }],
+          fileTreeRevision: "rev-abc",
+          fileTreeTruncated: true,
+        },
+      });
+      const server = createMockServer();
+      registerVolumeFileTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_volume_browse");
+      const result = await handler({ environmentId: "env1", volumeName: "data-vol" });
+
+      const [primera] = result.content[0].text.split("\n");
+      expect(primera).toBe(
+        "This file tree is TRUNCATED: it does not list every file in the volume. Do not conclude a file is absent from what is missing here.",
+      );
+      // El cuerpo estructurado se conserva intacto detras del aviso.
+      expect(JSON.parse(result.content[0].text.split("\n").slice(1).join("\n")).fileTreeTruncated).toBe(true);
+    });
+
+    it("arcane_volume_browse no antepone nada cuando el arbol esta completo", async () => {
+      const mockClient = clienteConWorkspace();
+      mockClient.volumeFiles.getWorkspace.mockResolvedValue({
+        success: true,
+        data: { files: [{ path: "a.txt", size: 1 }], fileTreeRevision: "rev-abc", fileTreeTruncated: false },
+      });
+      const server = createMockServer();
+      registerVolumeFileTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_volume_browse");
+      const result = await handler({ environmentId: "env1", volumeName: "data-vol" });
+
+      expect(result.content[0].text.startsWith("{")).toBe(true);
+      expect(result.content[0].text).not.toContain("TRUNCATED");
+    });
+
+    it("arcane_volume_browse trata files:null como lista vacia, nunca el texto 'null'", async () => {
+      const mockClient = clienteConWorkspace();
+      mockClient.volumeFiles.getWorkspace.mockResolvedValue({
+        success: true,
+        data: { files: null, fileTreeRevision: "rev-abc", fileTreeTruncated: false },
+      });
+      const server = createMockServer();
+      registerVolumeFileTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_volume_browse");
+      const result = await handler({ environmentId: "env1", volumeName: "data-vol" });
+
+      expect(JSON.parse(result.content[0].text).files).toEqual([]);
+    });
+
     it("arcane_volume_upload_file compone relativePath a partir de path y filename", async () => {
       const mockClient = clienteConWorkspace();
       const server = createMockServer();
