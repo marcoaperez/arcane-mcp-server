@@ -955,6 +955,25 @@ describe("ArcaneClient", () => {
         expect.objectContaining({ method: "POST" })
       );
     });
+
+    it(".get(envId, activityId) codifica un activityId hostil en vez de dejarlo saltar de ruta", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { activity: { id: "act1" }, messages: [] } }),
+      } as Response);
+
+      // Un activityId adversario que, sin encodeURIComponent, escaparia de
+      // /activities/ y aterrizaria en /api/users (dominio de administracion
+      // fuera de la superficie de escritura del MCP).
+      await client.activities.get("env123", "../../../users?");
+
+      const calledUrl = mockFetch.mock.calls[0][0] as string;
+      expect(calledUrl).toContain("/activities/");
+      expect(calledUrl).not.toContain("/api/users");
+      expect(calledUrl).toBe(
+        "http://localhost:3552/api/environments/env123/activities/..%2F..%2F..%2Fusers%3F"
+      );
+    });
   });
 
   describe("events", () => {
