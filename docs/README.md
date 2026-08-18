@@ -19,6 +19,15 @@ enlaza desde aquí.
 
 ## Balances de fase
 
+- [F3 (actualizaciones de imágenes) — 2026-08-17](balances/2026-08-17-f3.md)
+  — siete tools nuevas (estado de actualizaciones e imágenes, y `updater` con
+  `resourceIds` obligatorio), cierre de las tres deudas diferidas por F2
+  (`usedBy`, `updateInfo`, el filtro `updates`), y las cifras medidas (262
+  tests, 46 e2e, 88 tools, 86/249 operaciones cubiertas).
+- [Coherencia de la superficie de listado — 2026-08-17](balances/2026-08-17-coherencia-listado.md)
+  — uniforma el contrato de salida de las trece tools `_list`, corrige un bug
+  de paginación sin `sort` en Arcane 2.8.0 (publicado upstream) y deja 228
+  tests unitarios y 36 e2e en verde.
 - [F2 (observabilidad y núcleo del host) — 2026-08-17](balances/2026-08-16-f2.md)
   — 13 tools nuevas, cinco defectos de fidelidad al spec cazados por la revisión,
   una contradicción interna del plan, un test tautológico corregido, un bug del
@@ -36,15 +45,22 @@ enlaza desde aquí.
   — causa raíz del redeploy de GitOps roto, su arreglo, y las 9 operaciones que 2.8.0
   elimina (2 de ellas en uso, migradas de `/browse` a `/workspace`).
 
-### Issues redactados para el upstream (sin publicar)
+### Issues publicados en el upstream
 
 - [Paginación sin `sort` pierde elementos (2026-08-17)](auditorias/2026-08-17-paginacion-sin-sort-upstream.md)
   — recorrer una colección con `start` sin orden explícito devuelve un conjunto
   incompleto y no determinista. Es el motivo de que `collectAllPages` exija `sort`.
+  Publicado como [#3645](https://github.com/getarcaneapp/arcane/issues/3645).
+  Verificado antes de publicar: se reproduce en `volumes` (18–28 de 32) y en
+  `networks` (7–10 de 13), **no** en `containers`, `projects`, `gitops-syncs` ni
+  `images`, al contrario de lo que decía el borrador.
 - [`image_update_check` falla siempre (2026-08-17)](auditorias/2026-08-17-image-update-check-arcane-local-upstream.md)
   — Arcane no reconoce como locales las imágenes que ella misma etiqueta con el
   prefijo `arcane.local/`, así que el job programado falla en todas sus ejecuciones.
   No bloquea F3: los datos de actualizaciones sí llegan.
+  Publicado como [#3640](https://github.com/getarcaneapp/arcane/issues/3640), con
+  un comentario que precisa el mecanismo real (desajuste con `build_image_refs_json`,
+  no el prefijo en sí).
 
 ## Specs y planes
 

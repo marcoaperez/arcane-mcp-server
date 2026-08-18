@@ -1,8 +1,10 @@
 # Arcane Docker MCP Server
 
 > **Fork mantenido activamente por [Taiko Solutions](https://taikosolutions.com).**
-> Verificado contra **Arcane v2.8.0**: las **78** combinaciones método+ruta que usa el
-> cliente existen en el spec de la instancia (de 347 operaciones), sin ausencias.
+> Verificado contra **Arcane v2.8.0**: las **86** combinaciones método+ruta que usa el
+> cliente existen en el spec de la instancia, sin ausencias — **86 de las 249**
+> operaciones que este fork pretende cubrir (denominador honesto, ver
+> [criterio de exposición](docs/arquitectura/criterio-exposicion.md); 86 de 347 en bruto).
 > Origen del fork: [`cougz/arcane-mcp-server`](https://github.com/cougz/arcane-mcp-server),
 > inactivo desde marzo de 2026.
 >
@@ -10,7 +12,7 @@
 > |---|---|
 > | **Compatibilidad** | Arcane v2.x (probado contra v2.8.0) |
 > | **Spec de referencia** | [`openapi.txt`](openapi.txt) — descargado de la instancia con `npm run update-api-spec` |
-> | **Tools** | 81 |
+> | **Tools** | 88 |
 > | **Documentación** | [`docs/`](docs/README.md) |
 
 A Model Context Protocol (MCP) server for managing Docker environments through [Arcane](https://getarcane.app/), deployed on Cloudflare Workers.
@@ -32,7 +34,7 @@ Built on Cloudflare Workers using the official Cloudflare `agents` package, this
 | Compatibilidad de shapes | Escrito contra Arcane v1.x | Interfaces alineadas con v2.8.0 y auditadas por `scripts/audit-schema-drift.mjs` |
 | Despliegue | Solo Cloudflare Workers | Cloudflare Workers **o** contenedor Docker autoalojado (`docker-compose.yml` + `wrangler.local.jsonc`) |
 | Cliente | `baseUrl` fijo hacia el binding VPC | Modo dual: binding VPC en Workers, URL real en local/Docker |
-| Verificación | Sin runner de tests funcional | 214 tests unitarios + 32 tests e2e contra una instancia Arcane real |
+| Verificación | Sin runner de tests funcional | 262 tests unitarios + 46 tests e2e contra una instancia Arcane real |
 
 El fix de los endpoints NDJSON se ha ofrecido al upstream como PR autocontenido.
 
@@ -40,7 +42,7 @@ El fix de los endpoints NDJSON se ha ofrecido al upstream como PR autocontenido.
 
 <!-- BEGIN TOOLS -->
 
-Las **81** tools que expone el servidor, agrupadas por dominio. Esta tabla la
+Las **88** tools que expone el servidor, agrupadas por dominio. Esta tabla la
 genera `npm run gen-tools-table` a partir de `src/tools/`: las descripciones y los
 parámetros son los que registra el código, no una copia mantenida a mano.
 
@@ -58,7 +60,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_stack_list` | List Docker Compose stacks (projects) in an environment. Returns pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `status?`, `archived?`, `tags?` |
+| `arcane_stack_list` | List Docker Compose stacks (projects) in an environment. Returns pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `status?`, `archived?`, `tags?`, `updates?` |
 | `arcane_stack_get` | Get details of a specific Docker Compose stack by ID or name. | `environmentId?`, `environmentName?`, `stackId?`, `stackName?` |
 | `arcane_stack_deploy` | Deploy a new Docker Compose stack to an environment. | `environmentId?`, `environmentName?`, `name`, `composeContent`, `envContent?` |
 | `arcane_stack_update` | Update an existing Docker Compose stack. | `environmentId?`, `environmentName?`, `stackId?`, `stackName?`, `name?`, `composeContent?`, `envContent?` |
@@ -81,7 +83,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_container_list` | List Docker containers in an environment. Returns pagination and running/stopped counts; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `includeInternal?`, `standalone?` |
+| `arcane_container_list` | List Docker containers in an environment. Returns pagination and running/stopped counts; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `includeInternal?`, `standalone?`, `updates?` |
 | `arcane_container_get` | Get details of a specific Docker container by ID or name. | `environmentId?`, `environmentName?`, `containerId?`, `containerName?` |
 | `arcane_container_start` | Start a Docker container. | `environmentId?`, `environmentName?`, `containerId?`, `containerName?` |
 | `arcane_container_stop` | Stop a Docker container. | `environmentId?`, `environmentName?`, `containerId?`, `containerName?` |
@@ -100,7 +102,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_image_list` | List Docker images in an environment. Returns pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `inUse?` |
+| `arcane_image_list` | List Docker images in an environment. Returns pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `inUse?`, `updates?` |
 | `arcane_image_pull` | Pull a Docker image in an environment. | `environmentId?`, `environmentName?`, `imageName` |
 | `arcane_image_remove` | Remove a Docker image from an environment. | `environmentId?`, `environmentName?`, `imageId` |
 | `arcane_image_prune` | Remove unused Docker images from an environment. | `environmentId?`, `environmentName?` |
@@ -206,9 +208,26 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | Tool | Description | Inputs |
 |---|---|---|
 | `arcane_job_list` | List background jobs with their schedule, whether they are enabled, and whether they can be run manually. | `environmentId?`, `environmentName?` |
-| `arcane_job_run` | Run a background job immediately. Jobs with unmet prerequisites will not execute. | `environmentId?`, `environmentName?`, `jobId` |
+| `arcane_job_run` | Run a background job immediately. Jobs with unmet prerequisites will not execute. Some jobs have broad side effects when run this way: image-polling checks every image in the environment against its registry (the mass sweep this server otherwise does not expose), and auto-update would mutate running containers if Arcane's autoUpdate setting is ever enabled. Check what a job does with arcane_job_list before running it. | `environmentId?`, `environmentName?`, `jobId` |
 | `arcane_job_schedules_get` | Get the configured intervals for scheduled background jobs. | `environmentId?`, `environmentName?` |
 | `arcane_job_schedules_update` | Update one or more scheduled job intervals. Only the intervals provided are changed. Two of them govern background jobs with real side effects: scheduledPruneInterval controls how often unused Docker resources are automatically destroyed, and autoUpdateInterval controls how often running containers are automatically checked and mutated to newer images. | `environmentId?`, `environmentName?`, `autoHealInterval?`, `autoUpdateInterval?`, `dockerClientRefreshInterval?`, `environmentHealthInterval?`, `eventCleanupInterval?`, `expiredSessionsCleanupInterval?`, `pollingInterval?`, `scheduledPruneInterval?`, `vulnerabilityScanInterval?` |
+
+### Image updates (4)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_image_update_summary` | Get the aggregate image update counts for an environment: how many images there are, how many have updates available, and how many failed to check. Cheap: reads stored results, does not query any registry. | `environmentId?`, `environmentName?` |
+| `arcane_image_update_status` | Get the STORED update information for specific image references. Does not query any registry, so it is fast and safe to call repeatedly. The response map can omit some of the requested references, and the response does not say why — the tool flags this in prose when it happens. Use arcane_image_update_check for a fresh answer on the omitted references. | `environmentId?`, `environmentName?`, `imageRefs` |
+| `arcane_image_update_check` | Check ONE image for updates by querying its registry LIVE. Slower than arcane_image_update_status and subject to registry rate limits, so prefer the stored status unless you need a fresh answer. Accepts an image reference or an image ID. | `environmentId?`, `environmentName?`, `imageRef?`, `imageId?` |
+| `arcane_image_update_check_batch` | Check a specific LIST of images for updates by querying their registries LIVE. Requires the list: checking every image at once is not exposed, because a scheduled job already does that sweep hourly. | `environmentId?`, `environmentName?`, `imageRefs` |
+
+### Updater (3)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_updater_status` | Report which containers and projects are being updated right now. | `environmentId?`, `environmentName?` |
+| `arcane_updater_history` | List past automatic update runs. This endpoint reports no total count and cannot be paged, so the list may be incomplete: raise limit if you need to be sure you are seeing everything. | `environmentId?`, `environmentName?`, `limit?` |
+| `arcane_updater_run` | Apply pending updates to SPECIFIC containers or projects, recreating them. You must name the targets: updating everything at once is deliberately not available. Pass dryRun to see what would happen without changing anything. | `environmentId?`, `environmentName?`, `resourceIds`, `type?`, `dryRun?`, `forceUpdate?` |
 
 <!-- END TOOLS -->
 

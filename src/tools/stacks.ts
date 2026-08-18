@@ -23,10 +23,11 @@ export function registerStackTools(server: McpServer, client: ArcaneClient): voi
       status: z.string().optional().describe("Filter by status, comma-separated: running, stopped, partially running"),
       archived: z.string().optional().describe("Archived filter: 'true' for only archived, 'all' to include them. Excluded by default"),
       tags: z.string().optional().describe("Filter by tag names, comma-separated, OR semantics"),
+      updates: z.string().optional().describe("Filter by update status: has_update, up_to_date, error or unknown"),
     },
-    withErrors(async ({ environmentId, environmentName, search, sort, order, start, limit, status, archived, tags }) => {
+    withErrors(async ({ environmentId, environmentName, search, sort, order, start, limit, status, archived, tags, updates }) => {
       const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-      const result = await client.stacks.list(envId, { search, sort, order, start, limit, status, archived, tags });
+      const result = await client.stacks.list(envId, { search, sort, order, start, limit, status, archived, tags, updates });
       return listResponse(result, "stacks");
     }),
   );

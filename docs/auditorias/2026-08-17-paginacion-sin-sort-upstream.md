@@ -1,8 +1,27 @@
 # Issue para el upstream: paginación sin `sort` pierde/repite elementos
 
 - **Fecha:** 2026-08-17
-- **Estado:** redactado, **sin publicar** (decisión del propietario del proyecto)
+- **Estado:** **publicado** como [#3645](https://github.com/getarcaneapp/arcane/issues/3645) el 2026-08-17
 - **Repositorio destino:** [getarcaneapp/arcane](https://github.com/getarcaneapp/arcane)
+
+> **Corrección aplicada antes de publicar (2026-08-17).** Al verificar los pasos de
+> reproducción contra la instancia real, el alcance que afirmaba el borrador resultó
+> ser incorrecto. Seis recorridos completos por endpoint, con reintentos y
+> descartando las pasadas con alguna página irrecuperable (0 descartes):
+>
+> | endpoint | decía el borrador | medido |
+> | --- | --- | --- |
+> | `volumes` (32 items) | falla | **falla**, 18–28 únicos de 32 |
+> | `networks` (13 items) | no lo mencionaba | **falla más fuerte**, 7–10 de 13 |
+> | `containers` (16) | falla | 16/16 en las 6 pasadas |
+> | `projects` (9) | falla | 9/9 en las 6 pasadas |
+> | `gitops-syncs` (8) | falla | 8/8 en las 6 pasadas |
+> | `images` (18) | no lo mencionaba | 18/18 en las 6 pasadas |
+>
+> Se usaron páginas de 2 para maximizar el número de páginas (4–9 por endpoint) y
+> darle la máxima oportunidad de reproducirse. El texto publicado afirma sólo lo
+> reproducido, añade `networks` y describe la metodología de reintentos. El texto
+> en inglés de más abajo es el del **borrador original**, no el publicado.
 - **Sería el tercer issue** que este fork devuelve al upstream, tras:
   - [#3606](https://github.com/getarcaneapp/arcane/issues/3606) — redeploy de GitOps roto (ya reportado por otra persona, cerrado)
   - [#3638](https://github.com/getarcaneapp/arcane/issues/3638) — `HEAD /environments/{id}/system/health` devuelve 500 siempre

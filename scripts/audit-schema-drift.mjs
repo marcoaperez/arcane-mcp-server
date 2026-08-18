@@ -45,6 +45,15 @@ const MAP = {
   VolumeUsageCounts: "DockerVolumeVolumeUsageCountsData",
   NetworkUsageCounts: "NetworkUsageCounts",
   GitopsSyncCounts: "GitopsSyncCounts",
+  ImageUpdateResponse: "ImageupdateResponse",
+  ImageUpdateInfo: "ImageUpdateInfo",
+  ImageUpdateSummary: "ImageupdateSummary",
+  ImageUsedBy: "ImageUsedBy",
+  ProjectUpdateInfo: "ProjectUpdateInfo",
+  UpdaterResult: "UpdaterResult",
+  UpdaterResourceResult: "UpdaterResourceResult",
+  UpdaterStatus: "UpdaterStatus",
+  AutoUpdateRecord: "AutoUpdateRecord",
 };
 
 function tsInterfaceProps(file) {

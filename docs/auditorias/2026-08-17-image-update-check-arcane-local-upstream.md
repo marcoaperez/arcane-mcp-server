@@ -1,8 +1,35 @@
 # Issue para el upstream: `image_update_check` falla siempre por las imágenes que Arcane construye
 
 - **Fecha:** 2026-08-17
-- **Estado:** redactado, **sin publicar** (decisión del propietario del proyecto)
+- **Estado:** **publicado** como [#3640](https://github.com/getarcaneapp/arcane/issues/3640) el 2026-08-17
 - **Repositorio destino:** [getarcaneapp/arcane](https://github.com/getarcaneapp/arcane)
+
+> **Precisión del mecanismo, posterior a este borrador (2026-08-17).** El diagnóstico
+> de abajo describe bien el síntoma, pero no la causa. Leyendo el fuente de v2.8.0 y
+> la BD de la instancia: el guard para builds locales **ya existe** en el job
+> (`composeBuildImageRefsInternal()` en `backend/internal/imageupdate/image_update.go`),
+> y se alimenta de la columna `build_image_refs_json` de cada proyecto. Falla porque
+> las dos partes usan nombres distintos:
+>
+> - registrado en `build_image_refs_json`: `<proyecto>-<servicio>`
+> - etiqueta real de la imagen: `arcane.local/<proyecto>-<hash>/<servicio>:latest`
+>
+> Sólo afecta a servicios que **no declaran `image:`** junto a `build:`. Por eso
+> `ionos-manager:latest` e `ical-bridge:local` se saltan bien: declaran `image:`
+> explícito, así que ambos nombres coinciden. La línea del log de abajo
+> `arcane-mcp-arcane-mcp:latest — local build, registry check skipped` lo confirma:
+> es exactamente la ref registrada para ese proyecto. Esta precisión está publicada
+> como [comentario en #3640](https://github.com/getarcaneapp/arcane/issues/3640#issuecomment-5315240941).
+>
+> **Workaround descartado.** Añadir `image:` explícito parecía resolverlo, pero al
+> probarlo en `taiko-data-dev` el redespliegue falló: con `image:` declarado Arcane
+> intenta *pull antes de build* y aborta con `pull access denied ... repository does
+> not exist` si la imagen no existe ya en local. Revertido (`fa45cc7`), sin daño. Los
+> proyectos que hoy funcionan lo hacen porque su imagen ya estaba construida.
+>
+> **Sobre las cifras:** el histórico de activities se purga por retención, así que el
+> contador no es acumulativo. Medidas del 2026-08-17: 830 failed / 3 success por la
+> mañana; 636 failed / 5 success a las 22:38. Conviene fechar siempre el dato.
 - **Sería el cuarto issue** que este fork devuelve al upstream, tras:
   - [#3606](https://github.com/getarcaneapp/arcane/issues/3606) — redeploy de GitOps roto (ya reportado por otra persona, cerrado)
   - [#3638](https://github.com/getarcaneapp/arcane/issues/3638) — `HEAD /environments/{id}/system/health` devuelve 500 siempre

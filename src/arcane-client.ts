@@ -80,6 +80,8 @@ export interface Project {
   overrideFileName?: string;
   redeployDisabled?: boolean;
   relativePath?: string;
+  /** Estado de actualizacion del proyecto (spec: ProjectDetails.updateInfo). */
+  updateInfo?: ProjectUpdateInfo;
 }
 
 export interface ProjectCreate {
@@ -108,7 +110,8 @@ export interface ContainerSummary {
   hostConfig: any;
   networkSettings: any;
   mounts: any[] | null;
-  updateInfo?: any;
+  /** Estado de actualizacion del contenedor (spec: ContainerSummary.updateInfo -> ImageUpdateInfo). */
+  updateInfo?: ImageUpdateInfo;
   iconDarkUrl?: string;
   iconLightUrl?: string;
   redeployDisabled?: boolean;
@@ -145,7 +148,15 @@ export interface ImageSummary {
   inUse: boolean;
   repo: string;
   tag: string;
-  updateInfo?: any;
+  /** Estado de actualizacion de la imagen (spec: ImageSummary.updateInfo -> ImageUpdateInfo). */
+  updateInfo?: ImageUpdateInfo;
+  /**
+   * Que usa esta imagen. La instancia ya lo devolvia y el tipo lo descartaba:
+   * era una de las desalineaciones FALTA-EN-TS-OPCIONAL de la auditoria.
+   * Es lo que separa "esta imagen tiene actualizacion" de "actualizarla
+   * reinicia el proyecto arcane-mcp".
+   */
+  usedBy?: ImageUsedBy[] | null;
 }
 
 export interface ImagePullOptions {
@@ -155,6 +166,132 @@ export interface ImagePullOptions {
 export interface ImagePruneReport {
   imagesDeleted: number;
   spaceReclaimed: number;
+}
+
+/** Respuesta de una comprobación en vivo (spec: ImageupdateResponse). */
+export interface ImageUpdateResponse {
+  checkTime: string;
+  currentVersion: string;
+  hasUpdate: boolean;
+  responseTimeMs: number;
+  updateType: string;
+  activityId?: string;
+  authMethod?: string;
+  authRegistry?: string;
+  authUsername?: string;
+  currentDigest?: string;
+  error?: string;
+  latestDigest?: string;
+  latestVersion?: string;
+  usedCredential?: boolean;
+}
+
+/**
+ * Informacion persistida de actualizacion (spec: ImageUpdateInfo).
+ *
+ * Mismos campos que ImageUpdateResponse pero MAS estrictos: el spec marca
+ * currentDigest, latestDigest, latestVersion y error como obligatorios aqui y
+ * opcionales alli. No unificar los dos tipos.
+ */
+export interface ImageUpdateInfo {
+  checkTime: string;
+  currentDigest: string;
+  currentVersion: string;
+  error: string;
+  hasUpdate: boolean;
+  latestDigest: string;
+  latestVersion: string;
+  responseTimeMs: number;
+  updateType: string;
+  authMethod?: string;
+  authRegistry?: string;
+  authUsername?: string;
+  usedCredential?: boolean;
+}
+
+/** Recuento agregado (spec: ImageupdateSummary). */
+export interface ImageUpdateSummary {
+  digestUpdates: number;
+  errorsCount: number;
+  imagesWithUpdates: number;
+  totalImages: number;
+}
+
+/** Quien usa una imagen (spec: ImageUsedBy). */
+export interface ImageUsedBy {
+  name: string;
+  type: string;
+  id?: string;
+}
+
+/** Estado de actualizacion de un proyecto (spec: ProjectUpdateInfo). */
+export interface ProjectUpdateInfo {
+  checkedImageCount: number;
+  errorCount: number;
+  hasUpdate: boolean;
+  imageCount: number;
+  imagesWithUpdates: number;
+  status: string;
+  errorMessage?: string;
+  imageRefs?: string[] | null;
+  lastCheckedAt?: string;
+  updatedImageRefs?: string[] | null;
+}
+
+/** Resultado por recurso de una pasada del updater (spec: UpdaterResourceResult). */
+export interface UpdaterResourceResult {
+  resourceId: string;
+  resourceType: string;
+  status: string;
+  details?: Record<string, unknown>;
+  error?: string;
+  newImages?: Record<string, string>;
+  oldImages?: Record<string, string>;
+  resourceName?: string;
+  updateApplied?: boolean;
+  updateAvailable?: boolean;
+}
+
+/** Resultado de POST /updater/run (spec: UpdaterResult). */
+export interface UpdaterResult {
+  checked: number;
+  duration: string;
+  failed: number;
+  items: UpdaterResourceResult[] | null;
+  skipped: number;
+  updated: number;
+  activityId?: string;
+  endTime?: string;
+  restarted?: number;
+  startTime?: string;
+  success?: boolean;
+}
+
+/** Que se esta actualizando ahora mismo (spec: UpdaterStatus). */
+export interface UpdaterStatus {
+  containerIds: string[] | null;
+  projectIds: string[] | null;
+  updatingContainers: number;
+  updatingProjects: number;
+}
+
+/** Entrada del historial del updater (spec: AutoUpdateRecord). */
+export interface AutoUpdateRecord {
+  createdAt: string;
+  id: string;
+  resourceId: string;
+  resourceName: string;
+  resourceType: string;
+  startTime: string;
+  status: string;
+  updateApplied: boolean;
+  updateAvailable: boolean;
+  details?: Record<string, unknown>;
+  endTime?: string;
+  error?: string;
+  newImageVersions?: Record<string, unknown>;
+  oldImageVersions?: Record<string, unknown>;
+  updatedAt?: string;
 }
 
 export interface Volume {
@@ -438,11 +575,15 @@ export interface ContainerListOptions extends ListOptionsWithSort {
   includeInternal?: boolean;
   /** El spec lo declara string: "true" | "false". */
   standalone?: string;
+  /** has_update | up_to_date | error | unknown */
+  updates?: string;
 }
 
 export interface ImageListOptions extends ListOptionsWithSort {
   /** El spec lo declara string: "true" | "false". */
   inUse?: string;
+  /** "true" | "false" — en images es booleano expresado como cadena, no el enumerado de los otros */
+  updates?: string;
 }
 
 export interface VolumeListOptions extends ListOptionsWithSort {
@@ -465,6 +606,8 @@ export interface ProjectListOptions extends ListOptionsWithSort {
   archived?: string;
   /** Coma-separado, semantica OR. */
   tags?: string;
+  /** has_update | up_to_date | error | unknown */
+  updates?: string;
 }
 
 export interface TemplateListOptions extends ListOptionsWithSort {
@@ -957,6 +1100,7 @@ class StacksMethods {
     if (opts?.status) params.set("status", opts.status);
     if (opts?.archived) params.set("archived", opts.archived);
     if (opts?.tags) params.set("tags", opts.tags);
+    if (opts?.updates) params.set("updates", opts.updates);
     const query = params.toString();
     return this.client.request<PaginatedResponse<Project>>(
       "GET",
@@ -1018,6 +1162,7 @@ class ContainersMethods {
     appendListParams(params, opts);
     if (opts?.includeInternal !== undefined) params.set("includeInternal", String(opts.includeInternal));
     if (opts?.standalone) params.set("standalone", opts.standalone);
+    if (opts?.updates) params.set("updates", opts.updates);
     const query = params.toString();
     return this.client.request<PaginatedResponseWithCounts<ContainerSummary, ContainerStatusCounts>>(
       "GET",
@@ -1056,6 +1201,7 @@ class ImagesMethods {
     const params = new URLSearchParams();
     appendListParams(params, opts);
     if (opts?.inUse) params.set("inUse", opts.inUse);
+    if (opts?.updates) params.set("updates", opts.updates);
     const query = params.toString();
     return this.client.request<PaginatedResponse<ImageSummary>>(
       "GET",
@@ -1292,6 +1438,109 @@ class JobsMethods {
       "PUT",
       `/environments/${encodeURIComponent(envId)}/job-schedules`,
       cambios
+    );
+  }
+}
+
+class ImageUpdatesMethods {
+  constructor(private client: ArcaneClient) {}
+
+  async summary(envId: string): Promise<{ success: boolean; data: ImageUpdateSummary }> {
+    return this.client.request<{ success: boolean; data: ImageUpdateSummary }>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/image-updates/summary`
+    );
+  }
+
+  /**
+   * Informacion PERSISTIDA: no consulta los registros. El spec declara
+   * imageRefs como una cadena separada por comas, no como parametro repetido.
+   */
+  async byRefs(envId: string, imageRefs: string[]): Promise<{ success: boolean; data: Record<string, ImageUpdateInfo> }> {
+    const params = new URLSearchParams();
+    params.set("imageRefs", imageRefs.join(","));
+    return this.client.request<{ success: boolean; data: Record<string, ImageUpdateInfo> }>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/image-updates/by-refs?${params.toString()}`
+    );
+  }
+
+  /** Comprobacion EN VIVO de una imagen, por referencia o por ID. */
+  async check(envId: string, opts: { imageRef?: string; imageId?: string }): Promise<{ success: boolean; data: ImageUpdateResponse }> {
+    const base = `/environments/${encodeURIComponent(envId)}/image-updates`;
+    if (opts.imageId) {
+      return this.client.request<{ success: boolean; data: ImageUpdateResponse }>(
+        "GET",
+        `${base}/check/${encodeURIComponent(opts.imageId)}`
+      );
+    }
+    if (opts.imageRef) {
+      const params = new URLSearchParams();
+      params.set("imageRef", opts.imageRef);
+      return this.client.request<{ success: boolean; data: ImageUpdateResponse }>(
+        "GET",
+        `${base}/check?${params.toString()}`
+      );
+    }
+    throw new Error("check() necesita imageRef o imageId");
+  }
+
+  /** Comprobacion EN VIVO de una lista explicita. */
+  async checkBatch(envId: string, imageRefs: string[]): Promise<{ success: boolean; data: Record<string, ImageUpdateResponse> }> {
+    return this.client.request<{ success: boolean; data: Record<string, ImageUpdateResponse> }>(
+      "POST",
+      `/environments/${encodeURIComponent(envId)}/image-updates/check-batch`,
+      { imageRefs }
+    );
+  }
+}
+
+class UpdaterMethods {
+  constructor(private client: ArcaneClient) {}
+
+  async status(envId: string): Promise<{ success: boolean; data: UpdaterStatus }> {
+    return this.client.request<{ success: boolean; data: UpdaterStatus }>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/updater/status`
+    );
+  }
+
+  /**
+   * OJO: este endpoint devuelve un array pelado, SIN sobre de paginacion y sin
+   * `start`. Acepta `limit` (default 50 en el servidor) y no hay forma de saber
+   * cuantos registros hay en total. La tool lo advierte con una heuristica.
+   */
+  async history(envId: string, limit?: number): Promise<{ success: boolean; data: AutoUpdateRecord[] | null }> {
+    const params = new URLSearchParams();
+    if (limit !== undefined) params.set("limit", String(limit));
+    const query = params.toString();
+    return this.client.request<{ success: boolean; data: AutoUpdateRecord[] | null }>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/updater/history${query ? `?${query}` : ""}`
+    );
+  }
+
+  /**
+   * Aplica actualizaciones. `resourceIds` es OBLIGATORIO aqui aunque el spec lo
+   * declare opcional: sin el, una sola llamada actualizaria y reiniciaria todo
+   * el entorno, incluido el contenedor arcane-mcp-server que atiende esta misma
+   * peticion. Es el mismo motivo por el que F2 excluyo system/containers/stop-all.
+   */
+  async run(
+    envId: string,
+    opts: { resourceIds: string[]; type?: string; dryRun?: boolean; forceUpdate?: boolean }
+  ): Promise<{ success: boolean; data: UpdaterResult }> {
+    if (!opts.resourceIds || opts.resourceIds.length === 0) {
+      throw new Error("run() necesita al menos un elemento en resourceIds: la actualizacion masiva no se expone");
+    }
+    const body: Record<string, unknown> = { resourceIds: opts.resourceIds };
+    if (opts.type !== undefined) body.type = opts.type;
+    if (opts.dryRun !== undefined) body.dryRun = opts.dryRun;
+    if (opts.forceUpdate !== undefined) body.forceUpdate = opts.forceUpdate;
+    return this.client.request<{ success: boolean; data: UpdaterResult }>(
+      "POST",
+      `/environments/${encodeURIComponent(envId)}/updater/run`,
+      body
     );
   }
 }
@@ -1580,6 +1829,8 @@ export class ArcaneClient {
   readonly activities: ActivitiesMethods;
   readonly events: EventsMethods;
   readonly jobs: JobsMethods;
+  readonly imageUpdates: ImageUpdatesMethods;
+  readonly updater: UpdaterMethods;
   readonly gitRepositories: GitRepositoriesMethods;
   readonly gitOpsSyncs: GitOpsSyncsMethods;
   readonly projectAdditional: ProjectAdditionalMethods;
@@ -1613,6 +1864,8 @@ export class ArcaneClient {
     this.activities = new ActivitiesMethods(this);
     this.events = new EventsMethods(this);
     this.jobs = new JobsMethods(this);
+    this.imageUpdates = new ImageUpdatesMethods(this);
+    this.updater = new UpdaterMethods(this);
     this.gitRepositories = new GitRepositoriesMethods(this);
     this.gitOpsSyncs = new GitOpsSyncsMethods(this);
     this.projectAdditional = new ProjectAdditionalMethods(this);

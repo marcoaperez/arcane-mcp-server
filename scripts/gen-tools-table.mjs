@@ -37,6 +37,8 @@ const GROUPS = [
   ["activities.ts", "Activities"],
   ["events.ts", "Events"],
   ["jobs.ts", "Jobs"],
+  ["image-updates.ts", "Image updates"],
+  ["updater.ts", "Updater"],
 ];
 
 /** Extrae {name, desc, params} de cada `server.tool(name, desc, shape, handler)`. */
@@ -122,8 +124,9 @@ function extractTools(file) {
 const known = new Set(GROUPS.map(([f]) => f));
 // Ficheros de src/tools/ que no registran tools: helpers compartidos.
 // `resolve.ts` resuelve nombre->id; `respond.ts` construye la respuesta de una
-// tool; `paging.ts` recorre colecciones paginadas.
-const NON_TOOL_FILES = new Set(["resolve.ts", "respond.ts", "paging.ts"]);
+// tool; `paging.ts` recorre colecciones paginadas; `comma-list.ts` parte listas
+// separadas por comas (usado por `image-updates.ts` y `updater.ts`).
+const NON_TOOL_FILES = new Set(["resolve.ts", "respond.ts", "paging.ts", "comma-list.ts"]);
 const present = readdirSync("src/tools").filter(f => f.endsWith(".ts") && !NON_TOOL_FILES.has(f));
 const unmapped = present.filter(f => !known.has(f));
 if (unmapped.length > 0) {

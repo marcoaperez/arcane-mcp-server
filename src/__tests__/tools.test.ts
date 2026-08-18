@@ -18,6 +18,8 @@ import { registerJobTools } from "../tools/jobs";
 import { registerGitRepositoryTools } from "../tools/git-repositories";
 import { registerGitOpsSyncTools } from "../tools/gitops-syncs";
 import { registerVolumeBackupTools } from "../tools/volume-backups";
+import { registerImageUpdateTools } from "../tools/image-updates";
+import { registerUpdaterTools } from "../tools/updater";
 
 type MockedFunction<T extends (...args: any[]) => any> = {
   (...args: Parameters<T>): ReturnType<T>;
@@ -1822,6 +1824,256 @@ describe("MCP Tools", () => {
       const result = await handler({ environmentId: "env1" });
 
       expect(JSON.parse(result.content[0].text)).toEqual([{ id: "j1", name: "image_update_check" }]);
+    });
+  });
+
+  describe("Tools de image-updates", () => {
+    const clienteConUpdates = () => {
+      const mockClient = createMockClient() as any;
+      mockClient.imageUpdates = {
+        summary: vi.fn().mockResolvedValue({ success: true, data: { totalImages: 18, imagesWithUpdates: 4, digestUpdates: 4, errorsCount: 2 } }),
+        byRefs: vi.fn().mockResolvedValue({ success: true, data: {} }),
+        check: vi.fn().mockResolvedValue({ success: true, data: { checkTime: "t", currentVersion: "1", hasUpdate: true, responseTimeMs: 5, updateType: "digest" } }),
+        checkBatch: vi.fn().mockResolvedValue({ success: true, data: {} }),
+      };
+      return mockClient;
+    };
+
+    it("arcane_image_update_summary devuelve los recuentos", async () => {
+      const mockClient = clienteConUpdates();
+      const server = createMockServer();
+      registerImageUpdateTools(server as any, mockClient);
+
+      const result = await server.getHandler("arcane_image_update_summary")({ environmentId: "env1" });
+      expect(JSON.parse(result.content[0].text).imagesWithUpdates).toBe(4);
+    });
+
+    it("arcane_image_update_status pasa las referencias como array al cliente", async () => {
+      const mockClient = clienteConUpdates();
+      const server = createMockServer();
+      registerImageUpdateTools(server as any, mockClient);
+
+      await server.getHandler("arcane_image_update_status")({ environmentId: "env1", imageRefs: "nginx:latest,redis:7" });
+      expect(mockClient.imageUpdates.byRefs).toHaveBeenCalledWith("env1", ["nginx:latest", "redis:7"]);
+    });
+
+    it("arcane_image_update_status no avisa cuando el mapa trae todas las referencias pedidas", async () => {
+      const mockClient = clienteConUpdates();
+      mockClient.imageUpdates.byRefs.mockResolvedValue({
+        success: true,
+        data: {
+          "nginx:latest": { hasUpdate: false },
+          "redis:7": { hasUpdate: true },
+        },
+      });
+      const server = createMockServer();
+      registerImageUpdateTools(server as any, mockClient);
+
+      const result = await server.getHandler("arcane_image_update_status")({
+        environmentId: "env1",
+        imageRefs: "nginx:latest,redis:7",
+      });
+      expect(result.content[0].text.startsWith("{")).toBe(true);
+      expect(result.content[0].text).not.toContain("omits");
+    });
+
+    it("arcane_image_update_status avisa y nombra las referencias que faltan en el mapa", async () => {
+      // Comprobado contra la instancia real: la API omite del mapa las
+      // referencias que no tiene cacheadas. Este test falla si la tool deja
+      // de comparar lo pedido contra lo devuelto, o si deja de nombrar cuales
+      // faltan.
+      const mockClient = clienteConUpdates();
+      mockClient.imageUpdates.byRefs.mockResolvedValue({
+        success: true,
+        data: { "nginx:latest": { hasUpdate: false } },
+      });
+      const server = createMockServer();
+      registerImageUpdateTools(server as any, mockClient);
+
+      const result = await server.getHandler("arcane_image_update_status")({
+        environmentId: "env1",
+        imageRefs: "nginx:latest,redis:7,noexiste/pepe:1",
+      });
+      const [primera] = result.content[0].text.split("\n");
+      expect(primera).toBe(
+        "The response omits 2 of 3 requested reference(s): redis:7, noexiste/pepe:1. " +
+          "The response does not say why they are missing. " +
+          "Use arcane_image_update_check to get a fresh answer for those references.",
+      );
+    });
+
+    it("arcane_image_update_check acepta imageRef", async () => {
+      const mockClient = clienteConUpdates();
+      const server = createMockServer();
+      registerImageUpdateTools(server as any, mockClient);
+
+      await server.getHandler("arcane_image_update_check")({ environmentId: "env1", imageRef: "nginx:latest" });
+      expect(mockClient.imageUpdates.check).toHaveBeenCalledWith("env1", { imageRef: "nginx:latest", imageId: undefined });
+    });
+
+    it("arcane_image_update_check devuelve isError si el cliente falla", async () => {
+      const mockClient = clienteConUpdates();
+      mockClient.imageUpdates.check.mockRejectedValue(new ArcaneApiError(500, "registry down"));
+      const server = createMockServer();
+      registerImageUpdateTools(server as any, mockClient);
+
+      const result = await server.getHandler("arcane_image_update_check")({ environmentId: "env1", imageRef: "nginx:latest" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("registry down");
+    });
+
+    it("arcane_image_update_check_batch parte la lista separada por comas", async () => {
+      const mockClient = clienteConUpdates();
+      const server = createMockServer();
+      registerImageUpdateTools(server as any, mockClient);
+
+      await server.getHandler("arcane_image_update_check_batch")({ environmentId: "env1", imageRefs: "a:1, b:2" });
+      expect(mockClient.imageUpdates.checkBatch).toHaveBeenCalledWith("env1", ["a:1", "b:2"]);
+    });
+  });
+
+  describe("Tools de updater", () => {
+    const clienteConUpdater = () => {
+      const mockClient = createMockClient() as any;
+      mockClient.updater = {
+        status: vi.fn().mockResolvedValue({ success: true, data: { updatingContainers: 0, updatingProjects: 0, containerIds: [], projectIds: [] } }),
+        history: vi.fn().mockResolvedValue({ success: true, data: [] }),
+        run: vi.fn().mockResolvedValue({ success: true, data: { checked: 1, updated: 0, skipped: 1, failed: 0, duration: "1s", items: [] } }),
+      };
+      return mockClient;
+    };
+
+    it("arcane_updater_history avisa cuando devuelve exactamente lo pedido", async () => {
+      const mockClient = clienteConUpdater();
+      mockClient.updater.history.mockResolvedValue({
+        success: true,
+        data: Array.from({ length: 5 }, (_, i) => ({ id: `r${i}` })),
+      });
+      const server = createMockServer();
+      registerUpdaterTools(server as any, mockClient);
+
+      const result = await server.getHandler("arcane_updater_history")({ environmentId: "env1", limit: 5 });
+      const [primera] = result.content[0].text.split("\n");
+      expect(primera).toBe(
+        "This history may be truncated: exactly 5 records were requested and 5 were returned, and this endpoint reports no total. Raise limit to find out.",
+      );
+    });
+
+    it("arcane_updater_history no avisa cuando devuelve menos de lo pedido", async () => {
+      const mockClient = clienteConUpdater();
+      mockClient.updater.history.mockResolvedValue({ success: true, data: [{ id: "r0" }] });
+      const server = createMockServer();
+      registerUpdaterTools(server as any, mockClient);
+
+      const result = await server.getHandler("arcane_updater_history")({ environmentId: "env1", limit: 5 });
+      expect(result.content[0].text.startsWith("[")).toBe(true);
+      expect(result.content[0].text).not.toContain("may be truncated");
+    });
+
+    it("arcane_updater_history trata data:null como lista vacia, nunca el texto 'null'", async () => {
+      const mockClient = clienteConUpdater();
+      mockClient.updater.history.mockResolvedValue({ success: true, data: null });
+      const server = createMockServer();
+      registerUpdaterTools(server as any, mockClient);
+
+      const result = await server.getHandler("arcane_updater_history")({ environmentId: "env1" });
+      expect(JSON.parse(result.content[0].text)).toEqual([]);
+    });
+
+    it("arcane_updater_history avisa con el limite por defecto del servidor cuando no se pide limit", async () => {
+      // Sin `limit`, la heuristica compara contra LIMIT_POR_DEFECTO_DEL_SERVIDOR (50),
+      // no contra `undefined`. Este test falla si esa constante se sustituye por `limit` a secas.
+      const mockClient = clienteConUpdater();
+      mockClient.updater.history.mockResolvedValue({
+        success: true,
+        data: Array.from({ length: 50 }, (_, i) => ({ id: `r${i}` })),
+      });
+      const server = createMockServer();
+      registerUpdaterTools(server as any, mockClient);
+
+      const result = await server.getHandler("arcane_updater_history")({ environmentId: "env1" });
+      const [primera] = result.content[0].text.split("\n");
+      expect(primera).toBe(
+        "This history may be truncated: exactly 50 records were requested and 50 were returned, and this endpoint reports no total. Raise limit to find out.",
+      );
+    });
+
+    it("arcane_updater_run exige resourceIds: el schema no acepta la llamada sin el campo", async () => {
+      // resourceIds es z.string() sin .optional() a proposito: sin objetivo,
+      // arcane_updater_run actualizaria y reiniciaria todo el entorno, incluido
+      // el propio contenedor arcane-mcp-server. Este test falla si alguien le
+      // añade .optional() al schema en src/tools/updater.ts.
+      const mockClient = clienteConUpdater();
+      const server = createMockServer();
+      registerUpdaterTools(server as any, mockClient);
+
+      const call = (server.tool as any).mock.calls.find((c: any[]) => c[0] === "arcane_updater_run");
+      const schemaShape = call[2];
+      const schema = z.object(schemaShape);
+
+      const validArgs = { environmentId: "env1", resourceIds: "c1,c2" };
+      expect(() => schema.parse(validArgs)).not.toThrow();
+
+      const { resourceIds, ...withoutResourceIds } = validArgs;
+      expect(() => schema.parse(withoutResourceIds)).toThrow();
+    });
+
+    it("arcane_updater_run parte resourceIds y pasa dryRun", async () => {
+      const mockClient = clienteConUpdater();
+      const server = createMockServer();
+      registerUpdaterTools(server as any, mockClient);
+
+      await server.getHandler("arcane_updater_run")({ environmentId: "env1", resourceIds: "c1, c2", type: "container", dryRun: true });
+      expect(mockClient.updater.run).toHaveBeenCalledWith("env1", {
+        resourceIds: ["c1", "c2"], type: "container", dryRun: true, forceUpdate: undefined,
+      });
+    });
+
+    it("arcane_updater_run devuelve isError si el cliente rechaza por falta de objetivo", async () => {
+      const mockClient = clienteConUpdater();
+      mockClient.updater.run.mockRejectedValue(new Error("run() necesita al menos un elemento en resourceIds"));
+      const server = createMockServer();
+      registerUpdaterTools(server as any, mockClient);
+
+      const result = await server.getHandler("arcane_updater_run")({ environmentId: "env1", resourceIds: "" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("resourceIds");
+    });
+  });
+
+  describe("El filtro updates en las tools de listado", () => {
+    it("arcane_image_list pasa updates al cliente", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerImageTools(server as any, mockClient);
+      (mockClient.images.list as any).mockResolvedValue({
+        success: true, data: [], pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      await server.getHandler("arcane_image_list")({ environmentId: "env1", updates: "true" });
+      expect(mockClient.images.list).toHaveBeenCalledWith("env1", expect.objectContaining({ updates: "true" }));
+    });
+
+    it("arcane_container_list pasa updates al cliente", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerContainerTools(server as any, mockClient);
+      (mockClient.containers.list as any).mockResolvedValue({
+        success: true, data: [], counts: { runningContainers: 0, stoppedContainers: 0, totalContainers: 0 },
+        pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      await server.getHandler("arcane_container_list")({ environmentId: "env1", updates: "has_update" });
+      expect(mockClient.containers.list).toHaveBeenCalledWith("env1", expect.objectContaining({ updates: "has_update" }));
+    });
+
+    it("arcane_stack_list pasa updates al cliente", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerStackTools(server as any, mockClient);
+
+      await server.getHandler("arcane_stack_list")({ environmentId: "env1", updates: "up_to_date" });
+      expect(mockClient.stacks.list).toHaveBeenCalledWith("env1", expect.objectContaining({ updates: "up_to_date" }));
     });
   });
 });
