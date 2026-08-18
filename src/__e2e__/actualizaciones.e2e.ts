@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { e2eClient } from "./helpers";
+import { e2eClient, IDEMPOTENT_STACK } from "./helpers";
 
 /**
  * Invariantes de las actualizaciones de imagenes contra la instancia real.
@@ -73,6 +73,34 @@ describe("actualizaciones (e2e, Arcane 2.8.0)", () => {
     expect(typeof r.data.updateType).toBe("string");
   });
 
+  it("checkBatch comprueba en vivo una lista explicita de referencias", async () => {
+    // NO se usa ghcr.io/getarcaneapp/arcane: esta observado que devuelve
+    // toomanyrequests de forma intermitente. Se eligen imagenes de Docker Hub
+    // que ya estan en la instancia, evitando ese registro concreto.
+    const imgs = await client.images.list(envId, { limit: 50 });
+    const refs = [...new Set((imgs.data ?? []).flatMap((i) => i.repoTags ?? []))].filter(
+      (ref) => !ref.includes("getarcaneapp/arcane"),
+    );
+    expect(refs.length).toBeGreaterThanOrEqual(2);
+    const elegidas = refs.slice(0, 2);
+
+    const r = await client.imageUpdates.checkBatch(envId, elegidas);
+    expect(r.success).toBe(true);
+    expect(Array.isArray(r.data)).toBe(false); // es un mapa, no un array
+
+    const keys = Object.keys(r.data);
+    expect(keys.length).toBeGreaterThan(0);
+    for (const key of keys) {
+      // Igual que en by-refs: no se exige que aparezcan TODAS las referencias
+      // pedidas, solo que ninguna clave devuelta sea una que no se pidiera.
+      expect(elegidas).toContain(key);
+      const entry = r.data[key];
+      expect(typeof entry.hasUpdate).toBe("boolean");
+      expect(typeof entry.updateType).toBe("string");
+      expect(typeof entry.checkTime).toBe("string");
+    }
+  });
+
   it("updater.status responde con los recuentos y sus listas", async () => {
     const r = await client.updater.status(envId);
     expect(r.success).toBe(true);
@@ -112,5 +140,41 @@ describe("actualizaciones (e2e, Arcane 2.8.0)", () => {
 
   it("updater.run exige resourceIds y no llega a llamar a la API sin ellos", async () => {
     await expect(client.updater.run(envId, { resourceIds: [] })).rejects.toThrow(/resourceIds/);
+  });
+
+  it("updater.run con dryRun llega a la instancia y no aplica nada", async () => {
+    // El unico e2e anterior de updater.run se quedaba en el test de arriba,
+    // que no toca la red: solo comprueba que el cliente lanza ANTES de la
+    // llamada. Este si llega. dryRun:true esta verificado manualmente contra
+    // IDEMPOTENT_STACK (ical-bridge): `created` e `imageId` del contenedor
+    // quedan identicos antes y despues de la llamada.
+    const contenedores = await client.containers.list(envId, { search: IDEMPOTENT_STACK, limit: 5 });
+    const contenedor = (contenedores.data ?? [])[0];
+    expect(contenedor).toBeDefined();
+
+    const r = await client.updater.run(envId, {
+      resourceIds: [contenedor!.id],
+      type: "container",
+      dryRun: true,
+    });
+
+    expect(r.success).toBe(true);
+    // Forma de UpdaterResult (spec): los campos obligatorios estan presentes
+    // con el tipo correcto, y `items` es un array (puede ser null en el tipo,
+    // pero con un objetivo explicito siempre trae al menos una entrada).
+    expect(typeof r.data.checked).toBe("number");
+    expect(typeof r.data.updated).toBe("number");
+    expect(typeof r.data.skipped).toBe("number");
+    expect(typeof r.data.failed).toBe("number");
+    expect(typeof r.data.duration).toBe("string");
+    expect(Array.isArray(r.data.items)).toBe(true);
+
+    // Invariante de dryRun: nunca aplica ni reinicia nada, sea cual sea el
+    // estado de la imagen en el momento de la corrida.
+    expect(r.data.updated).toBe(0);
+    expect(r.data.restarted ?? 0).toBe(0);
+    for (const item of r.data.items ?? []) {
+      expect(item.updateApplied).not.toBe(true);
+    }
   });
 });
