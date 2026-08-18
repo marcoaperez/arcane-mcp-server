@@ -37,7 +37,7 @@ export function registerJobTools(server: McpServer, client: ArcaneClient): void 
 
   server.tool(
     "arcane_job_run",
-    "Run a background job immediately. Jobs with unmet prerequisites will not execute.",
+    "Run a background job immediately. Jobs with unmet prerequisites will not execute. Some jobs have broad side effects when run this way: image-polling checks every image in the environment against its registry (the mass sweep this server otherwise does not expose), and auto-update would mutate running containers if Arcane's autoUpdate setting is ever enabled. Check what a job does with arcane_job_list before running it.",
     {
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
