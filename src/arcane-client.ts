@@ -573,11 +573,15 @@ export interface ContainerListOptions extends ListOptionsWithSort {
   includeInternal?: boolean;
   /** El spec lo declara string: "true" | "false". */
   standalone?: string;
+  /** has_update | up_to_date | error | unknown */
+  updates?: string;
 }
 
 export interface ImageListOptions extends ListOptionsWithSort {
   /** El spec lo declara string: "true" | "false". */
   inUse?: string;
+  /** "true" | "false" — en images es booleano expresado como cadena, no el enumerado de los otros */
+  updates?: string;
 }
 
 export interface VolumeListOptions extends ListOptionsWithSort {
@@ -600,6 +604,8 @@ export interface ProjectListOptions extends ListOptionsWithSort {
   archived?: string;
   /** Coma-separado, semantica OR. */
   tags?: string;
+  /** has_update | up_to_date | error | unknown */
+  updates?: string;
 }
 
 export interface TemplateListOptions extends ListOptionsWithSort {
@@ -1092,6 +1098,7 @@ class StacksMethods {
     if (opts?.status) params.set("status", opts.status);
     if (opts?.archived) params.set("archived", opts.archived);
     if (opts?.tags) params.set("tags", opts.tags);
+    if (opts?.updates) params.set("updates", opts.updates);
     const query = params.toString();
     return this.client.request<PaginatedResponse<Project>>(
       "GET",
@@ -1153,6 +1160,7 @@ class ContainersMethods {
     appendListParams(params, opts);
     if (opts?.includeInternal !== undefined) params.set("includeInternal", String(opts.includeInternal));
     if (opts?.standalone) params.set("standalone", opts.standalone);
+    if (opts?.updates) params.set("updates", opts.updates);
     const query = params.toString();
     return this.client.request<PaginatedResponseWithCounts<ContainerSummary, ContainerStatusCounts>>(
       "GET",
@@ -1191,6 +1199,7 @@ class ImagesMethods {
     const params = new URLSearchParams();
     appendListParams(params, opts);
     if (opts?.inUse) params.set("inUse", opts.inUse);
+    if (opts?.updates) params.set("updates", opts.updates);
     const query = params.toString();
     return this.client.request<PaginatedResponse<ImageSummary>>(
       "GET",

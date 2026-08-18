@@ -1654,4 +1654,36 @@ describe("ArcaneClient", () => {
       );
     });
   });
+
+  describe("El filtro updates", () => {
+    const okVacio = () =>
+      ({ ok: true, json: async () => ({ success: true, data: [], counts: {}, pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 20 } }) }) as Response;
+
+    it("containers.list envia updates", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.containers.list("env1", { updates: "has_update" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/containers?updates=has_update",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("images.list envia updates junto a los demas filtros", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.images.list("env1", { inUse: "true", updates: "true" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images?inUse=true&updates=true",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("stacks.list envia updates", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.stacks.list("env1", { updates: "up_to_date" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/projects?updates=up_to_date",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+  });
 });
