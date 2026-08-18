@@ -19,6 +19,15 @@ enlaza desde aquí.
 
 ## Balances de fase
 
+- [F3 (actualizaciones de imágenes) — 2026-08-17](balances/2026-08-17-f3.md)
+  — siete tools nuevas (estado de actualizaciones e imágenes, y `updater` con
+  `resourceIds` obligatorio), cierre de las tres deudas diferidas por F2
+  (`usedBy`, `updateInfo`, el filtro `updates`), y las cifras medidas (260
+  tests, 44 e2e, 88 tools, 86/249 operaciones cubiertas).
+- [Coherencia de la superficie de listado — 2026-08-17](balances/2026-08-17-coherencia-listado.md)
+  — uniforma el contrato de salida de las trece tools `_list`, corrige un bug
+  de paginación sin `sort` en Arcane 2.8.0 (publicado upstream) y deja 228
+  tests unitarios y 36 e2e en verde.
 - [F2 (observabilidad y núcleo del host) — 2026-08-17](balances/2026-08-16-f2.md)
   — 13 tools nuevas, cinco defectos de fidelidad al spec cazados por la revisión,
   una contradicción interna del plan, un test tautológico corregido, un bug del

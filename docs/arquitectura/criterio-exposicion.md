@@ -4,7 +4,7 @@
 §2 del [spec de F2](../superpowers/specs/2026-08-16-fork-arcane-mcp-f2-design.md),
 que sigue siendo válida como registro histórico de cuándo se decidió cada cosa.
 
-- **Última revisión:** 2026-08-17
+- **Última revisión:** 2026-08-18
 - **Base:** Arcane **2.8.0** (`openapi.txt`, 273 paths, 347 operaciones)
 
 ---
@@ -84,7 +84,7 @@ De [F2 §3.5](../superpowers/specs/2026-08-16-fork-arcane-mcp-f2-design.md):
 | `POST .../system/containers/{start-all,stop-all,start-stopped}` | Acciones masivas: un `stop-all` mal disparado tumba todos los contenedores del host, incluido el propio Arcane |
 | `GET /environments/{id}/version` | Redundante con `arcane_version`. YAGNI |
 
-### 2.4 Diferido, no excluido — 24 operaciones y tres parámetros
+### 2.4 Diferido, no excluido — 21 operaciones y un parámetro
 
 No es lo mismo «fuera para siempre» que «todavía no». Nada de esto se descuenta del
 denominador de la §3, porque son operaciones que este fork sí pretende poder cubrir
@@ -92,10 +92,14 @@ algún día:
 
 | Qué | Cuánto | Cuándo |
 |---|---|---|
-| `webhooks` (4), `notifications` (6), `updater` (3), `settings` (5), `deployment`/mTLS (3), `dashboard` (1), `diagnostics` (2) | **24 operaciones** | Fase propia si se justifica. Son configuración persistente y superficie de agente, no observabilidad |
-| `updates` en `containers`, `images` y `projects` | 3 parámetros de query | F3 — depende del comprobador de actualizaciones, que hoy falla en la instancia |
-| `ImageSummary.usedBy`, `Project.updateInfo` | 2 campos diferidos en la auditoría de drift | F3 |
+| `webhooks` (4), `notifications` (6), `settings` (5), `deployment`/mTLS (3), `dashboard` (1), `diagnostics` (2) | **21 operaciones** | Fase propia si se justifica. Son configuración persistente y superficie de agente, no observabilidad |
 | `groupBy` en `containers` | 1 parámetro de query | Sin asignar: añade una clave `groups` a la respuesta y necesita su propio tipo y formateo |
+
+> **F3 entregó las cuatro filas que antes estaban aquí:** las tres operaciones de
+> `updater` (`status`, `history`, `run`), los tres parámetros `updates` en
+> `containers`/`images`/`projects`, y los dos campos `ImageSummary.usedBy` /
+> `Project.updateInfo` que la auditoría de drift señalaba como faltantes. Ya no son
+> diferidos: están cubiertos y cuentan en el denominador de la §3.
 
 ## 3. El denominador honesto
 
@@ -110,13 +114,14 @@ API que incluye lo que nunca se va a tocar.
   249  operaciones que este fork pretende poder cubrir
 ```
 
-**Los balances futuros publican `78 de 249` explicando el denominador**, no `78 de
-347`. Ambas cifras son ciertas; la segunda subestima el avance en un tercio y no dice
-nada útil sobre lo que queda por hacer.
+**Los balances publican la cobertura explicando el denominador** — a fecha de F3,
+`86 de 249`, no `86 de 347`. Ambas cifras son ciertas; la segunda subestima el avance
+en un tercio y no dice nada útil sobre lo que queda por hacer.
 
-El `78 de 347` que aparece en el README y en balances ya escritos se deja como está:
-es cierto, y reescribir documentos cerrados para cambiar un denominador introduciría
-más ruido que claridad.
+Las cifras que aparecen en balances ya escritos se dejan como están: son ciertas en
+el momento en que se midieron, y reescribir documentos cerrados cada vez que sube la
+cobertura introduciría más ruido que claridad. Este documento en cambio es la
+referencia viva: su cifra se actualiza en cada revisión (ver cabecera).
 
 ## 4. Qué haría falta para reabrir `swarm`
 
