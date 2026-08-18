@@ -110,7 +110,8 @@ export interface ContainerSummary {
   hostConfig: any;
   networkSettings: any;
   mounts: any[] | null;
-  updateInfo?: any;
+  /** Estado de actualizacion del contenedor (spec: ContainerSummary.updateInfo -> ImageUpdateInfo). */
+  updateInfo?: ImageUpdateInfo;
   iconDarkUrl?: string;
   iconLightUrl?: string;
   redeployDisabled?: boolean;

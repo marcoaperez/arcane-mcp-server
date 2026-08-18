@@ -74,15 +74,18 @@ describe("actualizaciones (e2e, Arcane 2.8.0)", () => {
   });
 
   it("checkBatch comprueba en vivo una lista explicita de referencias", async () => {
-    // NO se usa ghcr.io/getarcaneapp/arcane: esta observado que devuelve
-    // toomanyrequests de forma intermitente. Se eligen imagenes de Docker Hub
-    // que ya estan en la instancia, evitando ese registro concreto.
-    const imgs = await client.images.list(envId, { limit: 50 });
-    const refs = [...new Set((imgs.data ?? []).flatMap((i) => i.repoTags ?? []))].filter(
-      (ref) => !ref.includes("getarcaneapp/arcane"),
-    );
-    expect(refs.length).toBeGreaterThanOrEqual(2);
-    const elegidas = refs.slice(0, 2);
+    // Refs elegidas EXPLICITAMENTE, no tomadas por posicion de images.list:
+    // probado contra la instancia real, las dos primeras elegibles de ese
+    // listado eran imagenes locales con prefijo arcane.local/, cuyo registro
+    // no resuelve por DNS (bug conocido del upstream, ya reportado en
+    // docs/auditorias/2026-08-17-image-update-check-arcane-local-upstream.md)
+    // y JAMAS podra comprobarse. Se usan dos imagenes de Docker Hub que estan
+    // presentes en la instancia (check-batch inspecciona la imagen local antes
+    // de comparar contra el registro, asi que una ref de Docker Hub que no
+    // este ya descargada localmente falla con "No such image", verificado a
+    // mano). NO se usa ghcr.io/getarcaneapp/arcane: esta observado que
+    // devuelve toomanyrequests de forma intermitente.
+    const elegidas = ["gitea/gitea:1.25.5", "mariadb:11.2"];
 
     const r = await client.imageUpdates.checkBatch(envId, elegidas);
     expect(r.success).toBe(true);
@@ -98,6 +101,12 @@ describe("actualizaciones (e2e, Arcane 2.8.0)", () => {
       expect(typeof entry.hasUpdate).toBe("boolean");
       expect(typeof entry.updateType).toBe("string");
       expect(typeof entry.checkTime).toBe("string");
+      // La asercion que faltaba: con refs de arcane.local elegidas por
+      // posicion, esta entrada llegaba con error de DNS poblado y
+      // updateType "" -y el test pasaba igual, porque nunca miraba `error`.
+      // Aqui se exige explicitamente que no venga error: si el registro no
+      // resuelve o el check falla por cualquier motivo, el test debe fallar.
+      expect(entry.error ?? "").toBe("");
     }
   });
 

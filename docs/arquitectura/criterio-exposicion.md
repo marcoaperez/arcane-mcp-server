@@ -99,7 +99,8 @@ algún día:
 > `updater` (`status`, `history`, `run`), los tres parámetros `updates` en
 > `containers`/`images`/`projects`, y los dos campos `ImageSummary.usedBy` /
 > `Project.updateInfo` que la auditoría de drift señalaba como faltantes. Ya no son
-> diferidos: están cubiertos y cuentan en el denominador de la §3.
+> diferidos: siempre contaron en el denominador de la §3 (ver el preámbulo de
+> esta sección), y ahora además cuentan en el numerador — están cubiertos.
 
 ## 3. El denominador honesto
 

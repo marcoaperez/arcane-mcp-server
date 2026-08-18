@@ -1896,7 +1896,9 @@ describe("MCP Tools", () => {
       });
       const [primera] = result.content[0].text.split("\n");
       expect(primera).toBe(
-        "The response omits 2 of 3 requested reference(s), which have no cached update result: redis:7, noexiste/pepe:1.",
+        "The response omits 2 of 3 requested reference(s): redis:7, noexiste/pepe:1. " +
+          "The response does not say why they are missing. " +
+          "Use arcane_image_update_check to get a fresh answer for those references.",
       );
     });
 

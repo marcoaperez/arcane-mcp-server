@@ -22,8 +22,8 @@ enlaza desde aquí.
 - [F3 (actualizaciones de imágenes) — 2026-08-17](balances/2026-08-17-f3.md)
   — siete tools nuevas (estado de actualizaciones e imágenes, y `updater` con
   `resourceIds` obligatorio), cierre de las tres deudas diferidas por F2
-  (`usedBy`, `updateInfo`, el filtro `updates`), y las cifras medidas (260
-  tests, 44 e2e, 88 tools, 86/249 operaciones cubiertas).
+  (`usedBy`, `updateInfo`, el filtro `updates`), y las cifras medidas (262
+  tests, 46 e2e, 88 tools, 86/249 operaciones cubiertas).
 - [Coherencia de la superficie de listado — 2026-08-17](balances/2026-08-17-coherencia-listado.md)
   — uniforma el contrato de salida de las trece tools `_list`, corrige un bug
   de paginación sin `sort` en Arcane 2.8.0 (publicado upstream) y deja 228

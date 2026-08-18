@@ -34,7 +34,7 @@ Built on Cloudflare Workers using the official Cloudflare `agents` package, this
 | Compatibilidad de shapes | Escrito contra Arcane v1.x | Interfaces alineadas con v2.8.0 y auditadas por `scripts/audit-schema-drift.mjs` |
 | Despliegue | Solo Cloudflare Workers | Cloudflare Workers **o** contenedor Docker autoalojado (`docker-compose.yml` + `wrangler.local.jsonc`) |
 | Cliente | `baseUrl` fijo hacia el binding VPC | Modo dual: binding VPC en Workers, URL real en local/Docker |
-| Verificación | Sin runner de tests funcional | 260 tests unitarios + 44 tests e2e contra una instancia Arcane real |
+| Verificación | Sin runner de tests funcional | 262 tests unitarios + 46 tests e2e contra una instancia Arcane real |
 
 El fix de los endpoints NDJSON se ha ofrecido al upstream como PR autocontenido.
 
@@ -217,7 +217,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | Tool | Description | Inputs |
 |---|---|---|
 | `arcane_image_update_summary` | Get the aggregate image update counts for an environment: how many images there are, how many have updates available, and how many failed to check. Cheap: reads stored results, does not query any registry. | `environmentId?`, `environmentName?` |
-| `arcane_image_update_status` | Get the STORED update information for specific image references. Does not query any registry, so it is fast and safe to call repeatedly. The response map can omit references that have no cached result — the tool flags this in prose when it happens. Use arcane_image_update_check instead when you need a fresh answer. | `environmentId?`, `environmentName?`, `imageRefs` |
+| `arcane_image_update_status` | Get the STORED update information for specific image references. Does not query any registry, so it is fast and safe to call repeatedly. The response map can omit some of the requested references, and the response does not say why — the tool flags this in prose when it happens. Use arcane_image_update_check for a fresh answer on the omitted references. | `environmentId?`, `environmentName?`, `imageRefs` |
 | `arcane_image_update_check` | Check ONE image for updates by querying its registry LIVE. Slower than arcane_image_update_status and subject to registry rate limits, so prefer the stored status unless you need a fresh answer. Accepts an image reference or an image ID. | `environmentId?`, `environmentName?`, `imageRef?`, `imageId?` |
 | `arcane_image_update_check_batch` | Check a specific LIST of images for updates by querying their registries LIVE. Requires the list: checking every image at once is not exposed, because a scheduled job already does that sweep hourly. | `environmentId?`, `environmentName?`, `imageRefs` |
 
