@@ -147,7 +147,8 @@ export interface ImageSummary {
   inUse: boolean;
   repo: string;
   tag: string;
-  updateInfo?: any;
+  /** Estado de actualizacion de la imagen (spec: ImageSummary.updateInfo -> ImageUpdateInfo). */
+  updateInfo?: ImageUpdateInfo;
   /**
    * Que usa esta imagen. La instancia ya lo devolvia y el tipo lo descartaba:
    * era una de las desalineaciones FALTA-EN-TS-OPCIONAL de la auditoria.
@@ -243,8 +244,8 @@ export interface UpdaterResourceResult {
   status: string;
   details?: Record<string, unknown>;
   error?: string;
-  newImages?: Record<string, unknown>;
-  oldImages?: Record<string, unknown>;
+  newImages?: Record<string, string>;
+  oldImages?: Record<string, string>;
   resourceName?: string;
   updateApplied?: boolean;
   updateAvailable?: boolean;
