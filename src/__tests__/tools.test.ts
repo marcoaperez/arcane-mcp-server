@@ -18,6 +18,7 @@ import { registerJobTools } from "../tools/jobs";
 import { registerGitRepositoryTools } from "../tools/git-repositories";
 import { registerGitOpsSyncTools } from "../tools/gitops-syncs";
 import { registerVolumeBackupTools } from "../tools/volume-backups";
+import { registerImageUpdateTools } from "../tools/image-updates";
 
 type MockedFunction<T extends (...args: any[]) => any> = {
   (...args: Parameters<T>): ReturnType<T>;
@@ -1822,6 +1823,66 @@ describe("MCP Tools", () => {
       const result = await handler({ environmentId: "env1" });
 
       expect(JSON.parse(result.content[0].text)).toEqual([{ id: "j1", name: "image_update_check" }]);
+    });
+  });
+
+  describe("Tools de image-updates", () => {
+    const clienteConUpdates = () => {
+      const mockClient = createMockClient() as any;
+      mockClient.imageUpdates = {
+        summary: vi.fn().mockResolvedValue({ success: true, data: { totalImages: 18, imagesWithUpdates: 4, digestUpdates: 4, errorsCount: 2 } }),
+        byRefs: vi.fn().mockResolvedValue({ success: true, data: {} }),
+        check: vi.fn().mockResolvedValue({ success: true, data: { checkTime: "t", currentVersion: "1", hasUpdate: true, responseTimeMs: 5, updateType: "digest" } }),
+        checkBatch: vi.fn().mockResolvedValue({ success: true, data: {} }),
+      };
+      return mockClient;
+    };
+
+    it("arcane_image_update_summary devuelve los recuentos", async () => {
+      const mockClient = clienteConUpdates();
+      const server = createMockServer();
+      registerImageUpdateTools(server as any, mockClient);
+
+      const result = await server.getHandler("arcane_image_update_summary")({ environmentId: "env1" });
+      expect(JSON.parse(result.content[0].text).imagesWithUpdates).toBe(4);
+    });
+
+    it("arcane_image_update_status pasa las referencias como array al cliente", async () => {
+      const mockClient = clienteConUpdates();
+      const server = createMockServer();
+      registerImageUpdateTools(server as any, mockClient);
+
+      await server.getHandler("arcane_image_update_status")({ environmentId: "env1", imageRefs: "nginx:latest,redis:7" });
+      expect(mockClient.imageUpdates.byRefs).toHaveBeenCalledWith("env1", ["nginx:latest", "redis:7"]);
+    });
+
+    it("arcane_image_update_check acepta imageRef", async () => {
+      const mockClient = clienteConUpdates();
+      const server = createMockServer();
+      registerImageUpdateTools(server as any, mockClient);
+
+      await server.getHandler("arcane_image_update_check")({ environmentId: "env1", imageRef: "nginx:latest" });
+      expect(mockClient.imageUpdates.check).toHaveBeenCalledWith("env1", { imageRef: "nginx:latest", imageId: undefined });
+    });
+
+    it("arcane_image_update_check devuelve isError si el cliente falla", async () => {
+      const mockClient = clienteConUpdates();
+      mockClient.imageUpdates.check.mockRejectedValue(new ArcaneApiError(500, "registry down"));
+      const server = createMockServer();
+      registerImageUpdateTools(server as any, mockClient);
+
+      const result = await server.getHandler("arcane_image_update_check")({ environmentId: "env1", imageRef: "nginx:latest" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("registry down");
+    });
+
+    it("arcane_image_update_check_batch parte la lista separada por comas", async () => {
+      const mockClient = clienteConUpdates();
+      const server = createMockServer();
+      registerImageUpdateTools(server as any, mockClient);
+
+      await server.getHandler("arcane_image_update_check_batch")({ environmentId: "env1", imageRefs: "a:1, b:2" });
+      expect(mockClient.imageUpdates.checkBatch).toHaveBeenCalledWith("env1", ["a:1", "b:2"]);
     });
   });
 });
