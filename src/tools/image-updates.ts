@@ -22,7 +22,7 @@ export function registerImageUpdateTools(server: McpServer, client: ArcaneClient
 
   server.tool(
     "arcane_image_update_status",
-    "Get the STORED update information for specific image references. Does not query any registry, so it is fast and safe to call repeatedly. Use arcane_image_update_check instead when you need a fresh answer.",
+    "Get the STORED update information for specific image references. Does not query any registry, so it is fast and safe to call repeatedly. The response map can omit references that have no cached result — the tool flags this in prose when it happens. Use arcane_image_update_check instead when you need a fresh answer.",
     {
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
@@ -30,8 +30,25 @@ export function registerImageUpdateTools(server: McpServer, client: ArcaneClient
     },
     withErrors(async ({ environmentId, environmentName, imageRefs }) => {
       const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-      const result = await client.imageUpdates.byRefs(envId, parseCommaList(imageRefs));
-      return textResponse(JSON.stringify(result.data, null, 2));
+      const pedidas = parseCommaList(imageRefs);
+      const result = await client.imageUpdates.byRefs(envId, pedidas);
+      const texto = JSON.stringify(result.data, null, 2);
+
+      // Comprobado contra la instancia real: la API omite del mapa las
+      // referencias que no tiene cacheadas (de 20 pedidas, 2 no aparecieron).
+      // Sin aviso, un modelo que pide 5 y recibe 3 no puede distinguir "esas
+      // dos no tienen actualizacion" de "esas dos nunca se comprobaron". Se
+      // dice lo que se sabe -que faltan del mapa- sin afirmar por que, porque
+      // la tool tampoco lo sabe.
+      const devueltas = new Set(Object.keys(result.data ?? {}));
+      const faltantes = pedidas.filter((ref) => !devueltas.has(ref));
+      if (faltantes.length > 0) {
+        return textResponse(
+          `The response omits ${faltantes.length} of ${pedidas.length} requested reference(s), ` +
+            `which have no cached update result: ${faltantes.join(", ")}.\n${texto}`,
+        );
+      }
+      return textResponse(texto);
     }),
   );
 

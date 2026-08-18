@@ -1857,6 +1857,49 @@ describe("MCP Tools", () => {
       expect(mockClient.imageUpdates.byRefs).toHaveBeenCalledWith("env1", ["nginx:latest", "redis:7"]);
     });
 
+    it("arcane_image_update_status no avisa cuando el mapa trae todas las referencias pedidas", async () => {
+      const mockClient = clienteConUpdates();
+      mockClient.imageUpdates.byRefs.mockResolvedValue({
+        success: true,
+        data: {
+          "nginx:latest": { hasUpdate: false },
+          "redis:7": { hasUpdate: true },
+        },
+      });
+      const server = createMockServer();
+      registerImageUpdateTools(server as any, mockClient);
+
+      const result = await server.getHandler("arcane_image_update_status")({
+        environmentId: "env1",
+        imageRefs: "nginx:latest,redis:7",
+      });
+      expect(result.content[0].text.startsWith("{")).toBe(true);
+      expect(result.content[0].text).not.toContain("omits");
+    });
+
+    it("arcane_image_update_status avisa y nombra las referencias que faltan en el mapa", async () => {
+      // Comprobado contra la instancia real: la API omite del mapa las
+      // referencias que no tiene cacheadas. Este test falla si la tool deja
+      // de comparar lo pedido contra lo devuelto, o si deja de nombrar cuales
+      // faltan.
+      const mockClient = clienteConUpdates();
+      mockClient.imageUpdates.byRefs.mockResolvedValue({
+        success: true,
+        data: { "nginx:latest": { hasUpdate: false } },
+      });
+      const server = createMockServer();
+      registerImageUpdateTools(server as any, mockClient);
+
+      const result = await server.getHandler("arcane_image_update_status")({
+        environmentId: "env1",
+        imageRefs: "nginx:latest,redis:7,noexiste/pepe:1",
+      });
+      const [primera] = result.content[0].text.split("\n");
+      expect(primera).toBe(
+        "The response omits 2 of 3 requested reference(s), which have no cached update result: redis:7, noexiste/pepe:1.",
+      );
+    });
+
     it("arcane_image_update_check acepta imageRef", async () => {
       const mockClient = clienteConUpdates();
       const server = createMockServer();
