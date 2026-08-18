@@ -1935,6 +1935,44 @@ describe("MCP Tools", () => {
       expect(JSON.parse(result.content[0].text)).toEqual([]);
     });
 
+    it("arcane_updater_history avisa con el limite por defecto del servidor cuando no se pide limit", async () => {
+      // Sin `limit`, la heuristica compara contra LIMIT_POR_DEFECTO_DEL_SERVIDOR (50),
+      // no contra `undefined`. Este test falla si esa constante se sustituye por `limit` a secas.
+      const mockClient = clienteConUpdater();
+      mockClient.updater.history.mockResolvedValue({
+        success: true,
+        data: Array.from({ length: 50 }, (_, i) => ({ id: `r${i}` })),
+      });
+      const server = createMockServer();
+      registerUpdaterTools(server as any, mockClient);
+
+      const result = await server.getHandler("arcane_updater_history")({ environmentId: "env1" });
+      const [primera] = result.content[0].text.split("\n");
+      expect(primera).toBe(
+        "This history may be truncated: exactly 50 records were requested and 50 were returned, and this endpoint reports no total. Raise limit to find out.",
+      );
+    });
+
+    it("arcane_updater_run exige resourceIds: el schema no acepta la llamada sin el campo", async () => {
+      // resourceIds es z.string() sin .optional() a proposito: sin objetivo,
+      // arcane_updater_run actualizaria y reiniciaria todo el entorno, incluido
+      // el propio contenedor arcane-mcp-server. Este test falla si alguien le
+      // añade .optional() al schema en src/tools/updater.ts.
+      const mockClient = clienteConUpdater();
+      const server = createMockServer();
+      registerUpdaterTools(server as any, mockClient);
+
+      const call = (server.tool as any).mock.calls.find((c: any[]) => c[0] === "arcane_updater_run");
+      const schemaShape = call[2];
+      const schema = z.object(schemaShape);
+
+      const validArgs = { environmentId: "env1", resourceIds: "c1,c2" };
+      expect(() => schema.parse(validArgs)).not.toThrow();
+
+      const { resourceIds, ...withoutResourceIds } = validArgs;
+      expect(() => schema.parse(withoutResourceIds)).toThrow();
+    });
+
     it("arcane_updater_run parte resourceIds y pasa dryRun", async () => {
       const mockClient = clienteConUpdater();
       const server = createMockServer();
