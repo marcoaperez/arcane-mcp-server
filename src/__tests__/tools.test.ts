@@ -19,6 +19,7 @@ import { registerGitRepositoryTools } from "../tools/git-repositories";
 import { registerGitOpsSyncTools } from "../tools/gitops-syncs";
 import { registerVolumeBackupTools } from "../tools/volume-backups";
 import { registerImageUpdateTools } from "../tools/image-updates";
+import { registerUpdaterTools } from "../tools/updater";
 
 type MockedFunction<T extends (...args: any[]) => any> = {
   (...args: Parameters<T>): ReturnType<T>;
@@ -1883,6 +1884,77 @@ describe("MCP Tools", () => {
 
       await server.getHandler("arcane_image_update_check_batch")({ environmentId: "env1", imageRefs: "a:1, b:2" });
       expect(mockClient.imageUpdates.checkBatch).toHaveBeenCalledWith("env1", ["a:1", "b:2"]);
+    });
+  });
+
+  describe("Tools de updater", () => {
+    const clienteConUpdater = () => {
+      const mockClient = createMockClient() as any;
+      mockClient.updater = {
+        status: vi.fn().mockResolvedValue({ success: true, data: { updatingContainers: 0, updatingProjects: 0, containerIds: [], projectIds: [] } }),
+        history: vi.fn().mockResolvedValue({ success: true, data: [] }),
+        run: vi.fn().mockResolvedValue({ success: true, data: { checked: 1, updated: 0, skipped: 1, failed: 0, duration: "1s", items: [] } }),
+      };
+      return mockClient;
+    };
+
+    it("arcane_updater_history avisa cuando devuelve exactamente lo pedido", async () => {
+      const mockClient = clienteConUpdater();
+      mockClient.updater.history.mockResolvedValue({
+        success: true,
+        data: Array.from({ length: 5 }, (_, i) => ({ id: `r${i}` })),
+      });
+      const server = createMockServer();
+      registerUpdaterTools(server as any, mockClient);
+
+      const result = await server.getHandler("arcane_updater_history")({ environmentId: "env1", limit: 5 });
+      const [primera] = result.content[0].text.split("\n");
+      expect(primera).toBe(
+        "This history may be truncated: exactly 5 records were requested and 5 were returned, and this endpoint reports no total. Raise limit to find out.",
+      );
+    });
+
+    it("arcane_updater_history no avisa cuando devuelve menos de lo pedido", async () => {
+      const mockClient = clienteConUpdater();
+      mockClient.updater.history.mockResolvedValue({ success: true, data: [{ id: "r0" }] });
+      const server = createMockServer();
+      registerUpdaterTools(server as any, mockClient);
+
+      const result = await server.getHandler("arcane_updater_history")({ environmentId: "env1", limit: 5 });
+      expect(result.content[0].text.startsWith("[")).toBe(true);
+      expect(result.content[0].text).not.toContain("may be truncated");
+    });
+
+    it("arcane_updater_history trata data:null como lista vacia, nunca el texto 'null'", async () => {
+      const mockClient = clienteConUpdater();
+      mockClient.updater.history.mockResolvedValue({ success: true, data: null });
+      const server = createMockServer();
+      registerUpdaterTools(server as any, mockClient);
+
+      const result = await server.getHandler("arcane_updater_history")({ environmentId: "env1" });
+      expect(JSON.parse(result.content[0].text)).toEqual([]);
+    });
+
+    it("arcane_updater_run parte resourceIds y pasa dryRun", async () => {
+      const mockClient = clienteConUpdater();
+      const server = createMockServer();
+      registerUpdaterTools(server as any, mockClient);
+
+      await server.getHandler("arcane_updater_run")({ environmentId: "env1", resourceIds: "c1, c2", type: "container", dryRun: true });
+      expect(mockClient.updater.run).toHaveBeenCalledWith("env1", {
+        resourceIds: ["c1", "c2"], type: "container", dryRun: true, forceUpdate: undefined,
+      });
+    });
+
+    it("arcane_updater_run devuelve isError si el cliente rechaza por falta de objetivo", async () => {
+      const mockClient = clienteConUpdater();
+      mockClient.updater.run.mockRejectedValue(new Error("run() necesita al menos un elemento en resourceIds"));
+      const server = createMockServer();
+      registerUpdaterTools(server as any, mockClient);
+
+      const result = await server.getHandler("arcane_updater_run")({ environmentId: "env1", resourceIds: "" });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("resourceIds");
     });
   });
 });

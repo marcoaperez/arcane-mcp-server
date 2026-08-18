@@ -40,7 +40,7 @@ El fix de los endpoints NDJSON se ha ofrecido al upstream como PR autocontenido.
 
 <!-- BEGIN TOOLS -->
 
-Las **85** tools que expone el servidor, agrupadas por dominio. Esta tabla la
+Las **88** tools que expone el servidor, agrupadas por dominio. Esta tabla la
 genera `npm run gen-tools-table` a partir de `src/tools/`: las descripciones y los
 parámetros son los que registra el código, no una copia mantenida a mano.
 
@@ -218,6 +218,14 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | `arcane_image_update_status` | Get the STORED update information for specific image references. Does not query any registry, so it is fast and safe to call repeatedly. Use arcane_image_update_check instead when you need a fresh answer. | `environmentId?`, `environmentName?`, `imageRefs` |
 | `arcane_image_update_check` | Check ONE image for updates by querying its registry LIVE. Slower than arcane_image_update_status and subject to registry rate limits, so prefer the stored status unless you need a fresh answer. Accepts an image reference or an image ID. | `environmentId?`, `environmentName?`, `imageRef?`, `imageId?` |
 | `arcane_image_update_check_batch` | Check a specific LIST of images for updates by querying their registries LIVE. Requires the list: checking every image at once is not exposed, because a scheduled job already does that sweep hourly. | `environmentId?`, `environmentName?`, `imageRefs` |
+
+### Updater (3)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_updater_status` | Report which containers and projects are being updated right now. | `environmentId?`, `environmentName?` |
+| `arcane_updater_history` | List past automatic update runs. This endpoint reports no total count and cannot be paged, so the list may be incomplete: raise limit if you need to be sure you are seeing everything. | `environmentId?`, `environmentName?`, `limit?` |
+| `arcane_updater_run` | Apply pending updates to SPECIFIC containers or projects, recreating them. You must name the targets: updating everything at once is deliberately not available. Pass dryRun to see what would happen without changing anything. | `environmentId?`, `environmentName?`, `resourceIds`, `type?`, `dryRun?`, `forceUpdate?` |
 
 <!-- END TOOLS -->
 

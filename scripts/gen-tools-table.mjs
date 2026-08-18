@@ -38,6 +38,7 @@ const GROUPS = [
   ["events.ts", "Events"],
   ["jobs.ts", "Jobs"],
   ["image-updates.ts", "Image updates"],
+  ["updater.ts", "Updater"],
 ];
 
 /** Extrae {name, desc, params} de cada `server.tool(name, desc, shape, handler)`. */
