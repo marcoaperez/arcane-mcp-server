@@ -208,7 +208,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | Tool | Description | Inputs |
 |---|---|---|
 | `arcane_job_list` | List background jobs with their schedule, whether they are enabled, and whether they can be run manually. | `environmentId?`, `environmentName?` |
-| `arcane_job_run` | Run a background job immediately. Jobs with unmet prerequisites will not execute. | `environmentId?`, `environmentName?`, `jobId` |
+| `arcane_job_run` | Run a background job immediately. Jobs with unmet prerequisites will not execute. Some jobs have broad side effects when run this way: image-polling checks every image in the environment against its registry (the mass sweep this server otherwise does not expose), and auto-update would mutate running containers if Arcane's autoUpdate setting is ever enabled. Check what a job does with arcane_job_list before running it. | `environmentId?`, `environmentName?`, `jobId` |
 | `arcane_job_schedules_get` | Get the configured intervals for scheduled background jobs. | `environmentId?`, `environmentName?` |
 | `arcane_job_schedules_update` | Update one or more scheduled job intervals. Only the intervals provided are changed. Two of them govern background jobs with real side effects: scheduledPruneInterval controls how often unused Docker resources are automatically destroyed, and autoUpdateInterval controls how often running containers are automatically checked and mutated to newer images. | `environmentId?`, `environmentName?`, `autoHealInterval?`, `autoUpdateInterval?`, `dockerClientRefreshInterval?`, `environmentHealthInterval?`, `eventCleanupInterval?`, `expiredSessionsCleanupInterval?`, `pollingInterval?`, `scheduledPruneInterval?`, `vulnerabilityScanInterval?` |
 
@@ -217,7 +217,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | Tool | Description | Inputs |
 |---|---|---|
 | `arcane_image_update_summary` | Get the aggregate image update counts for an environment: how many images there are, how many have updates available, and how many failed to check. Cheap: reads stored results, does not query any registry. | `environmentId?`, `environmentName?` |
-| `arcane_image_update_status` | Get the STORED update information for specific image references. Does not query any registry, so it is fast and safe to call repeatedly. Use arcane_image_update_check instead when you need a fresh answer. | `environmentId?`, `environmentName?`, `imageRefs` |
+| `arcane_image_update_status` | Get the STORED update information for specific image references. Does not query any registry, so it is fast and safe to call repeatedly. The response map can omit references that have no cached result — the tool flags this in prose when it happens. Use arcane_image_update_check instead when you need a fresh answer. | `environmentId?`, `environmentName?`, `imageRefs` |
 | `arcane_image_update_check` | Check ONE image for updates by querying its registry LIVE. Slower than arcane_image_update_status and subject to registry rate limits, so prefer the stored status unless you need a fresh answer. Accepts an image reference or an image ID. | `environmentId?`, `environmentName?`, `imageRef?`, `imageId?` |
 | `arcane_image_update_check_batch` | Check a specific LIST of images for updates by querying their registries LIVE. Requires the list: checking every image at once is not exposed, because a scheduled job already does that sweep hourly. | `environmentId?`, `environmentName?`, `imageRefs` |
 
