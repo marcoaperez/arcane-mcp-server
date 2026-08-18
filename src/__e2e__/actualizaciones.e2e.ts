@@ -38,14 +38,29 @@ describe("actualizaciones (e2e, Arcane 2.8.0)", () => {
   });
 
   it("byRefs devuelve informacion persistida de las referencias pedidas", async () => {
-    const imgs = await client.images.list(envId, { limit: 5 });
-    const refs = (imgs.data ?? []).flatMap((i) => i.repoTags ?? []).slice(0, 2);
+    // limit 10 en vez de 5 para tener margen: probado contra la instancia real,
+    // la API omite del mapa las refs que no tiene cacheadas (de 20 refs reales
+    // pedidas, 18 aparecieron y 2 no), asi que cuantas mas refs se pidan menos
+    // probable es que el mapa salga vacio por mala suerte.
+    const imgs = await client.images.list(envId, { limit: 10 });
+    const refs = [...new Set((imgs.data ?? []).flatMap((i) => i.repoTags ?? []))];
     expect(refs.length).toBeGreaterThan(0);
 
     const r = await client.imageUpdates.byRefs(envId, refs);
     expect(r.success).toBe(true);
     expect(typeof r.data).toBe("object");
     expect(Array.isArray(r.data)).toBe(false); // es un mapa, no un array
+
+    // Falsable de verdad: un mapa vacio (el cliente perdiendo las refs pedidas)
+    // ya no pasa. NO se exige que aparezcan TODAS las refs pedidas: comprobado
+    // contra la instancia real, la API omite las que no tiene cacheadas, asi
+    // que esa asercion clavaria un comportamiento que no es constante. Lo que
+    // SI es invariante: el mapa nunca contiene una clave que no se pidiera.
+    const keys = Object.keys(r.data);
+    expect(keys.length).toBeGreaterThan(0);
+    for (const key of keys) {
+      expect(refs).toContain(key);
+    }
   });
 
   it("check en vivo responde para una imagen de un registro publico", async () => {
@@ -66,8 +81,33 @@ describe("actualizaciones (e2e, Arcane 2.8.0)", () => {
   });
 
   it("updater.history respeta el limit, que es el unico control que ofrece", async () => {
+    // No hay envoltorio de paginacion ni forma de pedir "el total": se pide con
+    // un limite generoso primero solo para saber cuantos registros hay de
+    // verdad en esta instancia (comprobado: 2 en el momento de escribir esto,
+    // pero el test no depende de esa cifra).
+    const amplio = await client.updater.history(envId, 20);
+    const total = (amplio.data ?? []).length;
+
+    if (total < 2) {
+      // Con 0 o 1 registro, "limit=1 devuelve <= 1" es verdad tanto si el
+      // cliente reenvia limit como si no: el test no puede ser falsable en
+      // este estado de la instancia. Se deja constancia en vez de dar un
+      // falso verde con una asercion que no prueba nada.
+      console.warn(
+        `updater.history: la instancia solo tiene ${total} registro(s); ` +
+          "el test de limit no es falsable ahora mismo y no se ejecuta.",
+      );
+      return;
+    }
+
     const uno = await client.updater.history(envId, 1);
-    expect((uno.data ?? []).length).toBeLessThanOrEqual(1);
+    const largo = (uno.data ?? []).length;
+    expect(largo).toBeLessThanOrEqual(1);
+    // La comprobacion real: pedir menos debe devolver estrictamente menos que
+    // pedir mas, cuando hay suficientes registros para que la diferencia se
+    // note. Si el cliente dejara de reenviar `limit`, ambas llamadas
+    // devolverian `total` y esta asercion fallaria.
+    expect(largo).toBeLessThan(total);
   });
 
   it("updater.run exige resourceIds y no llega a llamar a la API sin ellos", async () => {
