@@ -1484,6 +1484,56 @@ class ImageUpdatesMethods {
   }
 }
 
+class UpdaterMethods {
+  constructor(private client: ArcaneClient) {}
+
+  async status(envId: string): Promise<{ success: boolean; data: UpdaterStatus }> {
+    return this.client.request<{ success: boolean; data: UpdaterStatus }>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/updater/status`
+    );
+  }
+
+  /**
+   * OJO: este endpoint devuelve un array pelado, SIN sobre de paginacion y sin
+   * `start`. Acepta `limit` (default 50 en el servidor) y no hay forma de saber
+   * cuantos registros hay en total. La tool lo advierte con una heuristica.
+   */
+  async history(envId: string, limit?: number): Promise<{ success: boolean; data: AutoUpdateRecord[] | null }> {
+    const params = new URLSearchParams();
+    if (limit !== undefined) params.set("limit", String(limit));
+    const query = params.toString();
+    return this.client.request<{ success: boolean; data: AutoUpdateRecord[] | null }>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/updater/history${query ? `?${query}` : ""}`
+    );
+  }
+
+  /**
+   * Aplica actualizaciones. `resourceIds` es OBLIGATORIO aqui aunque el spec lo
+   * declare opcional: sin el, una sola llamada actualizaria y reiniciaria todo
+   * el entorno, incluido el contenedor arcane-mcp-server que atiende esta misma
+   * peticion. Es el mismo motivo por el que F2 excluyo system/containers/stop-all.
+   */
+  async run(
+    envId: string,
+    opts: { resourceIds: string[]; type?: string; dryRun?: boolean; forceUpdate?: boolean }
+  ): Promise<{ success: boolean; data: UpdaterResult }> {
+    if (!opts.resourceIds || opts.resourceIds.length === 0) {
+      throw new Error("run() necesita al menos un elemento en resourceIds: la actualizacion masiva no se expone");
+    }
+    const body: Record<string, unknown> = { resourceIds: opts.resourceIds };
+    if (opts.type !== undefined) body.type = opts.type;
+    if (opts.dryRun !== undefined) body.dryRun = opts.dryRun;
+    if (opts.forceUpdate !== undefined) body.forceUpdate = opts.forceUpdate;
+    return this.client.request<{ success: boolean; data: UpdaterResult }>(
+      "POST",
+      `/environments/${encodeURIComponent(envId)}/updater/run`,
+      body
+    );
+  }
+}
+
 class GitRepositoriesMethods {
   constructor(private client: ArcaneClient) {}
 
@@ -1769,6 +1819,7 @@ export class ArcaneClient {
   readonly events: EventsMethods;
   readonly jobs: JobsMethods;
   readonly imageUpdates: ImageUpdatesMethods;
+  readonly updater: UpdaterMethods;
   readonly gitRepositories: GitRepositoriesMethods;
   readonly gitOpsSyncs: GitOpsSyncsMethods;
   readonly projectAdditional: ProjectAdditionalMethods;
@@ -1803,6 +1854,7 @@ export class ArcaneClient {
     this.events = new EventsMethods(this);
     this.jobs = new JobsMethods(this);
     this.imageUpdates = new ImageUpdatesMethods(this);
+    this.updater = new UpdaterMethods(this);
     this.gitRepositories = new GitRepositoriesMethods(this);
     this.gitOpsSyncs = new GitOpsSyncsMethods(this);
     this.projectAdditional = new ProjectAdditionalMethods(this);

@@ -1156,6 +1156,55 @@ describe("ArcaneClient", () => {
     });
   });
 
+  describe("UpdaterMethods", () => {
+    const ok = (data: unknown) =>
+      ({ ok: true, json: async () => ({ success: true, data }) }) as Response;
+
+    it("status(envId) - GET /environments/{envId}/updater/status", async () => {
+      mockFetch.mockResolvedValue(ok({ updatingContainers: 0, updatingProjects: 0, containerIds: [], projectIds: [] }));
+      await client.updater.status("env1");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/updater/status",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("history(envId, limit) envia el limit", async () => {
+      mockFetch.mockResolvedValue(ok([]));
+      await client.updater.history("env1", 10);
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/updater/history?limit=10",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("history(envId) sin limit no anade query string", async () => {
+      mockFetch.mockResolvedValue(ok([]));
+      await client.updater.history("env1");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/updater/history",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("run(envId, opts) manda resourceIds, type y dryRun en el cuerpo", async () => {
+      mockFetch.mockResolvedValue(ok({ checked: 1, updated: 0, skipped: 1, failed: 0, duration: "1s", items: [] }));
+      await client.updater.run("env1", { resourceIds: ["c1"], type: "container", dryRun: true });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/updater/run",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ resourceIds: ["c1"], type: "container", dryRun: true }),
+        }),
+      );
+    });
+
+    it("run(envId, {resourceIds: []}) lanza sin llamar a la API", async () => {
+      await expect(client.updater.run("env1", { resourceIds: [] })).rejects.toThrow(/resourceIds/);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+  });
+
   describe("networks", () => {
     it(".list(envId) - GET /environments/{envId}/networks", async () => {
       mockFetch.mockResolvedValue({
