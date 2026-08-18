@@ -22,10 +22,11 @@ export function registerContainerTools(server: McpServer, client: ArcaneClient):
       ...LIST_PARAMS,
       includeInternal: z.boolean().optional().describe("Include internal containers (server default: false)"),
       standalone: z.string().optional().describe("Filter standalone containers only: true or false"),
+      updates: z.string().optional().describe("Filter by update status: has_update, up_to_date, error or unknown"),
     },
-    withErrors(async ({ environmentId, environmentName, search, sort, order, start, limit, includeInternal, standalone }) => {
+    withErrors(async ({ environmentId, environmentName, search, sort, order, start, limit, includeInternal, standalone, updates }) => {
       const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-      const result = await client.containers.list(envId, { search, sort, order, start, limit, includeInternal, standalone });
+      const result = await client.containers.list(envId, { search, sort, order, start, limit, includeInternal, standalone, updates });
       return listResponse(result, "containers");
     }),
   );

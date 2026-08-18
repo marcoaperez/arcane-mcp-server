@@ -58,7 +58,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_stack_list` | List Docker Compose stacks (projects) in an environment. Returns pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `status?`, `archived?`, `tags?` |
+| `arcane_stack_list` | List Docker Compose stacks (projects) in an environment. Returns pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `status?`, `archived?`, `tags?`, `updates?` |
 | `arcane_stack_get` | Get details of a specific Docker Compose stack by ID or name. | `environmentId?`, `environmentName?`, `stackId?`, `stackName?` |
 | `arcane_stack_deploy` | Deploy a new Docker Compose stack to an environment. | `environmentId?`, `environmentName?`, `name`, `composeContent`, `envContent?` |
 | `arcane_stack_update` | Update an existing Docker Compose stack. | `environmentId?`, `environmentName?`, `stackId?`, `stackName?`, `name?`, `composeContent?`, `envContent?` |
@@ -81,7 +81,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_container_list` | List Docker containers in an environment. Returns pagination and running/stopped counts; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `includeInternal?`, `standalone?` |
+| `arcane_container_list` | List Docker containers in an environment. Returns pagination and running/stopped counts; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `includeInternal?`, `standalone?`, `updates?` |
 | `arcane_container_get` | Get details of a specific Docker container by ID or name. | `environmentId?`, `environmentName?`, `containerId?`, `containerName?` |
 | `arcane_container_start` | Start a Docker container. | `environmentId?`, `environmentName?`, `containerId?`, `containerName?` |
 | `arcane_container_stop` | Stop a Docker container. | `environmentId?`, `environmentName?`, `containerId?`, `containerName?` |
@@ -100,7 +100,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_image_list` | List Docker images in an environment. Returns pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `inUse?` |
+| `arcane_image_list` | List Docker images in an environment. Returns pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `inUse?`, `updates?` |
 | `arcane_image_pull` | Pull a Docker image in an environment. | `environmentId?`, `environmentName?`, `imageName` |
 | `arcane_image_remove` | Remove a Docker image from an environment. | `environmentId?`, `environmentName?`, `imageId` |
 | `arcane_image_prune` | Remove unused Docker images from an environment. | `environmentId?`, `environmentName?` |

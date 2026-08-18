@@ -21,10 +21,11 @@ export function registerImageTools(server: McpServer, client: ArcaneClient): voi
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
       ...LIST_PARAMS,
       inUse: z.string().optional().describe("Filter by in-use status: true or false"),
+      updates: z.string().optional().describe("Filter by update availability: true or false"),
     },
-    withErrors(async ({ environmentId, environmentName, search, sort, order, start, limit, inUse }) => {
+    withErrors(async ({ environmentId, environmentName, search, sort, order, start, limit, inUse, updates }) => {
       const envId = await resolveEnvironmentId(client, environmentId, environmentName);
-      const result = await client.images.list(envId, { search, sort, order, start, limit, inUse });
+      const result = await client.images.list(envId, { search, sort, order, start, limit, inUse, updates });
       return listResponse(result, "images");
     }),
   );

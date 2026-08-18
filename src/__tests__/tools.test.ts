@@ -1995,4 +1995,40 @@ describe("MCP Tools", () => {
       expect(result.content[0].text).toContain("resourceIds");
     });
   });
+
+  describe("El filtro updates en las tools de listado", () => {
+    it("arcane_image_list pasa updates al cliente", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerImageTools(server as any, mockClient);
+      (mockClient.images.list as any).mockResolvedValue({
+        success: true, data: [], pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      await server.getHandler("arcane_image_list")({ environmentId: "env1", updates: "true" });
+      expect(mockClient.images.list).toHaveBeenCalledWith("env1", expect.objectContaining({ updates: "true" }));
+    });
+
+    it("arcane_container_list pasa updates al cliente", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerContainerTools(server as any, mockClient);
+      (mockClient.containers.list as any).mockResolvedValue({
+        success: true, data: [], counts: { runningContainers: 0, stoppedContainers: 0, totalContainers: 0 },
+        pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      await server.getHandler("arcane_container_list")({ environmentId: "env1", updates: "has_update" });
+      expect(mockClient.containers.list).toHaveBeenCalledWith("env1", expect.objectContaining({ updates: "has_update" }));
+    });
+
+    it("arcane_stack_list pasa updates al cliente", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerStackTools(server as any, mockClient);
+
+      await server.getHandler("arcane_stack_list")({ environmentId: "env1", updates: "up_to_date" });
+      expect(mockClient.stacks.list).toHaveBeenCalledWith("env1", expect.objectContaining({ updates: "up_to_date" }));
+    });
+  });
 });
