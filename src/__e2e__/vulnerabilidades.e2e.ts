@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { e2eClient, SCAN_IMAGE } from "./helpers";
-import type { VulnerabilityScanResult } from "../arcane-client";
+import type { VulnerabilityScanResult, VulnerabilitySeveritySummary } from "../arcane-client";
+
+/** Claves de severidad de VulnerabilitySeveritySummary, sin "total". */
+const SEVERIDADES = ["critical", "high", "medium", "low", "unknown"] as const;
+type Severidad = (typeof SEVERIDADES)[number];
 
 /**
  * Vulnerabilidades contra la instancia real. La SIEMBRA es parte de la suite:
@@ -24,10 +28,17 @@ describe("vulnerabilidades (e2e, Arcane 2.8.0)", () => {
     const lanzado = await client.vulnerabilities.scan(envId, imageId);
     acuse = lanzado.data;
 
-    // Sondeo hasta completed. Tolera cortes de Tailscale reintentando; un
-    // escaneo en estado failed NO se tolera: es un fallo real.
+    // Sondeo hasta completed. El catch reintenta CUALQUIER error que no sea
+    // el "failed" explícito del escaneo (incluye cortes de Tailscale, pero
+    // también un ArcaneApiError real -404/500/auth- si scanResult empezara
+    // a fallar de forma determinista); por eso se guarda el último error y
+    // se incluye su mensaje en el timeout final, para que un fallo
+    // determinista se delate a sí mismo en vez de perderse en 90 s de reintentos
+    // silenciosos. Un 404 justo tras lanzar el scan es legítimamente
+    // transitorio (el registro aún no existe), así que no se rethrow ante él.
     const plazo = Date.now() + 90_000;
     let ultimoEstado = "(sin respuesta)";
+    let ultimoError: unknown;
     for (;;) {
       try {
         const r = await client.vulnerabilities.scanResult(envId, imageId);
@@ -41,9 +52,16 @@ describe("vulnerabilidades (e2e, Arcane 2.8.0)", () => {
         }
       } catch (err) {
         if (err instanceof Error && err.message.startsWith("SCAN_FAILED")) throw err;
-        // corte de red: se reintenta hasta agotar el plazo
+        // corte de red u otro error transitorio: se reintenta, pero se
+        // recuerda para no perder el detalle si se agota el plazo.
+        ultimoError = err;
       }
-      if (Date.now() > plazo) throw new Error(`Timeout esperando el escaneo; último estado: ${ultimoEstado}`);
+      if (Date.now() > plazo) {
+        const detalle = ultimoError instanceof Error ? ultimoError.message : String(ultimoError ?? "(ninguno)");
+        throw new Error(
+          `Timeout esperando el escaneo; último estado: ${ultimoEstado}; último error: ${detalle}`,
+        );
+      }
       await new Promise((res) => setTimeout(res, 3_000));
     }
   }, 120_000);
@@ -108,12 +126,36 @@ describe("vulnerabilidades (e2e, Arcane 2.8.0)", () => {
     }
   });
 
-  it("image-options contiene la imagen escaneada y severity devuelve un subconjunto", async () => {
+  it("image-options contiene la imagen escaneada y severity filtra de verdad", async () => {
     const todas = await client.vulnerabilities.imageOptions(envId);
     expect(todas.data).toContain(SCAN_IMAGE);
-    const altas = await client.vulnerabilities.imageOptions(envId, "high");
-    for (const nombre of altas.data) {
-      expect(todas.data).toContain(nombre);
+
+    // Falsable de verdad: para una severidad con hallazgos, la imagen DEBE
+    // aparecer; para una severidad sin hallazgos, DEBE desaparecer. Un
+    // filtro ignorado (que devolviera siempre la lista completa) haría
+    // fallar la segunda mitad. Derivado de resultado.summary en tiempo de
+    // ejecución, sin cifras clavadas: la BD de CVEs cambia.
+    const s = resultado.summary as VulnerabilitySeveritySummary;
+    const conHallazgos = SEVERIDADES.filter((sev) => s[sev] > 0);
+    const sinHallazgos = SEVERIDADES.filter((sev) => s[sev] === 0);
+
+    // Si toda severidad quedara del mismo lado, ninguna de las dos mitades
+    // se ejercitaría y el test "pasaría" sin haber comprobado nada. Se hace
+    // fallar explícitamente en vez de dejarlo pasar en silencio.
+    expect(conHallazgos.length, `summary sin ninguna severidad con hallazgos: ${JSON.stringify(s)}`).toBeGreaterThan(
+      0,
+    );
+    expect(sinHallazgos.length, `summary con hallazgos en todas las severidades: ${JSON.stringify(s)}`).toBeGreaterThan(
+      0,
+    );
+
+    for (const sev of conHallazgos as Severidad[]) {
+      const r = await client.vulnerabilities.imageOptions(envId, sev);
+      expect(r.data, `severity=${sev} (${s[sev]} hallazgos) debería incluir ${SCAN_IMAGE}`).toContain(SCAN_IMAGE);
+    }
+    for (const sev of sinHallazgos as Severidad[]) {
+      const r = await client.vulnerabilities.imageOptions(envId, sev);
+      expect(r.data, `severity=${sev} (0 hallazgos) NO debería incluir ${SCAN_IMAGE}`).not.toContain(SCAN_IMAGE);
     }
   });
 
