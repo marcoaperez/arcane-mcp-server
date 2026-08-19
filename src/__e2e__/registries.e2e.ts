@@ -29,6 +29,8 @@ describe("e2e: registros de contenedor contra Arcane real", () => {
     const res = await client.containerRegistries.get(registroId);
     expect(res.data.id).toBe(registroId);
     expect(JSON.stringify(res.data)).not.toContain("no-es-un-secreto-real");
+    expect(Object.keys(res.data)).not.toContain("token");
+    expect(Object.keys(res.data)).not.toContain("awsSecretAccessKey");
   });
 
   it("pullUsage() incluye el registro sembrado", async () => {

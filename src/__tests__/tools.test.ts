@@ -2336,6 +2336,41 @@ describe("MCP Tools", () => {
   });
 
   describe("registerContainerRegistryTools", () => {
+    it("arcane_container_registry_list calls client.containerRegistries.list with correct params", async () => {
+      const mockClient = createMockClient();
+      (mockClient.containerRegistries.list as any).mockResolvedValue({
+        success: true,
+        data: [{ id: "r1", url: "reg.example", username: "u", insecure: false, enabled: true, registryType: "generic", repositoryNames: null, createdAt: "t", updatedAt: "t" }],
+        pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const server = createMockServer();
+      registerContainerRegistryTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_container_registry_list");
+      const result = await handler({ search: "hub", order: "asc" });
+
+      expect(mockClient.containerRegistries.list).toHaveBeenCalledWith({ search: "hub", order: "asc" });
+      expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
+    });
+
+    it("arcane_container_registry_get calls client.containerRegistries.get with registryId", async () => {
+      const mockClient = createMockClient();
+      (mockClient.containerRegistries.get as any).mockResolvedValue({
+        success: true,
+        data: { id: "r1", url: "reg.example", username: "u", insecure: false, enabled: true, registryType: "generic", repositoryNames: null, createdAt: "t", updatedAt: "t" },
+      });
+
+      const server = createMockServer();
+      registerContainerRegistryTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_container_registry_get");
+      const result = await handler({ registryId: "r1" });
+
+      expect(mockClient.containerRegistries.get).toHaveBeenCalledWith("r1");
+      expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
+    });
+
     it("arcane_container_registry_pull_usage convierte registries:null en lista vacia", async () => {
       const server = createMockServer();
       const client = createMockClient();

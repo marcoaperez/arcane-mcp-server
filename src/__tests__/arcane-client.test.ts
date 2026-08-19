@@ -2046,6 +2046,62 @@ describe("ArcaneClient", () => {
       );
     });
 
+    it(".list({order}) - GET /container-registries con la query literal", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: {} }),
+      } as Response);
+
+      await client.containerRegistries.list({ order: "desc" });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/container-registries?order=desc",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({start}) - GET /container-registries con la query literal", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: {} }),
+      } as Response);
+
+      await client.containerRegistries.list({ start: 40 });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/container-registries?start=40",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({start: 0}) se envia (es un valor valido, no una ausencia)", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: {} }),
+      } as Response);
+
+      await client.containerRegistries.list({ start: 0 });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/container-registries?start=0",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({limit}) - GET /container-registries con la query literal", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: {} }),
+      } as Response);
+
+      await client.containerRegistries.list({ limit: 5 });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/container-registries?limit=5",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
     it(".get(id) codifica el id en la ruta y no permite traversal", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
