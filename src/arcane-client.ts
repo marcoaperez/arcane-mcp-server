@@ -713,6 +713,18 @@ export interface ImageListOptions extends ListOptionsWithSort {
   updates?: string;
 }
 
+export interface VulnerabilityListOptions extends ListOptionsWithSort {
+  /** critical | high | medium | low | unknown */
+  severity?: string;
+  /** Nombre exacto de imagen, p. ej. "curlimages/curl:8.5.0" */
+  imageName?: string;
+}
+
+export interface ImageVulnerabilityListOptions extends ListOptionsWithSort {
+  /** critical | high | medium | low | unknown */
+  severity?: string;
+}
+
 export interface VolumeListOptions extends ListOptionsWithSort {
   inUse?: string;
   includeInternal?: boolean;
@@ -1672,6 +1684,102 @@ class UpdaterMethods {
   }
 }
 
+/**
+ * Vulnerabilidades (Trivy integrado en Arcane). Los endpoints por imagen
+ * responden 404 "Vulnerability scan not found" si la imagen no se ha
+ * escaneado: es su estado normal, no una avería.
+ */
+class VulnerabilitiesMethods {
+  constructor(private client: ArcaneClient) {}
+
+  async scannerStatus(envId: string): Promise<{ success: boolean; data: ScannerStatus }> {
+    return this.client.request<{ success: boolean; data: ScannerStatus }>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/vulnerabilities/scanner-status`
+    );
+  }
+
+  async environmentSummary(envId: string): Promise<{ success: boolean; data: EnvironmentVulnerabilitySummary }> {
+    return this.client.request<{ success: boolean; data: EnvironmentVulnerabilitySummary }>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/vulnerabilities/summary`
+    );
+  }
+
+  async listAll(envId: string, opts?: VulnerabilityListOptions): Promise<PaginatedResponse<VulnerabilityWithImage>> {
+    const params = new URLSearchParams();
+    appendListParams(params, opts);
+    if (opts?.severity) params.set("severity", opts.severity);
+    if (opts?.imageName) params.set("imageName", opts.imageName);
+    const query = params.toString();
+    return this.client.request<PaginatedResponse<VulnerabilityWithImage>>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/vulnerabilities/all${query ? `?${query}` : ""}`
+    );
+  }
+
+  async imageOptions(envId: string, severity?: string): Promise<{ success: boolean; data: string[] }> {
+    const params = new URLSearchParams();
+    if (severity) params.set("severity", severity);
+    const query = params.toString();
+    return this.client.request<{ success: boolean; data: string[] }>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/vulnerabilities/image-options${query ? `?${query}` : ""}`
+    );
+  }
+
+  async scanResult(envId: string, imageId: string): Promise<{ success: boolean; data: VulnerabilityScanResult }> {
+    return this.client.request<{ success: boolean; data: VulnerabilityScanResult }>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/images/${encodeURIComponent(imageId)}/vulnerabilities`
+    );
+  }
+
+  async imageList(
+    envId: string,
+    imageId: string,
+    opts?: ImageVulnerabilityListOptions
+  ): Promise<PaginatedResponse<Vulnerability>> {
+    const params = new URLSearchParams();
+    appendListParams(params, opts);
+    if (opts?.severity) params.set("severity", opts.severity);
+    const query = params.toString();
+    return this.client.request<PaginatedResponse<Vulnerability>>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/images/${encodeURIComponent(imageId)}/vulnerabilities/list${query ? `?${query}` : ""}`
+    );
+  }
+
+  async imageSummary(envId: string, imageId: string): Promise<{ success: boolean; data: VulnerabilityScanSummary }> {
+    return this.client.request<{ success: boolean; data: VulnerabilityScanSummary }>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/images/${encodeURIComponent(imageId)}/vulnerabilities/summary`
+    );
+  }
+
+  /**
+   * Resúmenes en lote. El mapa de la respuesta OMITE las imágenes sin escaneo
+   * (medido contra la instancia real): la capa tool avisa de las omisiones.
+   */
+  async imageSummaries(envId: string, imageIds: string[]): Promise<{ success: boolean; data: VulnerabilityScanSummariesResponse }> {
+    return this.client.request<{ success: boolean; data: VulnerabilityScanSummariesResponse }>(
+      "POST",
+      `/environments/${encodeURIComponent(envId)}/images/vulnerabilities/summaries`,
+      { imageIds }
+    );
+  }
+
+  async ignoredList(envId: string, opts?: ListOptionsWithSort): Promise<PaginatedResponse<IgnoredVulnerability>> {
+    const params = new URLSearchParams();
+    appendListParams(params, opts);
+    const query = params.toString();
+    return this.client.request<PaginatedResponse<IgnoredVulnerability>>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/vulnerabilities/ignored${query ? `?${query}` : ""}`
+    );
+  }
+}
+
 class GitRepositoriesMethods {
   constructor(private client: ArcaneClient) {}
 
@@ -1958,6 +2066,7 @@ export class ArcaneClient {
   readonly jobs: JobsMethods;
   readonly imageUpdates: ImageUpdatesMethods;
   readonly updater: UpdaterMethods;
+  readonly vulnerabilities: VulnerabilitiesMethods;
   readonly gitRepositories: GitRepositoriesMethods;
   readonly gitOpsSyncs: GitOpsSyncsMethods;
   readonly projectAdditional: ProjectAdditionalMethods;
@@ -1993,6 +2102,7 @@ export class ArcaneClient {
     this.jobs = new JobsMethods(this);
     this.imageUpdates = new ImageUpdatesMethods(this);
     this.updater = new UpdaterMethods(this);
+    this.vulnerabilities = new VulnerabilitiesMethods(this);
     this.gitRepositories = new GitRepositoriesMethods(this);
     this.gitOpsSyncs = new GitOpsSyncsMethods(this);
     this.projectAdditional = new ProjectAdditionalMethods(this);
