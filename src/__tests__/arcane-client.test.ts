@@ -2016,4 +2016,76 @@ describe("ArcaneClient", () => {
       );
     });
   });
+
+  describe("containerRegistries", () => {
+    it(".list() sin opciones - GET /container-registries sin query", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: {} }),
+      } as Response);
+
+      await client.containerRegistries.list();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/container-registries",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({search, sort}) - GET /container-registries con la query literal", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: {} }),
+      } as Response);
+
+      await client.containerRegistries.list({ search: "docker hub", sort: "url" });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/container-registries?search=docker+hub&sort=url",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".get(id) codifica el id en la ruta y no permite traversal", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: {} }),
+      } as Response);
+
+      await client.containerRegistries.get("../../system/containers/stop-all#");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/container-registries/..%2F..%2Fsystem%2Fcontainers%2Fstop-all%23",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".pullUsage() - GET /container-registries/pull-usage", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { registries: [] } }),
+      } as Response);
+
+      await client.containerRegistries.pullUsage();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/container-registries/pull-usage",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".test(id) - POST /container-registries/{id}/test, con el id codificado", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { message: "ok" } }),
+      } as Response);
+
+      await client.containerRegistries.test("reg#1");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/container-registries/reg%231/test",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+  });
 });

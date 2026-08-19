@@ -38,11 +38,45 @@ Built on Cloudflare Workers using the official Cloudflare `agents` package, this
 
 El fix de los endpoints NDJSON se ha ofrecido al upstream como PR autocontenido.
 
+## Pendiente al actualizar a Arcane v2.8.1
+
+La instancia de referencia corre **v2.8.0** deliberadamente: es la versión contra la que
+están verificadas las 98 combinaciones método+ruta y los comportamientos que describen las
+tools de este README. v2.8.1 (publicada el 2026-08-19) **no corrige ninguno** de los issues
+abiertos desde este proyecto, así que el salto no corre prisa. Cuando se haga, esto es lo
+que hay que atender:
+
+- **`arcane_image_update_check` gana un estado nuevo.** El PR
+  [#3631](https://github.com/getarcaneapp/arcane/pull/3631) hace que las imágenes nunca
+  descargadas reporten un estado propio `not pulled` en lugar de fallar la comprobación.
+  Es el único cambio de v2.8.1 que toca la superficie que usa este fork.
+- **El contrato JSON no cambia.** El refactor de `models` a paquetes de dominio
+  ([#3636](https://github.com/getarcaneapp/arcane/pull/3636)) mueve los structs de fichero
+  pero conserva los tags `json`. Verificado campo a campo sobre `VulnerabilityIgnore` en
+  `backend/internal/vulnerability/model.go` de v2.8.1, y el diff `v2.8.0...v2.8.1` no
+  contiene ningún campo eliminado ni renombrado. No se espera drift de shapes.
+- **Rehacer la línea base de verificación.** Regenerar `openapi.txt` con
+  `npm run update-api-spec` y pasar `scripts/audit-schema-drift.mjs`. Los comportamientos
+  medidos que documentan las descripciones de las tools (`arcane_system_health` siempre
+  500, `arcane_vulnerability_ignore` sin efecto sobre los recuentos) dejan de estar
+  garantizados hasta volver a medirlos.
+- **Requisitos operativos del salto.** Pinear la imagen antes de actualizar — la instancia
+  arrastra las etiquetas `:latest` y `:v2.8.0` sobre el mismo digest — y contar con que
+  v2.8.1 **migra el esquema de la base de datos**: backup previo.
+
+Issues abiertos contra upstream desde este proyecto, ninguno resuelto en v2.8.1:
+[#3638](https://github.com/getarcaneapp/arcane/issues/3638),
+[#3640](https://github.com/getarcaneapp/arcane/issues/3640),
+[#3645](https://github.com/getarcaneapp/arcane/issues/3645) — cuyo fix, el PR
+[#3648](https://github.com/getarcaneapp/arcane/pull/3648), sigue sin mergear — y
+[#3657](https://github.com/getarcaneapp/arcane/issues/3657), que documenta que la API no
+percent-decodifica los segmentos `{imageId}`.
+
 ## Available Tools
 
 <!-- BEGIN TOOLS -->
 
-Las **100** tools que expone el servidor, agrupadas por dominio. Esta tabla la
+Las **104** tools que expone el servidor, agrupadas por dominio. Esta tabla la
 genera `npm run gen-tools-table` a partir de `src/tools/`: las descripciones y los
 parámetros son los que registra el código, no una copia mantenida a mano.
 
@@ -245,6 +279,15 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | `arcane_vulnerability_scan` | Launch a vulnerability scan (Trivy) of ONE image. The scan is asynchronous: this returns an acknowledgement with an activityId, not the result. Follow progress with arcane_activity_get, and read the outcome with arcane_vulnerability_scan_result once completed (~15 s for a small image). Scanning consumes CPU on the host. Check arcane_vulnerability_scanner_status first if unsure the scanner is available. | `environmentId?`, `environmentName?`, `imageId` |
 | `arcane_vulnerability_ignore` | Mark ONE vulnerability of ONE image as ignored by creating a persistent ignore record. Requires a reason, which is stored and shown in arcane_vulnerability_ignored_list. Reversible with arcane_vulnerability_unignore. Measured against Arcane v2.8.0: creating the record does NOT change the CVE counts returned by arcane_vulnerability_image_summary or arcane_vulnerability_image_list — treat this as a tracked triage decision, not a reporting filter. | `environmentId?`, `environmentName?`, `imageId`, `vulnerabilityId`, `pkgName`, `reason`, `installedVersion?` |
 | `arcane_vulnerability_unignore` | Remove an ignore record created by arcane_vulnerability_ignore, so it no longer appears in arcane_vulnerability_ignored_list. The ignoreId comes from arcane_vulnerability_ignored_list or from the record returned by arcane_vulnerability_ignore. Measured against Arcane v2.8.0: removing the record does NOT change the CVE counts returned by arcane_vulnerability_image_summary or arcane_vulnerability_image_list. | `environmentId?`, `environmentName?`, `ignoreId` |
+
+### Container registries (4)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_container_registry_list` | List the container registries Arcane pulls images from. Credentials are never returned by this API: tokens and AWS secret keys are absent from the response, so what you get is configuration only. | `search?`, `sort?`, `order?`, `start?`, `limit?` |
+| `arcane_container_registry_get` | Get one container registry by ID. Credentials are never returned by this API. | `registryId` |
+| `arcane_container_registry_pull_usage` | Report pull-rate usage per registry: observed pulls, and the remaining quota when the provider exposes one. | — |
+| `arcane_container_registry_test` | Test connectivity and authentication to a container registry. Does not change any state. On failure the error text is the registry login output, which names the host and the reason. | `registryId` |
 
 <!-- END TOOLS -->
 

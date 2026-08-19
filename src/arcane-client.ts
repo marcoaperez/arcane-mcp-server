@@ -1860,6 +1860,58 @@ class VulnerabilitiesMethods {
   }
 }
 
+/**
+ * Registro de contenedor. Medido el 2026-08-19 contra Arcane 2.8.0 con sondas
+ * `generic` y `ecr`: la respuesta NO incluye `token` ni `awsSecretAccessKey`
+ * -no es que vengan enmascarados, es que el campo no existe-, y por eso las
+ * lecturas se exponen. `awsAccessKeyId` si viene: es un identificador.
+ */
+export interface ContainerRegistry {
+  id: string;
+  url: string;
+  username: string;
+  insecure: boolean;
+  enabled: boolean;
+  registryType: string;
+  repositoryNames: string[] | null;
+  createdAt: string;
+  updatedAt: string;
+  description?: string;
+  awsAccessKeyId?: string;
+  awsRegion?: string;
+}
+
+export interface RegistryPullUsage {
+  registryId: string;
+  provider: string;
+  registry: string;
+  displayName: string;
+  observedPulls: number;
+  authMethod: string;
+  checkedAt: string;
+  authUsername?: string;
+  error?: string;
+  limit?: number;
+  remaining?: number;
+  repository?: string;
+  source?: string;
+  used?: number;
+  windowSeconds?: number;
+}
+
+export interface RegistryPullUsageResponse {
+  registries: RegistryPullUsage[] | null;
+}
+
+/**
+ * Respuesta de los endpoints que devuelven un mensaje. NO es `ActionResponse`:
+ * medido, el mensaje viene anidado bajo `data`, no en la raiz.
+ */
+export interface MessageResponse {
+  success: boolean;
+  data: { message: string };
+}
+
 class GitRepositoriesMethods {
   constructor(private client: ArcaneClient) {}
 
@@ -2121,6 +2173,41 @@ class VolumeFilesMethods {
   }
 }
 
+class ContainerRegistriesMethods {
+  constructor(private client: ArcaneClient) {}
+
+  async list(opts?: ListOptionsWithSort): Promise<PaginatedResponse<ContainerRegistry>> {
+    const params = new URLSearchParams();
+    appendListParams(params, opts);
+    const query = params.toString();
+    return this.client.request<PaginatedResponse<ContainerRegistry>>(
+      "GET",
+      `/container-registries${query ? `?${query}` : ""}`,
+    );
+  }
+
+  async get(id: string): Promise<{ success: boolean; data: ContainerRegistry }> {
+    return this.client.request<{ success: boolean; data: ContainerRegistry }>(
+      "GET",
+      `/container-registries/${encodeURIComponent(id)}`,
+    );
+  }
+
+  async pullUsage(): Promise<{ success: boolean; data: RegistryPullUsageResponse }> {
+    return this.client.request<{ success: boolean; data: RegistryPullUsageResponse }>(
+      "GET",
+      "/container-registries/pull-usage",
+    );
+  }
+
+  async test(id: string): Promise<MessageResponse> {
+    return this.client.request<MessageResponse>(
+      "POST",
+      `/container-registries/${encodeURIComponent(id)}/test`,
+    );
+  }
+}
+
 export class ArcaneClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
@@ -2146,6 +2233,7 @@ export class ArcaneClient {
   readonly containerAdditional: ContainerAdditionalMethods;
   readonly volumeBackups: VolumeBackupsMethods;
   readonly volumeFiles: VolumeFilesMethods;
+  readonly containerRegistries: ContainerRegistriesMethods;
 
   // When a Cloudflare VPC Fetcher is provided, routing to the Arcane backend
   // is handled by the service binding — only the path portion of URLs matters.
@@ -2182,6 +2270,7 @@ export class ArcaneClient {
     this.containerAdditional = new ContainerAdditionalMethods(this);
     this.volumeBackups = new VolumeBackupsMethods(this);
     this.volumeFiles = new VolumeFilesMethods(this);
+    this.containerRegistries = new ContainerRegistriesMethods(this);
   }
 
   getBaseUrl(): string {

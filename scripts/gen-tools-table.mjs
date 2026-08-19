@@ -40,6 +40,7 @@ const GROUPS = [
   ["image-updates.ts", "Image updates"],
   ["updater.ts", "Updater"],
   ["vulnerabilities.ts", "Vulnerabilities"],
+  ["container-registries.ts", "Container registries"],
 ];
 
 /** Extrae {name, desc, params} de cada `server.tool(name, desc, shape, handler)`. */

@@ -21,6 +21,7 @@ import { registerVolumeBackupTools } from "../tools/volume-backups";
 import { registerImageUpdateTools } from "../tools/image-updates";
 import { registerUpdaterTools } from "../tools/updater";
 import { registerVulnerabilityTools } from "../tools/vulnerabilities";
+import { registerContainerRegistryTools } from "../tools/container-registries";
 
 type MockedFunction<T extends (...args: any[]) => any> = {
   (...args: Parameters<T>): ReturnType<T>;
@@ -216,6 +217,16 @@ describe("MCP Tools", () => {
         scan: vi.fn(),
         ignore: vi.fn(),
         unignore: vi.fn(),
+      },
+      containerRegistries: {
+        list: vi.fn().mockResolvedValue({
+          success: true,
+          data: [],
+          pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+        }),
+        get: vi.fn().mockResolvedValue({ success: true, data: { id: "r1", url: "reg.example" } }),
+        pullUsage: vi.fn().mockResolvedValue({ success: true, data: { registries: null } }),
+        test: vi.fn().mockResolvedValue({ success: true, data: { message: "Registry reachable" } }),
       },
     } as unknown as ArcaneClient;
     return mockClient;
@@ -2321,6 +2332,34 @@ describe("MCP Tools", () => {
       const out = await server.getHandler("arcane_vulnerability_unignore")!({ environmentId: "env1", ignoreId: "ign-7" });
       expect((mockClient.vulnerabilities.unignore as any).mock.calls[0]).toEqual(["env1", "ign-7"]);
       expect(out.isError).toBeUndefined();
+    });
+  });
+
+  describe("registerContainerRegistryTools", () => {
+    it("arcane_container_registry_pull_usage convierte registries:null en lista vacia", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      registerContainerRegistryTools(server as any, client);
+
+      const handler = server.getHandler("arcane_container_registry_pull_usage");
+      const res = await handler!({});
+
+      expect(JSON.parse(res.content[0].text)).toEqual({ registries: [] });
+    });
+
+    it("arcane_container_registry_test devuelve isError cuando la API falla", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      (client.containerRegistries.test as any).mockRejectedValue(
+        new ArcaneApiError(400, "Registry test failed: registry login failed: no such host"),
+      );
+      registerContainerRegistryTools(server as any, client);
+
+      const handler = server.getHandler("arcane_container_registry_test");
+      const res = await handler!({ registryId: "r1" });
+
+      expect(res.isError).toBe(true);
+      expect(res.content[0].text).toContain("no such host");
     });
   });
 });
