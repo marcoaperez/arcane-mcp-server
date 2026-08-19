@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import type { ArcaneClient } from "../arcane-client";
-import { resolveEnvironmentId, resolveStackId, resolveContainerId } from "../tools/resolve";
+import { resolveEnvironmentId, resolveStackId, resolveContainerId, resolveProjectId } from "../tools/resolve";
 import { resolveGitOpsSyncId } from "../tools/gitops-syncs";
 
 describe("resolve helpers", () => {
@@ -166,6 +166,137 @@ describe("resolve helpers", () => {
 
       await expect(resolveStackId(mockClient, "env123", undefined, undefined)).rejects.toThrow(
         "Either stackId or stackName must be provided"
+      );
+    });
+  });
+
+  describe("resolveProjectId", () => {
+    // "Proyecto" y "stack" son el mismo recurso (/environments/{envId}/projects),
+    // asi que resolveProjectId usa client.stacks.list, con vocabulario propio
+    // ("project", no "stack") en los mensajes de error, porque es el que usan
+    // las tools de build (Tarea 8).
+    it("returns projectId immediately if provided (no API call)", async () => {
+      const mockClient = {
+        stacks: { list: vi.fn() },
+      } as unknown as ArcaneClient;
+
+      const result = await resolveProjectId(mockClient, "env123", "proj456", undefined);
+      expect(result).toBe("proj456");
+      expect(mockClient.stacks.list).not.toHaveBeenCalled();
+    });
+
+    it("calls client.stacks.list() if only projectName given, returns matched ID", async () => {
+      const mockClient = {
+        stacks: {
+          list: vi.fn().mockResolvedValue({
+            success: true,
+            data: [
+              { id: "proj456", name: "ical-bridge" },
+              { id: "proj789", name: "arcane-mcp" },
+            ],
+            pagination: { totalItems: 2, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
+          }),
+        },
+      } as unknown as ArcaneClient;
+
+      const result = await resolveProjectId(mockClient, "env123", undefined, "ical-bridge");
+      expect(result).toBe("proj456");
+      expect(mockClient.stacks.list).toHaveBeenCalledWith("env123", {
+        search: "ical-bridge",
+        start: 0,
+        limit: 200,
+        sort: "name",
+      });
+    });
+
+    it("throws with list of available names if no match found", async () => {
+      const mockClient = {
+        stacks: {
+          list: vi.fn().mockResolvedValue({
+            success: true,
+            data: [
+              { id: "proj456", name: "ical-bridge" },
+              { id: "proj789", name: "arcane-mcp" },
+            ],
+            pagination: { totalItems: 2, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
+          }),
+        },
+      } as unknown as ArcaneClient;
+
+      await expect(resolveProjectId(mockClient, "env123", undefined, "no-existe")).rejects.toThrow(
+        "No project found with name 'no-existe' in environment 'env123'. Available projects: ical-bridge, arcane-mcp"
+      );
+    });
+
+    it("throws with instruction to use ID if multiple matches found", async () => {
+      const mockClient = {
+        stacks: {
+          list: vi.fn().mockResolvedValue({
+            success: true,
+            data: [
+              { id: "proj456", name: "web" },
+              { id: "proj789", name: "web" },
+            ],
+            pagination: { totalItems: 2, totalPages: 1, currentPage: 1, itemsPerPage: 50 },
+          }),
+        },
+      } as unknown as ArcaneClient;
+
+      await expect(resolveProjectId(mockClient, "env123", undefined, "web")).rejects.toThrow(
+        "Multiple projects found with name 'web' in environment 'env123'. Please use the project ID instead. Matching IDs: proj456, proj789"
+      );
+    });
+
+    it("throws if neither projectId nor projectName provided", async () => {
+      const mockClient = {} as unknown as ArcaneClient;
+
+      await expect(resolveProjectId(mockClient, "env123", undefined, undefined)).rejects.toThrow(
+        "Either projectId or projectName must be provided"
+      );
+    });
+
+    it("encuentra un proyecto que cae fuera de la primera pagina (paginacion completa via collectAllPages)", async () => {
+      const list = vi.fn(async (_envId: string, opts?: { start?: number; limit?: number }) => {
+        const start = opts?.start ?? 0;
+        const limit = opts?.limit ?? 20;
+        const total = 500;
+        const donde = 350;
+        const data = Array.from({ length: Math.max(0, Math.min(limit, total - start)) }, (_, i) => {
+          const idx = start + i;
+          return { id: `p${idx}`, name: idx === donde ? "buscado" : `relleno${idx}` };
+        });
+        return {
+          success: true,
+          data,
+          pagination: { totalItems: total, totalPages: Math.ceil(total / limit), currentPage: start / limit + 1, itemsPerPage: limit },
+        };
+      });
+      const mockClient = { stacks: { list } } as unknown as ArcaneClient;
+
+      const id = await resolveProjectId(mockClient, "env1", undefined, "buscado");
+      expect(id).toBe("p350");
+      expect(list.mock.calls.length).toBeGreaterThan(1);
+    });
+
+    it("cuando agota el tope, el error dice que no ha mirado todo (no concluye 'no existe' de una pagina incompleta)", async () => {
+      const list = vi.fn(async (_envId: string, opts?: { start?: number; limit?: number }) => {
+        const start = opts?.start ?? 0;
+        const limit = opts?.limit ?? 20;
+        const total = 5000;
+        const data = Array.from({ length: Math.max(0, Math.min(limit, total - start)) }, (_, i) => ({
+          id: `p${start + i}`,
+          name: `relleno${start + i}`,
+        }));
+        return {
+          success: true,
+          data,
+          pagination: { totalItems: total, totalPages: Math.ceil(total / limit), currentPage: start / limit + 1, itemsPerPage: limit },
+        };
+      });
+      const mockClient = { stacks: { list } } as unknown as ArcaneClient;
+
+      await expect(resolveProjectId(mockClient, "env1", undefined, "buscado")).rejects.toThrow(
+        /among the first 2000 of 5000 projects/,
       );
     });
   });

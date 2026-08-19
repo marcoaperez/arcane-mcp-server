@@ -76,7 +76,7 @@ percent-decodifica los segmentos `{imageId}`.
 
 <!-- BEGIN TOOLS -->
 
-Las **112** tools que expone el servidor, agrupadas por dominio. Esta tabla la
+Las **116** tools que expone el servidor, agrupadas por dominio. Esta tabla la
 genera `npm run gen-tools-table` a partir de `src/tools/`: las descripciones y los
 parámetros son los que registra el código, no una copia mantenida a mano.
 
@@ -306,6 +306,15 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | `arcane_build_workspace_read` | Read a file from the build workspace. Binary files are not returned: their type and size are reported instead. | `environmentId?`, `environmentName?`, `path`, `maxBytes?` |
 | `arcane_build_workspace_mkdir` | Create a directory in the build workspace. | `environmentId?`, `environmentName?`, `path` |
 | `arcane_build_workspace_delete` | Delete a file or directory from the build workspace. A path is required: this tool cannot delete the workspace root. | `environmentId?`, `environmentName?`, `path` |
+
+### Image builds (4)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_image_build` | Build a Docker image with BuildKit. Note that load:false does NOT discard the image: it is still created and tagged. Build arguments are stored by Arcane and readable afterwards, so do not pass secrets. | `environmentId?`, `environmentName?`, `contextDir`, `dockerfile?`, `dockerfileInline?`, `tags?`, `buildArgs?`, `labels?`, `target?`, `platforms?`, `noCache?`, `pull?`, `push?`, `load?`, `provider?` |
+| `arcane_project_build` | Build the Compose services of a project that declare a build directive. Do not rely on the project's hasBuildDirective field to decide: it reports false even for projects that do have one. | `environmentId?`, `environmentName?`, `projectId?`, `projectName?`, `services?`, `push?`, `load?`, `provider?` |
+| `arcane_image_build_list` | List the image build history of an environment. Build argument values are hidden; their names are kept. The environmentId recorded on each build is the agent's own local id, not the environment you queried. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `status?`, `provider?` |
+| `arcane_image_build_get` | Get one build record with its full build log. Build argument values are hidden, but the log itself is returned verbatim and contains whatever the build printed, including anything it echoed by mistake. | `environmentId?`, `environmentName?`, `buildId` |
 
 <!-- END TOOLS -->
 
