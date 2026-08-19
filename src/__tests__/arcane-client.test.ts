@@ -1299,6 +1299,26 @@ describe("ArcaneClient", () => {
       );
     });
 
+    it(".imageList sin severity omite el parametro (regresion: null nunca deberia escribirse)", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: { totalPages: 1, totalItems: 0, currentPage: 1, itemsPerPage: 20 } }),
+      } as Response);
+      // Caso A: con sort y limit, pero sin severity
+      await client.vulnerabilities.imageList("env1", "sha256:abc", { sort: "severity", limit: 20 });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/sha256%3Aabc/vulnerabilities/list?sort=severity&limit=20",
+        expect.objectContaining({ method: "GET" })
+      );
+      mockFetch.mockClear();
+      // Caso B: sin opciones en absoluto (ninguna query)
+      await client.vulnerabilities.imageList("env1", "sha256:abc");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/sha256%3Aabc/vulnerabilities/list",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
     it(".imageSummary - GET /images/{id}/vulnerabilities/summary", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
