@@ -2303,6 +2303,28 @@ describe("ArcaneClient", () => {
       expect(res.data.buildArgs!.GITHUB_TOKEN).toBe(BUILD_ARG_OCULTO);
     });
 
+    it(".get() no revienta si la API responde 200 con data: null", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: null }),
+      } as Response);
+
+      const res = await client.imageBuilds.get("env1", "b1");
+
+      expect(res.data).toBeNull();
+    });
+
+    it(".get() no revienta si la API responde 200 sin campo data (undefined)", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true }),
+      } as Response);
+
+      const res = await client.imageBuilds.get("env1", "b1");
+
+      expect(res.data).toBeUndefined();
+    });
+
     it(".get(buildId) codifica el buildId y no permite traversal", async () => {
       mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, data: {} }) } as Response);
       await client.imageBuilds.get("env1", "../../system/containers/stop-all#");

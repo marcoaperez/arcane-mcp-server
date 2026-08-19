@@ -2471,7 +2471,7 @@ class ImageBuildsMethods {
       "GET",
       `/environments/${encodeURIComponent(envId)}/images/builds/${encodeURIComponent(buildId)}`,
     );
-    return { ...res, data: enmascaraBuildArgs(res.data) };
+    return { ...res, data: res.data ? enmascaraBuildArgs(res.data) : res.data };
   }
 }
 
