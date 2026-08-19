@@ -140,8 +140,8 @@ nuevos. **Se reproduce, no se resta a mano.**
 | `GET .../images/builds/{buildId}` | `arcane_image_build_get` |
 | `POST .../projects/{projectId}/build` | `arcane_project_build` |
 
-`arcane_project_build` está sujeta a la puerta de la §8: si no hay sujeto sobre el que
-ejercitarla, no se entrega.
+Las 17 se entregan. La puerta que pendía sobre `arcane_project_build` —si existía un
+sujeto sobre el que ejercitarla— quedó cerrada en la §8: es `ical-bridge`.
 
 **Ninguna cifra de cierre se predice aquí.** El plan de F4 predijo tres y las tres eran
 falsas. Cobertura, drift, número de tools y de tests se miden al cerrar la fase.
@@ -203,6 +203,9 @@ de tamaño de `scan_result` por la puerta de atrás. El summarizer nuevo vive en
 fichero, **comparte `extractStreamError`**, expone el `activityId` del primer evento,
 conserva la **cola** del log y dice cuántas líneas descartó.
 `summarizeComposeStream` no se toca: da servicio a cuatro endpoints que funcionan.
+
+Medido en **los dos** endpoints de build, `images/build` y `projects/{projectId}/build`
+(§8.1): mismo `Content-Type`, mismo shape y mismo HTTP 200 sobre el fallo.
 
 **Trampa que el diseño debe absorber: el endpoint devuelve HTTP 200 aunque la build
 falle.** El fracaso solo vive dentro del stream. Es la clase de bug de
@@ -377,38 +380,59 @@ final, avisando si no puede.
 
 ---
 
-## 8. La puerta abierta: `arcane_project_build`
+## 8. `arcane_project_build`: sujeto resuelto, y un defecto del upstream
 
 `POST /projects/{projectId}/build` necesita un proyecto con directivas `build:`.
-**No está resuelto, y el spec no lo finge.**
+**Resuelto: existen cuatro, y uno de ellos es el sujeto idempotente que la suite ya usa.**
 
-Lo medido hasta ahora:
+Leídos los composes desplegados en `vm-control`, exactamente los ficheros que Arcane
+nombra en `composeFileName` de cada proyecto:
 
-- El campo `hasBuildDirective` de `ProjectDetails` sale **`false` en los 22 proyectos** de
-  los seis entornos.
-- Pero **`docker-compose.yml` de este propio repositorio contiene `build: .`**, y ese
-  repositorio *es* el proyecto `arcane-mcp` desplegado por GitOps. El campo contradice un
-  fichero que se puede leer.
-- `GET /projects/{id}/workspace/file` devuelve **403** con esta clave de API, así que el
-  compose desplegado no se ha podido leer por la API para dirimirlo.
+| Proyecto | Fichero | `build:` de servicio | `hasBuildDirective` |
+|---|---|---|---|
+| `ical-bridge` | `compose.yaml` | **sí** (`ical-bridge`) | `false` |
+| `arcane-mcp` | `docker-compose.yml` | **sí** (`arcane-mcp`) | `false` |
+| `ionos-manager` | `docker-compose.yml` | **sí** (`app`) | `false` |
+| `obsidian-notify` | `docker-compose.yml` | **sí** (`obsidian-notify`, `taiko-data`) | `false` |
 
-**Regla de decisión, para que esto no sea un TBD:**
+**Sujeto del e2e: `ical-bridge`** (`a2ae6abc-6144-42b2-8683-732c0f9c8f64`, entorno `0`),
+que ya es el `IDEMPOTENT_STACK` por defecto de la suite — el stack sobre el que este
+proyecto tiene establecido que es seguro actuar repetidamente.
 
-1. Se resuelve la contradicción leyendo el compose desplegado por `ssh` a `vm-control`.
-2. **Si existe algún proyecto con directiva `build:` que no sea `arcane-mcp`**, es el
-   sujeto del e2e y la tool se entrega.
-3. **Si el único es `arcane-mcp`, la tool NO se ejercita sobre él.** Construirlo recrea
-   el contenedor que atiende este mismo canal MCP.
-4. **Si no hay ninguno**, la tool queda **diferida, no excluida**, en
-   `criterio-exposicion.md` §2.4: es exactamente la situación de `swarm` —sin e2e posible—
-   pero reversible en cuanto exista un proyecto que la ejercite. F5 cierra con 16 tools y
-   el denominador no cambia, porque una diferida sigue contando.
+**`arcane-mcp` queda vetado como sujeto**, aunque tenga directiva: construirlo recrea el
+contenedor que atiende este mismo canal MCP.
 
-Y en los cuatro casos: **`hasBuildDirective` contradiciendo el compose es, o un bug del
-upstream, o un campo que significa algo más estrecho de lo que su nombre dice.** Se
-determina y se documenta; si es bug, se publica.
+### 8.1 El transporte, medido sin tocar ningún proyecto
 
----
+Un POST contra un `projectId` inexistente basta para leerlo:
+
+```
+HTTP/1.1 200 OK
+Content-Type: application/x-json-stream
+Transfer-Encoding: chunked
+X-Accel-Buffering: no
+
+{"activityId":"7e982bfa-…","type":"activity"}
+{"error":"project not found"}
+```
+
+Mismo NDJSON, mismo shape y **el mismo HTTP 200 sobre un fallo** que `images/build`. Las
+dos tools de build comparten `summarizeBuildStream()` sin excepciones.
+
+### 8.2 `hasBuildDirective` miente, y hay que publicarlo
+
+**Cuatro proyectos con `build:` de servicio verificado en el fichero que la propia API
+declara como su compose, y `hasBuildDirective: false` en los cuatro.** Ninguno de los 22
+proyectos de los seis entornos lo tiene a `true`.
+
+O el campo está roto, o significa algo más estrecho de lo que su nombre dice. En
+cualquiera de los dos casos es engañoso para un cliente que decida a partir de él —que es
+justo lo que haría un modelo—, así que:
+
+- **La descripción de `arcane_project_build` no menciona `hasBuildDirective`** ni sugiere
+  filtrar por él.
+- Se determina la causa contra el código del upstream y **se publica como issue**, con la
+  tabla de arriba como reproducción.
 
 ## 9. Ejecución de los e2e: fuera de Tailscale
 
