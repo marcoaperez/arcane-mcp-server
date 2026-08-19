@@ -12,10 +12,14 @@ que sigue siendo válida como registro histórico de cuándo se decidió cada co
 ## 1. El criterio
 
 > **Se expone lo que opera cargas de trabajo Docker y su observabilidad. De la
-> administración del propio Arcane se exponen las lecturas, nunca las escrituras.**
+> administración del propio Arcane se exponen las lecturas, nunca las escrituras —
+> salvo que el propio recurso no guarde ningún secreto y sea, en la práctica, un
+> catálogo de referencias en vez de una superficie de administración (§2.6).**
 
 Se decidió en F2, antes de listar ninguna tool, porque condiciona todas las fases
-siguientes. Sigue vigente sin cambios.
+siguientes. Sigue vigente, con la única excepción declarada en §2.6, añadida en F5:
+sin la matización, este documento contradiría lo que el fork expone desde F5, en vez
+de ser su referencia.
 
 ## 2. Qué queda fuera, y por qué
 
@@ -129,6 +133,33 @@ Tres agravantes, todos medidos contra el spec:
   que sigue siendo el que el propietario puso.
 - **`delete` es irreversible por construcción.** No hay papelera ni confirmación en dos
   pasos: el registro desaparece y con él la configuración de acceso a ese repositorio.
+
+### 2.6 Una excepción declarada — `templates/registries` sí expone sus 4 escrituras
+
+F5 entrega el CRUD completo de `/templates/registries` (`create`, `update`, `delete`,
+además de `list`): las tres escrituras se exponen, no solo la lectura. Es, medido
+contra §1 tal y como estaba escrita antes de esta revisión, una contradicción del
+propio criterio — «nunca las escrituras» sin matiz alguno.
+
+**El motivo, ya estaba en el spec de F5 §2.3 y no había llegado a este documento:**
+`templates/registries` no es administración de Arcane en el sentido que motiva §1. Su
+schema es `{id, name, url, description, enabled, lastFetchError}` y su `Create`/`Update`
+solo aceptan esos cuatro campos de entrada (`name`, `url`, `description`, `enabled`).
+**No hay ningún campo de credencial** — a diferencia de `container-registries`, cuyo
+`token`/`awsSecretAccessKey` obliga al modelo a redactar el secreto (§2.5). Es, en la
+práctica, un catálogo de URLs de dónde Arcane busca plantillas de Compose, no una
+palanca sobre la seguridad o disponibilidad de la instancia.
+
+**La irreversibilidad de `delete` no cambia el cálculo aquí.** §2.5 la usa como
+agravante, pero ahí se suma a que el modelo redacta un secreto real; en
+`templates/registries` no hay secreto que proteger, así que la irreversibilidad por sí
+sola —borrar una fila de un catálogo de URLs— no alcanza el radio de daño de §2.1 ni
+la pérdida de evidencia de §2.3. Perder una entrada del catálogo es un inconveniente
+recuperable creándola de nuevo, no un incidente de seguridad.
+
+Es la única excepción a §1 que este fork tiene hoy. Si aparece una segunda, va aquí
+también, con el mismo tipo de justificación medida — no se generaliza a «las
+escrituras sin secretos se admiten» sin revisarlas una a una.
 
 ## 3. El denominador honesto
 

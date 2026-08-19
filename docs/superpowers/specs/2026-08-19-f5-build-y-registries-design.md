@@ -2,7 +2,8 @@
 
 - **Fecha:** 2026-08-19
 - **Punto de partida:** `e72bbcf` (cierre de F4) — 100 tools, 294 unitarios, 59 e2e,
-  drift 21, cobertura 98 de 249
+  drift 21, cobertura 98 de 249 (remedida en la revisión final de rama con el
+  instrumento de F5: **97**, no 98 — ver `docs/balances/2026-08-19-f5.md` §3.3.1)
 - **Base:** Arcane **2.8.0** (`openapi.txt`, 273 paths, 347 operaciones)
 - **Alcance:** 16 tools entregadas sobre 22 operaciones. Una 17.a, `upload`, queda
   **diferida** por imposibilidad de verificacion (§3.1)
@@ -119,7 +120,13 @@ nuevos. **Se reproduce, no se resta a mano.**
 
 ---
 
-## 3. Las 17 tools
+## 3. Las 17 tools previstas, 16 entregadas
+
+**Corrección post-cierre (revisión final de rama):** esta sección y su tabla se
+escribieron cuando las 17 se planeaban enteras. La §3.1, añadida después, ya declara
+`arcane_build_workspace_upload` diferida — pero el título y la frase de cierre de esta
+sección se quedaron en «17» sin corregir. Quedan 16 tools entregadas; la tabla de abajo
+marca la diferida.
 
 | Operación | Tool |
 |---|---|
@@ -141,8 +148,9 @@ nuevos. **Se reproduce, no se resta a mano.**
 | `GET .../images/builds/{buildId}` | `arcane_image_build_get` |
 | `POST .../projects/{projectId}/build` | `arcane_project_build` |
 
-Las 17 se entregan. La puerta que pendía sobre `arcane_project_build` —si existía un
-sujeto sobre el que ejercitarla— quedó cerrada en la §8: es `ical-bridge`.
+16 de las 17 se entregan; `arcane_build_workspace_upload` queda diferida (§3.1). La
+puerta que pendía sobre `arcane_project_build` —si existía un sujeto sobre el que
+ejercitarla— quedó cerrada en la §8: es `ical-bridge`.
 
 **Ninguna cifra de cierre se predice aquí.** El plan de F4 predijo tres y las tres eran
 falsas. Cobertura, drift, número de tools y de tests se miden al cerrar la fase.
@@ -191,7 +199,7 @@ recibidos, no un numero.
 ```
 src/tools/container-registries.ts   4 tools   GROUPS: "Container registries"
 src/tools/template-registries.ts    4 tools   GROUPS: "Template registries"
-src/tools/build-workspace.ts        5 tools   GROUPS: "Build workspace"
+src/tools/build-workspace.ts        4 tools   GROUPS: "Build workspace"   (planeadas 5; upload diferida, §3.1)
 src/tools/image-builds.ts           4 tools   GROUPS: "Image builds"
 ```
 

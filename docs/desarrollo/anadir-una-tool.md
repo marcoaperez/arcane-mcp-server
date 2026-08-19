@@ -134,7 +134,7 @@ it(".miAccion(envId) - POST /environments/{envId}/mi-recurso/accion", async () =
 Para endpoints NDJSON, mockea `text:` en vez de `json:` y verifica al menos:
 stream de éxito con `{done:true}`, stream con `{error}`, y el fallback de objeto único.
 
-**(b) e2e contra la instancia v2.7.0 real** en `src/__e2e__/`:
+**(b) e2e contra la instancia 2.8.0 real** en `src/__e2e__/`:
 
 ```ts
 import { e2eClient, IDEMPOTENT_STACK } from "./helpers";
