@@ -1333,6 +1333,21 @@ class ContainersMethods {
   }
 }
 
+/**
+ * Codifica un segmento de ruta conservando los dos puntos literales.
+ *
+ * Medido el 2026-08-19: Arcane NO decodifica %3A en el segmento imageId
+ * -devuelve 404 en los GET, 500 en el scan, y un 200 con cero items en el
+ * listado, que es el fallo silencioso-, asi que el sha256: tiene que viajar
+ * crudo. Pero interpolar el valor entero sin codificar permitia inyectar
+ * ruta: un imageId con "../" y "#" resolvia a cualquier endpoint de Arcane,
+ * incluido system/containers/stop-all. Se codifica todo lo demas y se
+ * devuelven los dos puntos a su forma literal.
+ */
+function segmentoDeRuta(valor: string): string {
+  return encodeURIComponent(valor).replace(/%3A/gi, ":");
+}
+
 class ImagesMethods {
   constructor(private client: ArcaneClient) {}
 
@@ -1353,7 +1368,7 @@ class ImagesMethods {
   }
 
   async remove(envId: string, imageId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("DELETE", `/environments/${encodeURIComponent(envId)}/images/${encodeURIComponent(imageId)}`);
+    return this.client.request<ActionResponse>("DELETE", `/environments/${encodeURIComponent(envId)}/images/${segmentoDeRuta(imageId)}`);
   }
 
   async prune(envId: string): Promise<{ success: boolean; data: ImagePruneReport }> {
@@ -1610,7 +1625,7 @@ class ImageUpdatesMethods {
     if (opts.imageId) {
       return this.client.request<{ success: boolean; data: ImageUpdateResponse }>(
         "GET",
-        `${base}/check/${encodeURIComponent(opts.imageId)}`
+        `${base}/check/${segmentoDeRuta(opts.imageId)}`
       );
     }
     if (opts.imageRef) {
@@ -1682,21 +1697,6 @@ class UpdaterMethods {
       body
     );
   }
-}
-
-/**
- * Codifica un segmento de ruta conservando los dos puntos literales.
- *
- * Medido el 2026-08-19: Arcane NO decodifica %3A en el segmento imageId
- * -devuelve 404 en los GET, 500 en el scan, y un 200 con cero items en el
- * listado, que es el fallo silencioso-, asi que el sha256: tiene que viajar
- * crudo. Pero interpolar el valor entero sin codificar permitia inyectar
- * ruta: un imageId con "../" y "#" resolvia a cualquier endpoint de Arcane,
- * incluido system/containers/stop-all. Se codifica todo lo demas y se
- * devuelven los dos puntos a su forma literal.
- */
-function segmentoDeRuta(valor: string): string {
-  return encodeURIComponent(valor).replace(/%3A/gi, ":");
 }
 
 /**

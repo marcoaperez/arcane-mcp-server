@@ -774,6 +774,37 @@ describe("ArcaneClient", () => {
       );
     });
 
+    it(".remove deja el imageId crudo en la ruta (Arcane no decodifica %3A)", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, message: "Removed" }),
+      } as Response);
+
+      await client.images.remove("env123", "sha256:abc");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/images/sha256:abc",
+        expect.objectContaining({ method: "DELETE" })
+      );
+    });
+
+    it(".remove neutraliza un imageId con path traversal (inyeccion de ruta)", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, message: "Removed" }),
+      } as Response);
+
+      // Mismo imageId hostil que en vulnerabilities.scanResult/.scan: si viajara
+      // crudo, fetch lo resolveria contra /environments/env123/system/containers/stop-all.
+      const imageId = "../../0/system/containers/stop-all#";
+      await client.images.remove("env123", imageId);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/images/..%2F..%2F0%2Fsystem%2Fcontainers%2Fstop-all%23",
+        expect.objectContaining({ method: "DELETE" })
+      );
+    });
+
     it(".prune(envId) - POST /environments/{envId}/images/prune", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
@@ -1132,11 +1163,23 @@ describe("ArcaneClient", () => {
       );
     });
 
-    it("check(envId, {imageId}) usa el endpoint por ID", async () => {
+    it("check(envId, {imageId}) usa el endpoint por ID y deja el imageId crudo en la ruta (Arcane no decodifica %3A)", async () => {
       mockFetch.mockResolvedValue(ok({ checkTime: "t", currentVersion: "1", hasUpdate: false, responseTimeMs: 5, updateType: "digest" }));
       await client.imageUpdates.check("env1", { imageId: "sha256:abc" });
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env1/image-updates/check/sha256%3Aabc",
+        "http://localhost:3552/api/environments/env1/image-updates/check/sha256:abc",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("check(envId, {imageId}) neutraliza un imageId con path traversal (inyeccion de ruta)", async () => {
+      mockFetch.mockResolvedValue(ok({ checkTime: "t", currentVersion: "1", hasUpdate: false, responseTimeMs: 5, updateType: "digest" }));
+      // Mismo imageId hostil que en vulnerabilities.scanResult/.scan: si viajara
+      // crudo, fetch lo resolveria contra /environments/env1/system/containers/stop-all.
+      const imageId = "../../0/system/containers/stop-all#";
+      await client.imageUpdates.check("env1", { imageId });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/image-updates/check/..%2F..%2F0%2Fsystem%2Fcontainers%2Fstop-all%23",
         expect.objectContaining({ method: "GET" }),
       );
     });
