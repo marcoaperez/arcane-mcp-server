@@ -2283,10 +2283,34 @@ describe("MCP Tools", () => {
       const out = await server.getHandler("arcane_vulnerability_ignore")!({
         environmentId: "env1", imageId: "sha256:abc", vulnerabilityId: "CVE-1", pkgName: "p", reason: "no aplica",
       });
+      // envId resuelto, no solo el payload: si resolveEnvironmentId dejara de
+      // pasar el id correcto, el payload solo no lo delataría.
+      expect((mockClient.vulnerabilities.ignore as any).mock.calls[0][0]).toBe("env1");
       expect((mockClient.vulnerabilities.ignore as any).mock.calls[0][1]).toMatchObject({
         imageId: "sha256:abc", vulnerabilityId: "CVE-1", pkgName: "p", reason: "no aplica",
       });
       expect(out.content[0].text).toContain('"id": "ign-7"');
+      expect(out.isError).toBeUndefined();
+    });
+
+    it("las descripciones de las tools mutantes conservan sus avisos criticos", () => {
+      // Unica salvaguarda de que un futuro edit no borre en silencio el
+      // aviso de asincronia, el coste de CPU, o el de persistencia/reversibilidad:
+      // nada mas en la suite falla si estas frases desaparecen de la descripcion.
+      const server = createMockServer();
+      registerVulnerabilityTools(server as any, createMockClient());
+
+      const scanCall = (server.tool as any).mock.calls.find((c: any[]) => c[0] === "arcane_vulnerability_scan");
+      expect(scanCall, "arcane_vulnerability_scan debería estar registrada").toBeDefined();
+      const scanDescription: string = scanCall[1];
+      expect(scanDescription, "debe advertir que el scan es asincrono").toContain("asynchronous");
+      expect(scanDescription, "debe advertir del coste de CPU en el host").toContain("CPU on the host");
+
+      const ignoreCall = (server.tool as any).mock.calls.find((c: any[]) => c[0] === "arcane_vulnerability_ignore");
+      expect(ignoreCall, "arcane_vulnerability_ignore debería estar registrada").toBeDefined();
+      const ignoreDescription: string = ignoreCall[1];
+      expect(ignoreDescription, "debe decir que el registro es persistente").toContain("persistent");
+      expect(ignoreDescription, "debe decir que es reversible").toContain("Reversible");
     });
 
     it("vulnerability_unignore pasa el ignoreId", async () => {
