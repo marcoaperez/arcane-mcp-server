@@ -238,23 +238,95 @@ git commit -m "test(e2e): ejecuta la suite desde la LAN en vez de por Tailscale"
 
 ---
 
-## Tarea 2: `requestSinCuerpo()` — el hueco del 204
+## Tarea 2: `lanzaSiFalla()` y `requestSinCuerpo()` — el hueco del 204
 
 **Ficheros:**
 - Modificar: `src/arcane-client.ts` (junto a `requestHead`, sobre la línea 2218)
 - Test: `src/__tests__/arcane-client.test.ts`
 
 **Interfaces:**
-- Produce: `ArcaneClient.requestSinCuerpo(method: string, path: string, body?: unknown): Promise<void>`
+- Produce:
+  - `lanzaSiFalla(response: Response): Promise<void>` — funcion de modulo, no exportada
+  - `ArcaneClient.requestSinCuerpo(method: string, path: string, body?: unknown): Promise<void>`
 
-**Por qué existe:** `request()` termina en `response.json()`, que revienta con un cuerpo
-vacío. Medido el 2026-08-19: `POST /builds/browse/mkdir` y `DELETE /builds/browse`
+**Esta tarea hace dos cosas, y el refactor va primero.** El bloque de extraccion de
+`detail` esta repetido literalmente **cuatro veces** en `src/arcane-client.ts` (lineas
+2052, 2203, 2245, 2273). F5 añadiria dos mas. Decision del propietario: extraer un helper
+compartido y aplicarlo a los seis sitios. Toca codigo que funciona, asi que **la suite
+entera tiene que quedar en verde antes de tocar nada mas**.
+
+**Por qué existe `requestSinCuerpo`:** `request()` termina en `response.json()`, que
+revienta con un cuerpo vacío. Medido el 2026-08-19: `POST /builds/browse/mkdir` y `DELETE /builds/browse`
 devuelven **204 sin cuerpo**. Las Tareas 5 y 6 lo consumen.
 
 El parámetro `body` es opcional desde el principio: la Tarea 6 lo necesita para
 `POST /builds/browse/upload`, que envía `{uploadId}` y tampoco devuelve cuerpo.
 
-- [ ] **Paso 1: Escribir los tests que fallan**
+- [ ] **Paso 1: Fijar la linea base antes de tocar codigo que funciona**
+
+```bash
+npm test 2>&1 | tail -3
+```
+
+**Anota el numero exacto de tests que pasan.** El refactor del Paso 2 no puede cambiarlo:
+si baja, has roto algo; si sube sin que hayas añadido tests, algo raro pasa.
+
+- [ ] **Paso 2: Extraer el helper y aplicarlo a los cuatro sitios existentes**
+
+En `src/arcane-client.ts`, a nivel de modulo (no dentro de la clase, porque
+`VolumeBackupsMethods.download()` tambien lo usa y no tiene acceso a los privados):
+
+```ts
+/**
+ * Lanza ArcaneApiError si la respuesta no es correcta, usando el `detail` del
+ * cuerpo de error cuando lo hay.
+ *
+ * Extraido en F5: el mismo bloque estaba repetido literalmente en request(),
+ * requestMultipart(), requestNdjson() y VolumeBackupsMethods.download(), y la
+ * fase añadia dos sitios mas.
+ */
+async function lanzaSiFalla(response: Response): Promise<void> {
+  if (response.ok) return;
+  let message = response.statusText;
+  try {
+    const err = (await response.json()) as { detail?: string };
+    if (err.detail) message = err.detail;
+  } catch {}
+  throw new ArcaneApiError(response.status, message);
+}
+```
+
+Sustituye los cuatro bloques existentes por `await lanzaSiFalla(response);`. Son las
+lineas 2052, 2203, 2245 y 2273 **antes** de editar: localizalas con
+
+```bash
+grep -n "if (err.detail) message = err.detail" src/arcane-client.ts
+```
+
+y trabaja de abajo arriba para que los numeros no se te muevan.
+
+- [ ] **Paso 3: Comprobar que el refactor no cambio nada**
+
+```bash
+npm test 2>&1 | tail -3
+npm run type-check
+grep -c "if (err.detail) message = err.detail" src/arcane-client.ts
+```
+
+Esperado: **el mismo numero de tests del Paso 1**, type-check limpio, y el `grep -c` da
+**0**.
+
+**Falsabilidad:** cambia `if (response.ok) return;` por `return;` y comprueba que caen
+los tests existentes que asertan errores de la API. Revierte.
+
+Commitea el refactor por separado, antes de seguir:
+
+```bash
+git add src/arcane-client.ts
+git commit -m "refactor(client): extrae lanzaSiFalla() de los cuatro sitios que lo repetian"
+```
+
+- [ ] **Paso 4: Escribir los tests que fallan**
 
 En `src/__tests__/arcane-client.test.ts`, dentro del `describe("request() internals")`:
 
@@ -315,7 +387,7 @@ it("requestSinCuerpo() con body lo serializa y anade Content-Type", async () => 
 Los dos últimos son el par obligatorio de la restricción global 3: sin el de «sin body»,
 una mutación que pusiera `Content-Type` siempre pasaría inadvertida.
 
-- [ ] **Paso 2: Verificar que fallan**
+- [ ] **Paso 5: Verificar que fallan**
 
 ```bash
 npx vitest run src/__tests__/arcane-client.test.ts -t "requestSinCuerpo"
@@ -323,7 +395,7 @@ npx vitest run src/__tests__/arcane-client.test.ts -t "requestSinCuerpo"
 
 Esperado: FAIL — `client.requestSinCuerpo is not a function`.
 
-- [ ] **Paso 3: Implementar**
+- [ ] **Paso 6: Implementar**
 
 En `src/arcane-client.ts`, justo después de `requestHead()`:
 
@@ -349,18 +421,11 @@ En `src/arcane-client.ts`, justo después de `requestHead()`:
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
 
-    if (!response.ok) {
-      let message = response.statusText;
-      try {
-        const err = (await response.json()) as { detail?: string };
-        if (err.detail) message = err.detail;
-      } catch {}
-      throw new ArcaneApiError(response.status, message);
-    }
+    await lanzaSiFalla(response);
   }
 ```
 
-- [ ] **Paso 4: Verificar que pasan y demostrar falsabilidad**
+- [ ] **Paso 7: Verificar que pasan y demostrar falsabilidad**
 
 ```bash
 npx vitest run src/__tests__/arcane-client.test.ts -t "requestSinCuerpo"
@@ -369,10 +434,10 @@ npm run type-check
 
 Esperado: 4 passed, type-check sin salida.
 
-**Falsabilidad:** quita el bloque `if (!response.ok)` y comprueba que el segundo test cae.
-Después pon el `Content-Type` incondicional y comprueba que cae el tercero. Revierte.
+**Falsabilidad:** quita el `await lanzaSiFalla(response)` y comprueba que el segundo test
+cae. Después pon el `Content-Type` incondicional y comprueba que cae el tercero. Revierte.
 
-- [ ] **Paso 5: Commit**
+- [ ] **Paso 8: Commit**
 
 ```bash
 git add src/arcane-client.ts src/__tests__/arcane-client.test.ts
@@ -712,8 +777,7 @@ describe("registerContainerRegistryTools", () => {
 
     const res = await (server as any)._registeredTools["arcane_container_registry_pull_usage"].callback({});
 
-    expect(res.content[0].text).toContain('"registries": []');
-    expect(res.content[0].text).not.toContain("null");
+    expect(JSON.parse(res.content[0].text)).toEqual({ registries: [] });
   });
 
   it("arcane_container_registry_test devuelve isError cuando la API falla", async () => {
@@ -1652,7 +1716,8 @@ rechazar la Tarea 5.
 - Test: `src/__tests__/arcane-client.test.ts`, `src/__e2e__/builds.e2e.ts`
 
 **Interfaces:**
-- Consume: `BuildWorkspaceMethods` (Tarea 5), `requestSinCuerpo(method, path, body?)` (Tarea 2).
+- Consume: `BuildWorkspaceMethods` (Tarea 5); `requestSinCuerpo(method, path, body?)` y
+  `lanzaSiFalla(response)` (Tarea 2).
 - Produce:
   - `UploadSession`
   - `ArcaneClient.requestBinario<T>(method: string, path: string, body: Uint8Array): Promise<T>`
@@ -1767,17 +1832,12 @@ export interface UploadSession {
       headers: { "X-API-Key": this.apiKey, "Content-Type": "application/octet-stream" },
       body,
     });
-    if (!response.ok) {
-      let message = response.statusText;
-      try {
-        const err = (await response.json()) as { detail?: string };
-        if (err.detail) message = err.detail;
-      } catch {}
-      throw new ArcaneApiError(response.status, message);
-    }
+    await lanzaSiFalla(response);
     return response.json() as Promise<T>;
   }
 ```
+
+`lanzaSiFalla()` viene de la Tarea 2. **No repitas el bloque aqui.**
 
 Método, dentro de `BuildWorkspaceMethods` (sustituye `KIND` por el valor medido):
 
