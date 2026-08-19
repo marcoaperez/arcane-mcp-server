@@ -25,3 +25,11 @@ export function e2eClient(): ArcaneClient {
  * redesplegarlo repetidamente no tiene efectos observables fuera de sí mismo.
  */
 export const IDEMPOTENT_STACK = process.env.ARCANE_E2E_STACK ?? "ical-bridge";
+
+/**
+ * Imagen sobre la que es seguro lanzar escaneos de vulnerabilidades: pequeña
+ * (33 MB), sin contenedores que dependan de ella, y reescanearla SUSTITUYE el
+ * resultado anterior sin acumular (medido en la puerta de F4, 2026-08-18).
+ * Nunca uses aquí la imagen del contenedor arcane-mcp-server.
+ */
+export const SCAN_IMAGE = process.env.ARCANE_E2E_SCAN_IMAGE ?? "curlimages/curl:8.5.0";
