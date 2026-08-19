@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { e2eClient, SCAN_IMAGE } from "./helpers";
-import type { VulnerabilityScanResult, VulnerabilitySeveritySummary } from "../arcane-client";
+import type { VulnerabilityScanResult, VulnerabilitySeveritySummary, IgnoredVulnerability } from "../arcane-client";
 
 /** Claves de severidad de VulnerabilitySeveritySummary, sin "total". */
 const SEVERIDADES = ["critical", "high", "medium", "low", "unknown"] as const;
@@ -231,13 +231,25 @@ describe("vulnerabilidades (e2e, Arcane 2.8.0)", () => {
   afterAll(async () => {
     // Limpieza de ignores marcados por el test. Si quedan vivos tras abortar
     // el ciclo, silencian una vulnerabilidad real en el reporting de producción.
-    // Intenta eliminar cada uno por separado: un fallo no abandona el resto
-    // (try/catch por registro, no por el lote). Los fallos se reportan en rojo
-    // con id y razón del residual, pero NO tumban la suite (el siguiente run
-    // lo reintentará). Sigue dependiendo de que unignore funcione; si falla el
-    // API, los registros quedan vivos.
-    const ign = await client.vulnerabilities.ignoredList(envId, { sort: "id", limit: 200 });
-    for (const resto of (ign.data ?? []).filter((x) => (x.reason ?? "").includes(MARCA))) {
+    // Intenta listar, luego eliminar cada uno por separado: un fallo en listado
+    // o en registro no abandona el resto (try/catch independientes). Los fallos
+    // se reportan en rojo con detalle, pero NO tumban la suite (el siguiente run
+    // lo reintentará). Sigue dependiendo de que el API funcione; si falla
+    // permanentemente, los registros quedan vivos en la instancia.
+    let ignoreList: IgnoredVulnerability[] = [];
+    try {
+      const ign = await client.vulnerabilities.ignoredList(envId, { sort: "id", limit: 200 });
+      ignoreList = (ign.data ?? []).filter((x) => (x.reason ?? "").includes(MARCA));
+    } catch (err) {
+      const detalle = err instanceof Error ? err.message : String(err ?? "(ninguno)");
+      console.error(
+        `No se pudo listar los ignores en la limpieza. ` +
+        `Cualquier ignore creado por este test puede estar vivo en la instancia y suprimiendo esa vulnerabilidad del reporting. ` +
+        `Verifica manualmente: arcane_vulnerability_ignored_list o GET /environments/{envId}/vulnerabilities/ignored. ` +
+        `Error: ${detalle}`
+      );
+    }
+    for (const resto of ignoreList) {
       try {
         await client.vulnerabilities.unignore(envId, resto.id);
       } catch (err) {
