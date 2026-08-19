@@ -1685,6 +1685,21 @@ class UpdaterMethods {
 }
 
 /**
+ * Codifica un segmento de ruta conservando los dos puntos literales.
+ *
+ * Medido el 2026-08-19: Arcane NO decodifica %3A en el segmento imageId
+ * -devuelve 404 en los GET, 500 en el scan, y un 200 con cero items en el
+ * listado, que es el fallo silencioso-, asi que el sha256: tiene que viajar
+ * crudo. Pero interpolar el valor entero sin codificar permitia inyectar
+ * ruta: un imageId con "../" y "#" resolvia a cualquier endpoint de Arcane,
+ * incluido system/containers/stop-all. Se codifica todo lo demas y se
+ * devuelven los dos puntos a su forma literal.
+ */
+function segmentoDeRuta(valor: string): string {
+  return encodeURIComponent(valor).replace(/%3A/gi, ":");
+}
+
+/**
  * Vulnerabilidades (Trivy integrado en Arcane). Los endpoints por imagen
  * responden 404 "Vulnerability scan not found" si la imagen no se ha
  * escaneado: es su estado normal, no una avería.
@@ -1729,20 +1744,22 @@ class VulnerabilitiesMethods {
   }
 
   /**
-   * El imageId va SIN encodeURIComponent en este segmento de ruta a
-   * propósito. Un image ID Docker tiene forma "sha256:08e466...": codificado
-   * queda "sha256%3A08e466...", y el router de Arcane NO decodifica ese
-   * segmento — la petición apunta a una imagen que no existe. Medido contra
-   * la instancia real el 2026-08-19: la versión codificada da 404 en este
-   * endpoint y en /summary, 500 "invalid reference format" en /scan, y en
-   * /list falla EN SILENCIO devolviendo 200 con 0 items (sin error visible,
-   * el más fácil de pasar por alto). Por eso NO "arreglar" esto volviendo a
-   * poner encodeURIComponent.
+   * El imageId pasa por segmentoDeRuta(), no por encodeURIComponent() a
+   * secas. Un image ID Docker tiene forma "sha256:08e466...": el router de
+   * Arcane no decodifica un %3A en este segmento -medido el 2026-08-19: 404
+   * en este endpoint y en /summary, 500 "invalid reference format" en
+   * /scan, y en /list falla EN SILENCIO devolviendo 200 con 0 items-, asi
+   * que los dos puntos tienen que viajar crudos. Pero un imageId es
+   * atacante-controlable, y el fetch subyacente resuelve "../" y trunca en
+   * "#": sin codificar el resto del valor, un imageId como
+   * "../../0/system/containers/stop-all#" reescribe la ruta entera hacia
+   * cualquier endpoint de Arcane. segmentoDeRuta() codifica todo excepto
+   * los dos puntos.
    */
   async scanResult(envId: string, imageId: string): Promise<{ success: boolean; data: VulnerabilityScanResult }> {
     return this.client.request<{ success: boolean; data: VulnerabilityScanResult }>(
       "GET",
-      `/environments/${encodeURIComponent(envId)}/images/${imageId}/vulnerabilities`
+      `/environments/${encodeURIComponent(envId)}/images/${segmentoDeRuta(imageId)}/vulnerabilities`
     );
   }
 
@@ -1757,14 +1774,14 @@ class VulnerabilitiesMethods {
     const query = params.toString();
     return this.client.request<PaginatedResponse<Vulnerability>>(
       "GET",
-      `/environments/${encodeURIComponent(envId)}/images/${imageId}/vulnerabilities/list${query ? `?${query}` : ""}`
+      `/environments/${encodeURIComponent(envId)}/images/${segmentoDeRuta(imageId)}/vulnerabilities/list${query ? `?${query}` : ""}`
     );
   }
 
   async imageSummary(envId: string, imageId: string): Promise<{ success: boolean; data: VulnerabilityScanSummary }> {
     return this.client.request<{ success: boolean; data: VulnerabilityScanSummary }>(
       "GET",
-      `/environments/${encodeURIComponent(envId)}/images/${imageId}/vulnerabilities/summary`
+      `/environments/${encodeURIComponent(envId)}/images/${segmentoDeRuta(imageId)}/vulnerabilities/summary`
     );
   }
 
@@ -1799,7 +1816,7 @@ class VulnerabilitiesMethods {
   async scan(envId: string, imageId: string): Promise<{ success: boolean; data: VulnerabilityScanResult }> {
     return this.client.request<{ success: boolean; data: VulnerabilityScanResult }>(
       "POST",
-      `/environments/${encodeURIComponent(envId)}/images/${imageId}/vulnerabilities/scan`
+      `/environments/${encodeURIComponent(envId)}/images/${segmentoDeRuta(imageId)}/vulnerabilities/scan`
     );
   }
 

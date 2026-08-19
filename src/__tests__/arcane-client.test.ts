@@ -1287,6 +1287,38 @@ describe("ArcaneClient", () => {
       );
     });
 
+    it(".scanResult neutraliza un imageId con path traversal (inyeccion de ruta)", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { imageId: "x", imageName: "x", scanTime: "t", status: "completed" } }),
+      } as Response);
+      // imageId hostil: "../" quiere escapar de /images/{id}/vulnerabilities
+      // y "#" quiere truncar el resto de la plantilla. Si esto viajara crudo,
+      // fetch lo resolveria contra /environments/env1/system/containers/stop-all.
+      const imageId = "../../0/system/containers/stop-all#";
+      await client.vulnerabilities.scanResult("env1", imageId);
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/..%2F..%2F0%2Fsystem%2Fcontainers%2Fstop-all%23/vulnerabilities",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".scan neutraliza un imageId con path traversal (inyeccion de ruta)", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { imageId: "x", imageName: "x", scanTime: "t", status: "scanning", activityId: "act-1" } }),
+      } as Response);
+      // Mismo imageId hostil, contra el POST mutante: sin codificar, esto
+      // seria un POST sin cuerpo contra /system/containers/stop-all, que
+      // tumbaria todos los contenedores del host, incluido el que sirve esta sesion.
+      const imageId = "../../0/system/containers/stop-all#";
+      await client.vulnerabilities.scan("env1", imageId);
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/..%2F..%2F0%2Fsystem%2Fcontainers%2Fstop-all%23/vulnerabilities/scan",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+
     it(".imageList con severity construye la query", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
