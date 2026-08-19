@@ -33,6 +33,18 @@ Se aplican a **todas** las tareas. No se repiten en cada una.
 3. **Dos tests por parámetro opcional**, uno con él y otro sin él, **asertando la URL
    literal completa**. `toHaveBeenCalledWith` considera iguales una clave ausente y una
    clave con valor `undefined`: enumerar `sort: undefined` no comprueba nada.
+   **Esto vale para TODOS los parámetros opcionales del método, no solo para los que
+   aparezcan en el código de ejemplo de la tarea.** Si el ejemplo cubre `search` y `sort`
+   y el método acepta además `order`, `start` y `limit`, faltan tests: manda esta
+   restricción, no el ejemplo. Incluye siempre el borde **`start=0`**, que es un valor
+   válido y no una ausencia — este proyecto ya ha tenido ese bug tres veces.
+3b. **Cada handler de tool necesita al menos un test que compruebe que pasa sus
+   parámetros al cliente.** Los tests de `arcane-client.test.ts` prueban la clase
+   cliente y los e2e llaman al cliente directamente: **ninguna de las dos capas toca el
+   handler MCP**, así que sin este test el cableado de la tool no lo verifica nadie y una
+   mutación que deje de pasar un parámetro no rompe nada. Sigue el patrón de los tests
+   que ya existen en `tools.test.ts` (`arcane_environment_list calls client.environments.list
+   with correct params`).
 4. **Fixtures que el percent-encoding cambie.** Nada de identificadores como `ign-1`, que
    codificados son idénticos. Usa valores con `#`, `/` o `..`.
 5. **Falsabilidad demostrada.** Antes de dar una tarea por hecha, muta el código de
