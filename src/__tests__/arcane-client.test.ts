@@ -1359,6 +1359,51 @@ describe("ArcaneClient", () => {
         expect.objectContaining({ method: "GET" })
       );
     });
+
+    it(".scan(envId, imageId) - POST .../vulnerabilities/scan (acuse asincrono)", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: { imageId: "sha256:abc", imageName: "x", scanTime: "t", status: "scanning", activityId: "act-1" },
+        }),
+      } as Response);
+      const r = await client.vulnerabilities.scan("env1", "sha256:abc");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/sha256%3Aabc/vulnerabilities/scan",
+        expect.objectContaining({ method: "POST" })
+      );
+      expect(r.data.status).toBe("scanning");
+      expect(r.data.activityId).toBe("act-1");
+    });
+
+    it(".ignore envía el payload exacto, sin createdBy", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: { id: "ign-1", environmentId: "env1", imageId: "sha256:abc", vulnerabilityId: "CVE-1", pkgName: "p", installedVersion: "1", createdAt: "t", createdBy: "arcane" },
+        }),
+      } as Response);
+      const payload = { imageId: "sha256:abc", vulnerabilityId: "CVE-1", pkgName: "p", reason: "triaje", installedVersion: "1" };
+      await client.vulnerabilities.ignore("env1", payload);
+      const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe("http://localhost:3552/api/environments/env1/vulnerabilities/ignore");
+      expect(init.method).toBe("POST");
+      // Body serializado real: el payload entero, y NADA más.
+      expect(init.body).toBe(JSON.stringify(payload));
+      expect(String(init.body)).not.toContain("createdBy");
+    });
+
+    it(".unignore(envId, ignoreId) - DELETE .../ignore/{ignoreId}", async () => {
+      mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true }) } as Response);
+      const r = await client.vulnerabilities.unignore("env1", "ign-1");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/vulnerabilities/ignore/ign-1",
+        expect.objectContaining({ method: "DELETE" })
+      );
+      expect(r.success).toBe(true);
+    });
   });
 
   describe("networks", () => {

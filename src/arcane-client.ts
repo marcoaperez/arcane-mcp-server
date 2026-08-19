@@ -1778,6 +1778,40 @@ class VulnerabilitiesMethods {
       `/environments/${encodeURIComponent(envId)}/vulnerabilities/ignored${query ? `?${query}` : ""}`
     );
   }
+
+  /**
+   * MUTANTE: lanza un escaneo ASÍNCRONO de UNA imagen. Devuelve el ACUSE
+   * (status "scanning" + activityId), no el resultado — medido en la puerta
+   * de F4: el resultado se recoge después con scanResult(). Acotado a una
+   * imagen por construcción: el endpoint exige imageId en la ruta.
+   */
+  async scan(envId: string, imageId: string): Promise<{ success: boolean; data: VulnerabilityScanResult }> {
+    return this.client.request<{ success: boolean; data: VulnerabilityScanResult }>(
+      "POST",
+      `/environments/${encodeURIComponent(envId)}/images/${encodeURIComponent(imageId)}/vulnerabilities/scan`
+    );
+  }
+
+  /**
+   * MUTANTE: silencia una vulnerabilidad de forma persistente. `reason` es
+   * obligatorio en esta firma aunque el spec lo declare opcional (spec F4
+   * §3.2). Devuelve el registro creado, con el `id` que usa unignore().
+   */
+  async ignore(envId: string, payload: VulnerabilityIgnoreRequest): Promise<{ success: boolean; data: IgnoredVulnerability }> {
+    return this.client.request<{ success: boolean; data: IgnoredVulnerability }>(
+      "POST",
+      `/environments/${encodeURIComponent(envId)}/vulnerabilities/ignore`,
+      payload
+    );
+  }
+
+  /** MUTANTE: deja de ignorar. El ignoreId sale de ignoredList() o del retorno de ignore(). */
+  async unignore(envId: string, ignoreId: string): Promise<{ success: boolean }> {
+    return this.client.request<{ success: boolean }>(
+      "DELETE",
+      `/environments/${encodeURIComponent(envId)}/vulnerabilities/ignore/${encodeURIComponent(ignoreId)}`
+    );
+  }
 }
 
 class GitRepositoriesMethods {
