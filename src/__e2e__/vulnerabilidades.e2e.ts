@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { e2eClient, SCAN_IMAGE } from "./helpers";
 import type { VulnerabilityScanResult, VulnerabilitySeveritySummary } from "../arcane-client";
 
@@ -179,5 +179,51 @@ describe("vulnerabilidades (e2e, Arcane 2.8.0)", () => {
     expect(r.data.scannedImages).toBeGreaterThanOrEqual(1);
     expect(r.data.totalImages).toBeGreaterThanOrEqual(r.data.scannedImages);
     expect(r.data.summary!.total).toBeGreaterThanOrEqual(resultado.summary!.total);
+  });
+
+  // ── Ciclo mutante: SIEMPRE al final, para no afectar a las lecturas ──
+
+  const MARCA = "e2e-arcane-mcp";
+
+  it("ciclo completo: ignore → aparece en ignored → unignore → desaparece", async () => {
+    const lista = await client.vulnerabilities.imageList(envId, imageId, { sort: "severity", limit: 1 });
+    const cve = (lista.data ?? [])[0];
+    expect(cve).toBeDefined();
+
+    const creado = await client.vulnerabilities.ignore(envId, {
+      imageId,
+      vulnerabilityId: cve.vulnerabilityId,
+      pkgName: cve.pkgName,
+      installedVersion: cve.installedVersion,
+      reason: `${MARCA}: ciclo e2e, se elimina en este mismo test`,
+    });
+    expect(creado.success).toBe(true);
+    expect(creado.data.id).toBeTruthy();
+    // Eco de campos: el registro creado es el que se pidió crear.
+    expect(creado.data.vulnerabilityId).toBe(cve.vulnerabilityId);
+    expect(creado.data.imageId).toBe(imageId);
+    expect(creado.data.pkgName).toBe(cve.pkgName);
+
+    const con = await client.vulnerabilities.ignoredList(envId, { sort: "id", limit: 200 });
+    expect((con.data ?? []).some((x) => x.id === creado.data.id)).toBe(true);
+
+    const borrado = await client.vulnerabilities.unignore(envId, creado.data.id);
+    expect(borrado.success).toBe(true);
+
+    const sin = await client.vulnerabilities.ignoredList(envId, { sort: "id", limit: 200 });
+    expect((sin.data ?? []).some((x) => x.id === creado.data.id)).toBe(false);
+  });
+
+  afterAll(async () => {
+    // Red de seguridad: si el ciclo abortó a medias (Tailscale), ningún ignore
+    // marcado puede quedar vivo alterando la postura de seguridad real.
+    try {
+      const ign = await client.vulnerabilities.ignoredList(envId, { sort: "id", limit: 200 });
+      for (const resto of (ign.data ?? []).filter((x) => (x.reason ?? "").includes(MARCA))) {
+        await client.vulnerabilities.unignore(envId, resto.id);
+      }
+    } catch {
+      // La limpieza no debe tumbar la suite; el siguiente run la reintenta.
+    }
   });
 });
