@@ -229,15 +229,26 @@ describe("vulnerabilidades (e2e, Arcane 2.8.0)", () => {
   });
 
   afterAll(async () => {
-    // Red de seguridad: si el ciclo abortó a medias (Tailscale), ningún ignore
-    // marcado puede quedar vivo alterando la postura de seguridad real.
-    try {
-      const ign = await client.vulnerabilities.ignoredList(envId, { sort: "id", limit: 200 });
-      for (const resto of (ign.data ?? []).filter((x) => (x.reason ?? "").includes(MARCA))) {
+    // Limpieza de ignores marcados por el test. Si quedan vivos tras abortar
+    // el ciclo, silencian una vulnerabilidad real en el reporting de producción.
+    // Intenta eliminar cada uno por separado: un fallo no abandona el resto
+    // (try/catch por registro, no por el lote). Los fallos se reportan en rojo
+    // con id y razón del residual, pero NO tumban la suite (el siguiente run
+    // lo reintentará). Sigue dependiendo de que unignore funcione; si falla el
+    // API, los registros quedan vivos.
+    const ign = await client.vulnerabilities.ignoredList(envId, { sort: "id", limit: 200 });
+    for (const resto of (ign.data ?? []).filter((x) => (x.reason ?? "").includes(MARCA))) {
+      try {
         await client.vulnerabilities.unignore(envId, resto.id);
+      } catch (err) {
+        const detalle = err instanceof Error ? err.message : String(err ?? "(ninguno)");
+        console.error(
+          `IGNORE RESIDUAL: id=${resto.id}, reason="${resto.reason}". ` +
+          `El registro está vivo en la instancia y sigue suprimiendo esa vulnerabilidad del reporting. ` +
+          `Debe eliminarse manualmente: arcane_vulnerability_unignore o DELETE /environments/{envId}/vulnerabilities/ignore/{id}. ` +
+          `Error: ${detalle}`
+        );
       }
-    } catch {
-      // La limpieza no debe tumbar la suite; el siguiente run la reintenta.
     }
   });
 });
