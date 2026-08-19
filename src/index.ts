@@ -24,6 +24,10 @@ import { registerProjectAdditionalTools } from "./tools/projects-additional";
 import { registerImageUpdateTools } from "./tools/image-updates";
 import { registerUpdaterTools } from "./tools/updater";
 import { registerVulnerabilityTools } from "./tools/vulnerabilities";
+import { registerContainerRegistryTools } from "./tools/container-registries";
+import { registerTemplateRegistryTools } from "./tools/template-registries";
+import { registerBuildWorkspaceTools } from "./tools/build-workspace";
+import { registerImageBuildTools } from "./tools/image-builds";
 
 export class ArcaneAgent extends McpAgent<Env, Record<string, never>, Props> {
   server = new McpServer({
@@ -65,6 +69,10 @@ export class ArcaneAgent extends McpAgent<Env, Record<string, never>, Props> {
     registerImageUpdateTools(this.server, client);
     registerUpdaterTools(this.server, client);
     registerVulnerabilityTools(this.server, client);
+    registerContainerRegistryTools(this.server, client);
+    registerTemplateRegistryTools(this.server, client);
+    registerBuildWorkspaceTools(this.server, client);
+    registerImageBuildTools(this.server, client);
   }
 }
 

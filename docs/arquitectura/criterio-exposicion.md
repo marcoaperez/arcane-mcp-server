@@ -12,10 +12,14 @@ que sigue siendo válida como registro histórico de cuándo se decidió cada co
 ## 1. El criterio
 
 > **Se expone lo que opera cargas de trabajo Docker y su observabilidad. De la
-> administración del propio Arcane se exponen las lecturas, nunca las escrituras.**
+> administración del propio Arcane se exponen las lecturas, nunca las escrituras —
+> salvo que el propio recurso no guarde ningún secreto y sea, en la práctica, un
+> catálogo de referencias en vez de una superficie de administración (§2.6).**
 
 Se decidió en F2, antes de listar ninguna tool, porque condiciona todas las fases
-siguientes. Sigue vigente sin cambios.
+siguientes. Sigue vigente, con la única excepción declarada en §2.6, añadida en F5:
+sin la matización, este documento contradiría lo que el fork expone desde F5, en vez
+de ser su referencia.
 
 ## 2. Qué queda fuera, y por qué
 
@@ -83,6 +87,7 @@ De [F2 §3.5](../superpowers/specs/2026-08-16-fork-arcane-mcp-f2-design.md):
 | `DELETE /environments/{id}/activities/history` | Íd. |
 | `POST .../system/containers/{start-all,stop-all,start-stopped}` | Acciones masivas: un `stop-all` mal disparado tumba todos los contenedores del host, incluido el propio Arcane |
 | `GET /environments/{id}/version` | Redundante con `arcane_version`. YAGNI |
+| `GET /environments/{id}/builds/browse/download` | Redundante con `.../builds/browse/content` (F5): mismo fichero, la tool ya cubre la lectura de texto y el binario no aporta nada nuevo sobre MCP |
 
 ### 2.4 Diferido, no excluido — 21 operaciones y un parámetro
 
@@ -94,6 +99,7 @@ algún día:
 |---|---|---|
 | `webhooks` (4), `notifications` (6), `settings` (5), `deployment`/mTLS (3), `dashboard` (1), `diagnostics` (2) | **21 operaciones** | Fase propia si se justifica. Son configuración persistente y superficie de agente, no observabilidad |
 | `groupBy` en `containers` | 1 parámetro de query | Sin asignar: añade una clave `groups` a la respuesta y necesita su propio tipo y formateo |
+| `POST /environments/{id}/builds/browse/upload` | 1 operación (F5) | Diferida — medido el 2026-08-19 que ningún entorno soporta las tres llamadas del flujo de subida (`POST /uploads/build-workspace`, subida de trozos y `POST .../builds/browse/upload`): local Docker (`0`) da 200 en `/uploads` y 500 `permission denied` en `/builds`; Zabbix da 404 en `/uploads` y 200 en `/builds`; los otros cuatro entornos dan 404 y 500. Son conjuntos disjuntos — ningún entorno gana las dos rutas a la vez, así que no hay e2e posible en ninguno. Reversible en cuanto uno las gane. **Sigue contando en el denominador**, como toda diferida |
 
 > **F3 entregó las cuatro filas que antes estaban aquí:** las tres operaciones de
 > `updater` (`status`, `history`, `run`), los tres parámetros `updates` en
@@ -101,6 +107,59 @@ algún día:
 > `Project.updateInfo` que la auditoría de drift señalaba como faltantes. Ya no son
 > diferidos: siempre contaron en el denominador de la §3 (ver el preámbulo de
 > esta sección), y ahora además cuentan en el numerador — están cubiertos.
+
+### 2.5 El modelo tendría que redactar el secreto — 4 operaciones
+
+`POST /container-registries`, `PUT /container-registries/{id}`, `DELETE
+/container-registries/{id}` y `POST /container-registries/sync` quedan fuera. F5 solo
+implementa las cuatro lecturas (`list`, `get`, `pull-usage`, `test`); ni las cuatro
+escrituras ni sus métodos de cliente llegaron a escribirse.
+
+El motivo no es el radio de daño de §2.1 — esto no es infraestructura de Arcane — sino
+que la propia forma del contrato obliga a que el secreto pase por el contexto del
+modelo. `CreateContainerRegistryRequest` exige `token` (y, para AWS,
+`awsAccessKeyId`/`awsSecretAccessKey`) como campo **requerido** del cuerpo: para crear o
+actualizar un registro, el modelo tiene que **redactar la credencial en texto plano**
+como argumento de la llamada. Las lecturas, medido, no tienen esta propiedad: ni `list`
+ni `get` devuelven `token` ni las claves de AWS — es la razón por la que sí se admiten
+(la descripción de ambas tools lo declara).
+
+Tres agravantes, todos medidos contra el spec:
+
+- **`sync` es masivo.** `ContainerregistrySyncRequest.registries` es un array: una sola
+  llamada puede reescribir la credencial de varios registros a la vez.
+- **`update` puede vaciar la credencial.** El mismo campo `token` que crea el registro
+  sirve para sobrescribirlo; no hay endpoint separado de solo-lectura para verificar
+  que sigue siendo el que el propietario puso.
+- **`delete` es irreversible por construcción.** No hay papelera ni confirmación en dos
+  pasos: el registro desaparece y con él la configuración de acceso a ese repositorio.
+
+### 2.6 Una excepción declarada — `templates/registries` sí expone sus 4 escrituras
+
+F5 entrega el CRUD completo de `/templates/registries` (`create`, `update`, `delete`,
+además de `list`): las tres escrituras se exponen, no solo la lectura. Es, medido
+contra §1 tal y como estaba escrita antes de esta revisión, una contradicción del
+propio criterio — «nunca las escrituras» sin matiz alguno.
+
+**El motivo, ya estaba en el spec de F5 §2.3 y no había llegado a este documento:**
+`templates/registries` no es administración de Arcane en el sentido que motiva §1. Su
+schema es `{id, name, url, description, enabled, lastFetchError}` y su `Create`/`Update`
+solo aceptan esos cuatro campos de entrada (`name`, `url`, `description`, `enabled`).
+**No hay ningún campo de credencial** — a diferencia de `container-registries`, cuyo
+`token`/`awsSecretAccessKey` obliga al modelo a redactar el secreto (§2.5). Es, en la
+práctica, un catálogo de URLs de dónde Arcane busca plantillas de Compose, no una
+palanca sobre la seguridad o disponibilidad de la instancia.
+
+**La irreversibilidad de `delete` no cambia el cálculo aquí.** §2.5 la usa como
+agravante, pero ahí se suma a que el modelo redacta un secreto real; en
+`templates/registries` no hay secreto que proteger, así que la irreversibilidad por sí
+sola —borrar una fila de un catálogo de URLs— no alcanza el radio de daño de §2.1 ni
+la pérdida de evidencia de §2.3. Perder una entrada del catálogo es un inconveniente
+recuperable creándola de nuevo, no un incidente de seguridad.
+
+Es la única excepción a §1 que este fork tiene hoy. Si aparece una segunda, va aquí
+también, con el mismo tipo de justificación medida — no se generaliza a «las
+escrituras sin secretos se admiten» sin revisarlas una a una.
 
 ## 3. El denominador honesto
 
@@ -111,13 +170,18 @@ API que incluye lo que nunca se va a tocar.
   347  operaciones en openapi.txt
  − 51  swarm (infraestructura inexistente, §2.2)
  − 47  escrituras de administración de Arcane (radio de daño, §2.1)
+ −  4  escrituras de registro de contenedor (§2.5)
+ −  1  builds/browse/download (redundante, §2.3)
  ────
-  249  operaciones que este fork pretende poder cubrir
+  244  operaciones que este fork pretende poder cubrir
 ```
 
 **Los balances publican la cobertura explicando el denominador** — a fecha de F4,
 `98 de 249`, no `98 de 347`. Ambas cifras son ciertas; la segunda subestima el avance
-en un tercio y no dice nada útil sobre lo que queda por hacer.
+en un tercio y no dice nada útil sobre lo que queda por hacer. El denominador baja de
+249 a 244 en F5 por las dos filas nuevas de arriba: no es que el fork cubra menos, es
+que el denominador se afina — las cuatro escrituras de §2.5 nunca iban a implementarse
+y `builds/browse/download` nunca iba a añadir cobertura real sobre `.../content`.
 
 Las cifras que aparecen en balances ya escritos se dejan como están: son ciertas en
 el momento en que se midieron, y reescribir documentos cerrados cada vez que sube la
@@ -139,7 +203,8 @@ criterio de §1: el ciclo de vida del cluster es administración, no carga de tr
 
 ## 5. Cómo reproducir las cifras de este documento
 
-Reparto de operaciones y denominador:
+Reparto de operaciones y denominador (versión F5, con las dos filas nuevas de §2.5 y
+§2.3 — sustituye al comando de F2/F4, que daba 249):
 
 ```bash
 node -e "
@@ -147,14 +212,17 @@ const s=JSON.parse(require('fs').readFileSync('openapi.txt','utf8'));
 const M=['get','post','put','delete','patch','head'];
 const ADMIN=['auth','oidc','users','roles','api-keys','federated-credentials'];
 const dom=p=>{const g=p.split('/').filter(Boolean);return (g[0]==='environments'&&g.length>=3)?g[2]:g[0];};
-let total=0,swarm=0,adminL=0,adminE=0;
+const SECRETO=new Set(['POST /container-registries','PUT /container-registries/{id}','DELETE /container-registries/{id}','POST /container-registries/sync']);
+const REDUNDANTE=new Set(['GET /environments/{id}/builds/browse/download']);
+let total=0,swarm=0,adminE=0,secreto=0,redundante=0;
 for(const p of Object.keys(s.paths)) for(const m of M){ if(!s.paths[p][m])continue; total++;
-  const d=dom(p);
-  if(d==='swarm') swarm++;
-  if(ADMIN.includes(d)) (m==='get'||m==='head')?adminL++:adminE++;
+  const clave=m.toUpperCase()+' '+p, d=dom(p);
+  if(d==='swarm'){swarm++;continue;}
+  if(ADMIN.includes(d)&&!(m==='get'||m==='head')){adminE++;continue;}
+  if(SECRETO.has(clave))secreto++;
+  if(REDUNDANTE.has(clave))redundante++;
 }
-console.log('total='+total+' swarm='+swarm+' adminLect='+adminL+' adminEscr='+adminE);
-console.log('denominador='+(total-swarm-adminE));
+console.log('denominador='+(total-swarm-adminE-secreto-redundante));
 "
 ```
 

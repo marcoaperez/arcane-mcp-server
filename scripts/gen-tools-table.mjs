@@ -31,6 +31,7 @@ const GROUPS = [
   ["volume-files.ts", "Volume files"],
   ["networks.ts", "Networks"],
   ["templates.ts", "Templates"],
+  ["template-registries.ts", "Template registries"],
   ["git-repositories.ts", "Git repositories"],
   ["gitops-syncs.ts", "GitOps syncs"],
   ["system.ts", "System"],
@@ -40,6 +41,9 @@ const GROUPS = [
   ["image-updates.ts", "Image updates"],
   ["updater.ts", "Updater"],
   ["vulnerabilities.ts", "Vulnerabilities"],
+  ["container-registries.ts", "Container registries"],
+  ["build-workspace.ts", "Build workspace"],
+  ["image-builds.ts", "Image builds"],
 ];
 
 /** Extrae {name, desc, params} de cada `server.tool(name, desc, shape, handler)`. */

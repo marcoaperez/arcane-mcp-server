@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { ArcaneClient, ArcaneApiError, type VersionInfo } from "../arcane-client";
+import { ArcaneClient, ArcaneApiError, BUILD_ARG_OCULTO, LINEAS_DE_LOG_CONSERVADAS, type VersionInfo } from "../arcane-client";
 
 describe("ArcaneClient", () => {
   let client: ArcaneClient;
@@ -121,6 +121,58 @@ describe("ArcaneClient", () => {
       const resultado = await client.requestHead("/environments/env123/system/health");
 
       expect(resultado).toEqual({ ok: false, status: 503 });
+    });
+
+    it("requestSinCuerpo() no intenta parsear el cuerpo de un 204", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 204,
+        json: async () => { throw new Error("no debe llamarse"); },
+      } as unknown as Response);
+
+      await expect(client.requestSinCuerpo("POST", "/algo")).resolves.toBeUndefined();
+    });
+
+    it("requestSinCuerpo() lanza ArcaneApiError con el detail del error", async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: "Internal Server Error",
+        json: async () => ({ detail: "invalid path: path traversal not allowed" }),
+      } as unknown as Response);
+
+      await expect(client.requestSinCuerpo("DELETE", "/algo")).rejects.toThrow(
+        "invalid path: path traversal not allowed",
+      );
+    });
+
+    it("requestSinCuerpo() sin body no envia Content-Type", async () => {
+      mockFetch.mockResolvedValue({ ok: true, status: 204 } as unknown as Response);
+
+      await client.requestSinCuerpo("POST", "/ruta");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/ruta",
+        expect.objectContaining({
+          method: "POST",
+          headers: { "X-API-Key": "test-api-key" },
+        }),
+      );
+    });
+
+    it("requestSinCuerpo() con body lo serializa y anade Content-Type", async () => {
+      mockFetch.mockResolvedValue({ ok: true, status: 204 } as unknown as Response);
+
+      await client.requestSinCuerpo("POST", "/ruta", { uploadId: "up1" });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/ruta",
+        expect.objectContaining({
+          method: "POST",
+          headers: { "X-API-Key": "test-api-key", "Content-Type": "application/json" },
+          body: JSON.stringify({ uploadId: "up1" }),
+        }),
+      );
     });
   });
 
@@ -1962,6 +2014,479 @@ describe("ArcaneClient", () => {
         "http://localhost:3552/api/environments/env1/projects?updates=up_to_date",
         expect.objectContaining({ method: "GET" }),
       );
+    });
+  });
+
+  describe("containerRegistries", () => {
+    it(".list() sin opciones - GET /container-registries sin query", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: {} }),
+      } as Response);
+
+      await client.containerRegistries.list();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/container-registries",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({search, sort}) - GET /container-registries con la query literal", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: {} }),
+      } as Response);
+
+      await client.containerRegistries.list({ search: "docker hub", sort: "url" });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/container-registries?search=docker+hub&sort=url",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({order}) - GET /container-registries con la query literal", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: {} }),
+      } as Response);
+
+      await client.containerRegistries.list({ order: "desc" });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/container-registries?order=desc",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({start}) - GET /container-registries con la query literal", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: {} }),
+      } as Response);
+
+      await client.containerRegistries.list({ start: 40 });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/container-registries?start=40",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({start: 0}) se envia (es un valor valido, no una ausencia)", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: {} }),
+      } as Response);
+
+      await client.containerRegistries.list({ start: 0 });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/container-registries?start=0",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({limit}) - GET /container-registries con la query literal", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: {} }),
+      } as Response);
+
+      await client.containerRegistries.list({ limit: 5 });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/container-registries?limit=5",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".get(id) codifica el id en la ruta y no permite traversal", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: {} }),
+      } as Response);
+
+      await client.containerRegistries.get("../../system/containers/stop-all#");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/container-registries/..%2F..%2Fsystem%2Fcontainers%2Fstop-all%23",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".pullUsage() - GET /container-registries/pull-usage", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { registries: [] } }),
+      } as Response);
+
+      await client.containerRegistries.pullUsage();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/container-registries/pull-usage",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".test(id) - POST /container-registries/{id}/test, con el id codificado", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { message: "ok" } }),
+      } as Response);
+
+      await client.containerRegistries.test("reg#1");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/container-registries/reg%231/test",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+  });
+
+  describe("templateRegistries", () => {
+    it(".list() - GET /templates/registries", async () => {
+      mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, data: [] }) } as Response);
+      await client.templateRegistries.list();
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/templates/registries",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".create(dto) - POST con el cuerpo serializado", async () => {
+      mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, data: {} }) } as Response);
+      await client.templateRegistries.create({
+        name: "catalogo", url: "https://ejemplo.invalid/t.json", description: "d", enabled: true,
+      });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/templates/registries",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ name: "catalogo", url: "https://ejemplo.invalid/t.json", description: "d", enabled: true }),
+        }),
+      );
+    });
+
+    it(".update(id, dto) codifica el id y no permite traversal", async () => {
+      mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, data: { message: "ok" } }) } as Response);
+      await client.templateRegistries.update("../../system/containers/stop-all#", {
+        name: "n", url: "https://ejemplo.invalid/t.json", description: "d", enabled: false,
+      });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/templates/registries/..%2F..%2Fsystem%2Fcontainers%2Fstop-all%23",
+        expect.objectContaining({ method: "PUT" }),
+      );
+    });
+
+    it(".delete(id) codifica el id", async () => {
+      mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, data: { message: "ok" } }) } as Response);
+      await client.templateRegistries.delete("reg#1");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/templates/registries/reg%231",
+        expect.objectContaining({ method: "DELETE" }),
+      );
+    });
+  });
+
+  describe("buildWorkspace", () => {
+    it(".browse(envId) sin path - GET sin query", async () => {
+      mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, data: [] }) } as Response);
+      await client.buildWorkspace.browse("env1");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/builds/browse",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".browse(envId, path) - GET con la query literal y el path escapado", async () => {
+      mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, data: [] }) } as Response);
+      await client.buildWorkspace.browse("env1", "sub dir/../x");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/builds/browse?path=sub+dir%2F..%2Fx",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".browse(envId, path) codifica el envId (no solo el path)", async () => {
+      mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, data: [] }) } as Response);
+      await client.buildWorkspace.browse("env/../otro", "ctx");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env%2F..%2Fotro/builds/browse?path=ctx",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".read(envId, path) sin maxBytes - no escribe maxBytes en la query", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true, json: async () => ({ success: true, data: { content: "", mimeType: "text/plain" } }),
+      } as Response);
+      await client.buildWorkspace.read("env1", "Dockerfile");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/builds/browse/content?path=Dockerfile",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".read(envId, path, maxBytes) - escribe maxBytes", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true, json: async () => ({ success: true, data: { content: "", mimeType: "text/plain" } }),
+      } as Response);
+      await client.buildWorkspace.read("env1", "Dockerfile", 4096);
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/builds/browse/content?path=Dockerfile&maxBytes=4096",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".mkdir(envId, path) - POST, y no revienta con un 204 sin cuerpo", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true, status: 204, json: async () => { throw new Error("no debe llamarse"); },
+      } as unknown as Response);
+      await expect(client.buildWorkspace.mkdir("env1", "ctx")).resolves.toBeUndefined();
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/builds/browse/mkdir?path=ctx",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+
+    it(".delete(envId, path) - DELETE con el path en la query", async () => {
+      mockFetch.mockResolvedValue({ ok: true, status: 204 } as unknown as Response);
+      await client.buildWorkspace.delete("env1", "ctx");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/builds/browse?path=ctx",
+        expect.objectContaining({ method: "DELETE" }),
+      );
+    });
+  });
+
+  describe("imageBuilds", () => {
+    const okVacio = () =>
+      ({ ok: true, json: async () => ({ success: true, data: [], pagination: {} }) }) as Response;
+
+    const registroBase = {
+      id: "b1", environmentId: "0", status: "success", createdAt: "x", contextDir: "/builds",
+      noCache: false, pull: false, privileged: false, push: false, load: false, outputTruncated: false,
+    };
+
+    it(".list() enmascara los valores de buildArgs y conserva las claves", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [{ ...registroBase, buildArgs: { NPM_TOKEN: "npm_secreto_de_verdad", OTRO: "tambien" } }],
+          pagination: {},
+        }),
+      } as Response);
+
+      const res = await client.imageBuilds.list("env1");
+
+      expect(JSON.stringify(res)).not.toContain("npm_secreto_de_verdad");
+      expect(JSON.stringify(res)).not.toContain("tambien");
+      expect(Object.keys(res.data![0].buildArgs!)).toEqual(["NPM_TOKEN", "OTRO"]);
+      expect(res.data![0].buildArgs!.NPM_TOKEN).toBe(BUILD_ARG_OCULTO);
+    });
+
+    it(".get() enmascara igual que .list(): la fuga no puede depender de la ruta", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: { ...registroBase, buildArgs: { GITHUB_TOKEN: "ghp_secreto_de_verdad" } },
+        }),
+      } as Response);
+
+      const res = await client.imageBuilds.get("env1", "b1");
+
+      expect(JSON.stringify(res)).not.toContain("ghp_secreto_de_verdad");
+      expect(res.data.buildArgs!.GITHUB_TOKEN).toBe(BUILD_ARG_OCULTO);
+    });
+
+    it(".get() no revienta si la API responde 200 con data: null", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: null }),
+      } as Response);
+
+      const res = await client.imageBuilds.get("env1", "b1");
+
+      expect(res.data).toBeNull();
+    });
+
+    it(".get() no revienta si la API responde 200 sin campo data (undefined)", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true }),
+      } as Response);
+
+      const res = await client.imageBuilds.get("env1", "b1");
+
+      expect(res.data).toBeUndefined();
+    });
+
+    it(".get(buildId) codifica el buildId y no permite traversal", async () => {
+      mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, data: {} }) } as Response);
+      await client.imageBuilds.get("env1", "../../system/containers/stop-all#");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/builds/..%2F..%2Fsystem%2Fcontainers%2Fstop-all%23",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list() sin opciones - GET sin query", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.imageBuilds.list("env1");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/builds",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({search}) - GET con la query literal", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.imageBuilds.list("env1", { search: "my-app" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/builds?search=my-app",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({sort}) - GET con la query literal", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.imageBuilds.list("env1", { sort: "createdAt" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/builds?sort=createdAt",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({order}) - GET con la query literal", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.imageBuilds.list("env1", { order: "desc" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/builds?order=desc",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({start}) - GET con la query literal", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.imageBuilds.list("env1", { start: 40 });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/builds?start=40",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({start: 0}) se envia (es un valor valido, no una ausencia)", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.imageBuilds.list("env1", { start: 0 });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/builds?start=0",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({limit}) - GET con la query literal", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.imageBuilds.list("env1", { limit: 5 });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/builds?limit=5",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({status}) - GET con la query literal", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.imageBuilds.list("env1", { status: "failed" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/builds?status=failed",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({provider}) - GET con la query literal", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.imageBuilds.list("env1", { provider: "buildx" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/builds?provider=buildx",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".build() trata {done:true} como exito y expone el activityId", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () =>
+          '{"type":"activity","activityId":"act-1"}\n{"log":"#1 paso"}\n{"done":true}\n',
+      } as unknown as Response);
+
+      const res = await client.imageBuilds.build("env1", { contextDir: "/builds" });
+
+      expect(res.success).toBe(true);
+      expect(res.activityId).toBe("act-1");
+      expect(res.logTail).toContain("#1 paso");
+    });
+
+    it(".build() trata {error} como fallo AUNQUE el HTTP sea 200", async () => {
+      // Medido el 2026-08-19: el endpoint responde 200 y el fracaso solo vive
+      // dentro del stream. Es la clase de bug que tuvo arcane_project_redeploy.
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () =>
+          '{"type":"activity","activityId":"act-2"}\n{"error":"build context not found: stat /x: no such file or directory"}\n',
+      } as unknown as Response);
+
+      const res = await client.imageBuilds.build("env1", { contextDir: "/x" });
+
+      expect(res.success).toBe(false);
+      expect(res.message).toContain("build context not found");
+    });
+
+    it(".build() conserva solo la cola del log y dice cuantas lineas descarto", async () => {
+      const lineas = Array.from({ length: 250 }, (_, i) => `{"log":"linea ${i}"}`).join("\n");
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () => `{"type":"activity","activityId":"a"}\n${lineas}\n{"done":true}\n`,
+      } as unknown as Response);
+
+      const res = await client.imageBuilds.build("env1", { contextDir: "/builds" });
+
+      expect(res.logTail).toHaveLength(LINEAS_DE_LOG_CONSERVADAS);
+      expect(res.logTail[res.logTail.length - 1]).toBe("linea 249");
+      expect(res.droppedLines).toBe(250 - LINEAS_DE_LOG_CONSERVADAS);
+    });
+
+    it(".build() sin {error} y sin {done:true} se considera fallo: el stream no completo", async () => {
+      // Ni error ni done: el stream se corto (o el provider no emitio el
+      // marcador final) sin reportar fallo explicito. success tiene que
+      // seguir a `done`, no asumir exito por ausencia de error.
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () => '{"type":"activity","activityId":"act-3"}\n{"log":"building..."}\n',
+      } as unknown as Response);
+
+      const res = await client.imageBuilds.build("env1", { contextDir: "/builds" });
+
+      expect(res.success).toBe(false);
+      expect(res.message).toContain("ended without a completion event");
+    });
+
+    it(".buildProject() codifica el projectId y usa el mismo resumidor", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () => '{"type":"activity","activityId":"a"}\n{"error":"project not found"}\n',
+      } as unknown as Response);
+
+      const res = await client.imageBuilds.buildProject("env1", "p#1", {});
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/projects/p%231/build",
+        expect.objectContaining({ method: "POST" }),
+      );
+      expect(res.success).toBe(false);
+      expect(res.message).toContain("project not found");
     });
   });
 });

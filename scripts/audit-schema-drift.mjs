@@ -64,6 +64,13 @@ const MAP = {
   VulnerabilityScanSummariesResponse: "VulnerabilityScanSummariesResponse",
   EnvironmentVulnerabilitySummary: "VulnerabilityEnvironmentVulnerabilitySummary",
   IgnoredVulnerability: "VulnerabilityIgnoredVulnerability",
+  ContainerRegistry: "ContainerregistryContainerRegistry",
+  RegistryPullUsage: "ContainerregistryPullUsage",
+  TemplateRegistry: "TemplateTemplateRegistry",
+  BuildWorkspaceEntry: "WorkspaceFileEntry",
+  BuildFileContent: "BuildFileContentResponse",
+  ImageBuildRecord: "ImageBuildRecord",
+  UploadSession: "UploadSession",
 };
 
 function tsInterfaceProps(file) {

@@ -38,11 +38,45 @@ Built on Cloudflare Workers using the official Cloudflare `agents` package, this
 
 El fix de los endpoints NDJSON se ha ofrecido al upstream como PR autocontenido.
 
+## Pendiente al actualizar a Arcane v2.8.1
+
+La instancia de referencia corre **v2.8.0** deliberadamente: es la versión contra la que
+están verificadas las 98 combinaciones método+ruta y los comportamientos que describen las
+tools de este README. v2.8.1 (publicada el 2026-08-19) **no corrige ninguno** de los issues
+abiertos desde este proyecto, así que el salto no corre prisa. Cuando se haga, esto es lo
+que hay que atender:
+
+- **`arcane_image_update_check` gana un estado nuevo.** El PR
+  [#3631](https://github.com/getarcaneapp/arcane/pull/3631) hace que las imágenes nunca
+  descargadas reporten un estado propio `not pulled` en lugar de fallar la comprobación.
+  Es el único cambio de v2.8.1 que toca la superficie que usa este fork.
+- **El contrato JSON no cambia.** El refactor de `models` a paquetes de dominio
+  ([#3636](https://github.com/getarcaneapp/arcane/pull/3636)) mueve los structs de fichero
+  pero conserva los tags `json`. Verificado campo a campo sobre `VulnerabilityIgnore` en
+  `backend/internal/vulnerability/model.go` de v2.8.1, y el diff `v2.8.0...v2.8.1` no
+  contiene ningún campo eliminado ni renombrado. No se espera drift de shapes.
+- **Rehacer la línea base de verificación.** Regenerar `openapi.txt` con
+  `npm run update-api-spec` y pasar `scripts/audit-schema-drift.mjs`. Los comportamientos
+  medidos que documentan las descripciones de las tools (`arcane_system_health` siempre
+  500, `arcane_vulnerability_ignore` sin efecto sobre los recuentos) dejan de estar
+  garantizados hasta volver a medirlos.
+- **Requisitos operativos del salto.** Pinear la imagen antes de actualizar — la instancia
+  arrastra las etiquetas `:latest` y `:v2.8.0` sobre el mismo digest — y contar con que
+  v2.8.1 **migra el esquema de la base de datos**: backup previo.
+
+Issues abiertos contra upstream desde este proyecto, ninguno resuelto en v2.8.1:
+[#3638](https://github.com/getarcaneapp/arcane/issues/3638),
+[#3640](https://github.com/getarcaneapp/arcane/issues/3640),
+[#3645](https://github.com/getarcaneapp/arcane/issues/3645) — cuyo fix, el PR
+[#3648](https://github.com/getarcaneapp/arcane/pull/3648), sigue sin mergear — y
+[#3657](https://github.com/getarcaneapp/arcane/issues/3657), que documenta que la API no
+percent-decodifica los segmentos `{imageId}`.
+
 ## Available Tools
 
 <!-- BEGIN TOOLS -->
 
-Las **100** tools que expone el servidor, agrupadas por dominio. Esta tabla la
+Las **116** tools que expone el servidor, agrupadas por dominio. Esta tabla la
 genera `npm run gen-tools-table` a partir de `src/tools/`: las descripciones y los
 parámetros son los que registra el código, no una copia mantenida a mano.
 
@@ -152,6 +186,15 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | `arcane_template_update` | Update an existing template. The API replaces the whole template, so all fields are required. | `templateId`, `name`, `description`, `content`, `envContent` |
 | `arcane_template_delete` | Delete a template. | `templateId` |
 
+### Template registries (4)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_template_registry_list` | List the template registries Arcane fetches Compose templates from. Check lastFetchError to see whether a registry is failing to load. | — |
+| `arcane_template_registry_create` | Add a template registry. Template registries hold no credentials: a name, a URL, a description and enabled — all four are required. | `name`, `url`, `description`, `enabled` |
+| `arcane_template_registry_update` | Update a template registry. All four fields are required and this replaces all of them, including the ones you didn't mean to change: read the current values with arcane_template_registry_list first, or you will silently overwrite a field with a guessed value. | `registryId`, `name`, `url`, `description`, `enabled` |
+| `arcane_template_registry_delete` | Delete a template registry. | `registryId` |
+
 ### Git repositories (8)
 
 | Tool | Description | Inputs |
@@ -245,6 +288,33 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | `arcane_vulnerability_scan` | Launch a vulnerability scan (Trivy) of ONE image. The scan is asynchronous: this returns an acknowledgement with an activityId, not the result. Follow progress with arcane_activity_get, and read the outcome with arcane_vulnerability_scan_result once completed (~15 s for a small image). Scanning consumes CPU on the host. Check arcane_vulnerability_scanner_status first if unsure the scanner is available. | `environmentId?`, `environmentName?`, `imageId` |
 | `arcane_vulnerability_ignore` | Mark ONE vulnerability of ONE image as ignored by creating a persistent ignore record. Requires a reason, which is stored and shown in arcane_vulnerability_ignored_list. Reversible with arcane_vulnerability_unignore. Measured against Arcane v2.8.0: creating the record does NOT change the CVE counts returned by arcane_vulnerability_image_summary or arcane_vulnerability_image_list — treat this as a tracked triage decision, not a reporting filter. | `environmentId?`, `environmentName?`, `imageId`, `vulnerabilityId`, `pkgName`, `reason`, `installedVersion?` |
 | `arcane_vulnerability_unignore` | Remove an ignore record created by arcane_vulnerability_ignore, so it no longer appears in arcane_vulnerability_ignored_list. The ignoreId comes from arcane_vulnerability_ignored_list or from the record returned by arcane_vulnerability_ignore. Measured against Arcane v2.8.0: removing the record does NOT change the CVE counts returned by arcane_vulnerability_image_summary or arcane_vulnerability_image_list. | `environmentId?`, `environmentName?`, `ignoreId` |
+
+### Container registries (4)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_container_registry_list` | List the container registries Arcane pulls images from. Credentials are never returned by this API: tokens and AWS secret keys are absent from the response, so what you get is configuration only. | `search?`, `sort?`, `order?`, `start?`, `limit?` |
+| `arcane_container_registry_get` | Get one container registry by ID. Credentials are never returned by this API. | `registryId` |
+| `arcane_container_registry_pull_usage` | Report pull-rate usage per registry: observed pulls, and the remaining quota when the provider exposes one. | — |
+| `arcane_container_registry_test` | Test connectivity and authentication to a container registry. Does not modify the registry's configuration in Arcane. This performs a real registry login against the third-party host; only the failure path has been observed (host unreachable) — the success path has not been exercised against this instance, so what it does beyond that is not confirmed. On failure the error text is the registry login output, which names the host and the reason. | `registryId` |
+
+### Build workspace (4)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_build_workspace_browse` | List files and directories in the build workspace of an environment. The workspace is a directory inside the Arcane agent, not the host filesystem, and paths cannot escape it. Measured against this instance: only 1 of the 6 environments has a usable build workspace. The other 5 respond "500 failed to ensure builds directory: mkdir /builds: permission denied". | `environmentId?`, `environmentName?`, `path?` |
+| `arcane_build_workspace_read` | Read a file from the build workspace. Binary files are not returned: their MIME type and the number of bytes read are reported instead. Measured against this instance: only 1 of the 6 environments has a usable build workspace. The other 5 respond "500 failed to ensure builds directory: mkdir /builds: permission denied". | `environmentId?`, `environmentName?`, `path`, `maxBytes?` |
+| `arcane_build_workspace_mkdir` | Create a directory in the build workspace. Measured against this instance: only 1 of the 6 environments has a usable build workspace. The other 5 respond "500 failed to ensure builds directory: mkdir /builds: permission denied". | `environmentId?`, `environmentName?`, `path` |
+| `arcane_build_workspace_delete` | Delete a file or directory from the build workspace. A path is required: this tool cannot delete the workspace root. Measured against this instance: only 1 of the 6 environments has a usable build workspace. The other 5 respond "500 failed to ensure builds directory: mkdir /builds: permission denied". | `environmentId?`, `environmentName?`, `path` |
+
+### Image builds (4)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_image_build` | Build a Docker image with BuildKit. Note that load:false does NOT discard the image: it is still created and tagged. Build arguments are stored by Arcane and readable afterwards, so do not pass secrets. | `environmentId?`, `environmentName?`, `contextDir`, `dockerfile?`, `dockerfileInline?`, `tags?`, `buildArgs?`, `labels?`, `target?`, `platforms?`, `noCache?`, `pull?`, `push?`, `load?`, `provider?` |
+| `arcane_project_build` | Build the Compose services of a project that declare a build directive. Do not rely on the project's hasBuildDirective field to decide: it reports false even for projects that do have one. | `environmentId?`, `environmentName?`, `projectId?`, `projectName?`, `services?`, `push?`, `load?`, `provider?` |
+| `arcane_image_build_list` | List the image build history of an environment. Build argument values are hidden; their names are kept. The environmentId recorded on each build is the agent's own local id, not the environment you queried. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `status?`, `provider?` |
+| `arcane_image_build_get` | Get one build record with its full build log. Build argument values are hidden, but the log itself is returned verbatim and contains whatever the build printed, including anything it echoed by mistake. The environmentId recorded on the build is the agent's own local id, not the environment you queried. | `environmentId?`, `environmentName?`, `buildId` |
 
 <!-- END TOOLS -->
 

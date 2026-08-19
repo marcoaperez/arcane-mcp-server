@@ -134,7 +134,7 @@ it(".miAccion(envId) - POST /environments/{envId}/mi-recurso/accion", async () =
 Para endpoints NDJSON, mockea `text:` en vez de `json:` y verifica al menos:
 stream de éxito con `{done:true}`, stream con `{error}`, y el fallback de objeto único.
 
-**(b) e2e contra la instancia v2.7.0 real** en `src/__e2e__/`:
+**(b) e2e contra la instancia 2.8.0 real** en `src/__e2e__/`:
 
 ```ts
 import { e2eClient, IDEMPOTENT_STACK } from "./helpers";
@@ -149,6 +149,12 @@ npm test
 ARCANE_BASE_URL=http://192.168.180.210:3552 ARCANE_API_KEY=<clave> npm run test:e2e
 npm run type-check
 ```
+
+**Ejecuta los e2e desde dentro de la LAN, no por Tailscale.** Medido el 2026-08-19:
+desde el Mac se cae el 16,7 % de las peticiones (50 de 60); desde `vm-control`, 0 de 120.
+`./scripts/e2e-remoto.sh` copia el árbol, instala con bun y ejecuta con node en
+contenedores sobre `vm-control`. Instala con bun pero **ejecuta con node**: bajo el
+runtime de bun, `zod` no resuelve y `src/tools/gitops-syncs.ts` revienta al importar.
 
 ## 6. Documentar y publicar
 

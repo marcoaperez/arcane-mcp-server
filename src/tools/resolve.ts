@@ -45,8 +45,8 @@ interface ResolveByNameLabels {
  * Resuelve un id a partir de un nombre recorriendo la coleccion entera con
  * `collectAllPages`, en vez de mirar solo la primera pagina.
  *
- * Los cuatro resolvers (entorno, stack, contenedor, sync de GitOps) comparten
- * esta forma exacta: buscar coincidencias, y si no hay ninguna, distinguir
+ * Los resolvers nombre->id (entorno, stack, contenedor, proyecto, sync de
+ * GitOps) comparten esta forma exacta: buscar coincidencias, y si no hay ninguna, distinguir
  * entre "no lo he mirado todo" (cuando `collectAllPages` agota su tope) y "no
  * existe" (cuando si se ha visto la coleccion completa). Decir "no existe"
  * en el primer caso es la conclusion falsa que esta tarea elimina.
@@ -145,6 +145,45 @@ export async function resolveStackId(
       countNoun: "stacks",
       foundNoun: "stacks",
       idNoun: "stack ID",
+      scope: ` in environment '${envId}'`,
+    },
+  });
+}
+
+/**
+ * Resuelve un id de proyecto a partir de un nombre. "Proyecto" y "stack" son
+ * el mismo recurso en la API de Arcane (`/environments/{envId}/projects`,
+ * tipo `Project`) — `client.stacks` es simplemente el cliente que apunta a
+ * ese endpoint — pero se le da su propio resolver (en vez de reusar
+ * `resolveStackId`) para que los mensajes de error hablen de "project" y no
+ * de "stack", que es el vocabulario que usan las tools de build.
+ */
+export async function resolveProjectId(
+  client: ArcaneClient,
+  envId: string,
+  projectId?: string,
+  projectName?: string
+): Promise<string> {
+  if (projectId) {
+    return projectId;
+  }
+
+  if (!projectName) {
+    throw new Error("Either projectId or projectName must be provided");
+  }
+
+  return resolveIdByName({
+    sort: "name",
+    fetchPage: (req) => client.stacks.list(envId, { search: projectName, ...req }),
+    isMatch: (project) => project.name === projectName,
+    getId: (project) => project.id,
+    namesOf: (items) => items.map((project) => project.name),
+    name: projectName,
+    labels: {
+      singular: "project",
+      countNoun: "projects",
+      foundNoun: "projects",
+      idNoun: "project ID",
       scope: ` in environment '${envId}'`,
     },
   });

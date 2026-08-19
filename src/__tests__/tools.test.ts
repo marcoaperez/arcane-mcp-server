@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ArcaneApiError } from "../arcane-client";
+import { ArcaneApiError, LINEAS_DE_LOG_CONSERVADAS } from "../arcane-client";
 import type { ArcaneClient, ListOptions } from "../arcane-client";
 import { registerEnvironmentTools } from "../tools/environments";
 import { registerStackTools } from "../tools/stacks";
@@ -21,6 +21,10 @@ import { registerVolumeBackupTools } from "../tools/volume-backups";
 import { registerImageUpdateTools } from "../tools/image-updates";
 import { registerUpdaterTools } from "../tools/updater";
 import { registerVulnerabilityTools } from "../tools/vulnerabilities";
+import { registerContainerRegistryTools } from "../tools/container-registries";
+import { registerTemplateRegistryTools } from "../tools/template-registries";
+import { registerBuildWorkspaceTools } from "../tools/build-workspace";
+import { registerImageBuildTools } from "../tools/image-builds";
 
 type MockedFunction<T extends (...args: any[]) => any> = {
   (...args: Parameters<T>): ReturnType<T>;
@@ -216,6 +220,50 @@ describe("MCP Tools", () => {
         scan: vi.fn(),
         ignore: vi.fn(),
         unignore: vi.fn(),
+      },
+      containerRegistries: {
+        list: vi.fn().mockResolvedValue({
+          success: true,
+          data: [],
+          pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+        }),
+        get: vi.fn().mockResolvedValue({ success: true, data: { id: "r1", url: "reg.example" } }),
+        pullUsage: vi.fn().mockResolvedValue({ success: true, data: { registries: null } }),
+        test: vi.fn().mockResolvedValue({ success: true, data: { message: "Registry reachable" } }),
+      },
+      templateRegistries: {
+        list: vi.fn().mockResolvedValue({ success: true, data: [] }),
+        create: vi.fn().mockResolvedValue({
+          success: true,
+          data: { id: "tr1", name: "catalogo", url: "https://ejemplo.invalid/t.json", description: "d", enabled: true },
+        }),
+        update: vi.fn().mockResolvedValue({ success: true, data: { message: "Registry updated" } }),
+        delete: vi.fn().mockResolvedValue({ success: true, data: { message: "Registry deleted" } }),
+      },
+      buildWorkspace: {
+        browse: vi.fn().mockResolvedValue({ success: true, data: [] }),
+        read: vi.fn().mockResolvedValue({ success: true, data: { content: "", mimeType: "text/plain" } }),
+        mkdir: vi.fn(),
+        delete: vi.fn(),
+      },
+      imageBuilds: {
+        build: vi.fn().mockResolvedValue({
+          success: true, message: "Build finished", activityId: "a1", logTail: [], droppedLines: 0,
+        }),
+        buildProject: vi.fn().mockResolvedValue({
+          success: true, message: "Project build finished", activityId: "a1", logTail: [], droppedLines: 0,
+        }),
+        list: vi.fn().mockResolvedValue({
+          success: true, data: [], pagination: { totalItems: 0, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+        }),
+        get: vi.fn().mockResolvedValue({
+          success: true,
+          data: {
+            id: "b1", environmentId: "0", status: "success", createdAt: "2024-01-01",
+            contextDir: "/builds", noCache: false, pull: false, privileged: false,
+            push: false, load: false, outputTruncated: false,
+          },
+        }),
       },
     } as unknown as ArcaneClient;
     return mockClient;
@@ -2321,6 +2369,625 @@ describe("MCP Tools", () => {
       const out = await server.getHandler("arcane_vulnerability_unignore")!({ environmentId: "env1", ignoreId: "ign-7" });
       expect((mockClient.vulnerabilities.unignore as any).mock.calls[0]).toEqual(["env1", "ign-7"]);
       expect(out.isError).toBeUndefined();
+    });
+  });
+
+  describe("registerContainerRegistryTools", () => {
+    it("arcane_container_registry_list calls client.containerRegistries.list with correct params", async () => {
+      const mockClient = createMockClient();
+      (mockClient.containerRegistries.list as any).mockResolvedValue({
+        success: true,
+        data: [{ id: "r1", url: "reg.example", username: "u", insecure: false, enabled: true, registryType: "generic", repositoryNames: null, createdAt: "t", updatedAt: "t" }],
+        pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+
+      const server = createMockServer();
+      registerContainerRegistryTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_container_registry_list");
+      const result = await handler({ search: "hub", order: "asc" });
+
+      expect(mockClient.containerRegistries.list).toHaveBeenCalledWith({ search: "hub", order: "asc" });
+      expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
+    });
+
+    it("arcane_container_registry_get calls client.containerRegistries.get with registryId", async () => {
+      const mockClient = createMockClient();
+      (mockClient.containerRegistries.get as any).mockResolvedValue({
+        success: true,
+        data: { id: "r1", url: "reg.example", username: "u", insecure: false, enabled: true, registryType: "generic", repositoryNames: null, createdAt: "t", updatedAt: "t" },
+      });
+
+      const server = createMockServer();
+      registerContainerRegistryTools(server as any, mockClient);
+
+      const handler = server.getHandler("arcane_container_registry_get");
+      const result = await handler({ registryId: "r1" });
+
+      expect(mockClient.containerRegistries.get).toHaveBeenCalledWith("r1");
+      expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
+    });
+
+    it("arcane_container_registry_pull_usage convierte registries:null en lista vacia", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      registerContainerRegistryTools(server as any, client);
+
+      const handler = server.getHandler("arcane_container_registry_pull_usage");
+      const res = await handler!({});
+
+      expect(JSON.parse(res.content[0].text)).toEqual({ registries: [] });
+    });
+
+    it("arcane_container_registry_test devuelve isError cuando la API falla", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      (client.containerRegistries.test as any).mockRejectedValue(
+        new ArcaneApiError(400, "Registry test failed: registry login failed: no such host"),
+      );
+      registerContainerRegistryTools(server as any, client);
+
+      const handler = server.getHandler("arcane_container_registry_test");
+      const res = await handler!({ registryId: "r1" });
+
+      expect(res.isError).toBe(true);
+      expect(res.content[0].text).toContain("no such host");
+    });
+  });
+
+  describe("template-registries.ts", () => {
+    it("arcane_template_registry_list calls client.templateRegistries.list", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      registerTemplateRegistryTools(server as any, client);
+
+      const handler = server.getHandler("arcane_template_registry_list");
+      const result = await handler({});
+
+      expect(client.templateRegistries.list).toHaveBeenCalledWith();
+      expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
+    });
+
+    it("arcane_template_registry_create calls client.templateRegistries.create with the four fields", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      registerTemplateRegistryTools(server as any, client);
+
+      const handler = server.getHandler("arcane_template_registry_create");
+      const result = await handler({
+        name: "catalogo",
+        url: "https://ejemplo.invalid/t.json",
+        description: "d",
+        enabled: false,
+      });
+
+      expect(client.templateRegistries.create).toHaveBeenCalledWith({
+        name: "catalogo",
+        url: "https://ejemplo.invalid/t.json",
+        description: "d",
+        enabled: false,
+      });
+      expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
+    });
+
+    it("arcane_template_registry_update calls client.templateRegistries.update with registryId and the four fields", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      registerTemplateRegistryTools(server as any, client);
+
+      const handler = server.getHandler("arcane_template_registry_update");
+      const result = await handler({
+        registryId: "tr1",
+        name: "catalogo",
+        url: "https://ejemplo.invalid/t.json",
+        description: "d nueva",
+        enabled: false,
+      });
+
+      expect(client.templateRegistries.update).toHaveBeenCalledWith("tr1", {
+        name: "catalogo",
+        url: "https://ejemplo.invalid/t.json",
+        description: "d nueva",
+        enabled: false,
+      });
+      expect(result.content).toEqual([{ type: "text", text: "Registry updated" }]);
+    });
+
+    it("arcane_template_registry_delete calls client.templateRegistries.delete with registryId", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      registerTemplateRegistryTools(server as any, client);
+
+      const handler = server.getHandler("arcane_template_registry_delete");
+      const result = await handler({ registryId: "tr1" });
+
+      expect(client.templateRegistries.delete).toHaveBeenCalledWith("tr1");
+      expect(result.content).toEqual([{ type: "text", text: "Registry deleted" }]);
+    });
+
+    it("arcane_template_registry_delete devuelve isError cuando la API falla", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      (client.templateRegistries.delete as any).mockRejectedValue(
+        new ArcaneApiError(404, "Template registry not found"),
+      );
+      registerTemplateRegistryTools(server as any, client);
+
+      const handler = server.getHandler("arcane_template_registry_delete");
+      const res = await handler!({ registryId: "tr1" });
+
+      expect(res.isError).toBe(true);
+      expect(res.content[0].text).toContain("Template registry not found");
+    });
+  });
+
+  describe("registerBuildWorkspaceTools", () => {
+    it("arcane_build_workspace_browse calls client.buildWorkspace.browse with envId and path", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      registerBuildWorkspaceTools(server as any, client);
+
+      const handler = server.getHandler("arcane_build_workspace_browse");
+      const result = await handler({ environmentId: "env1", path: "ctx" });
+
+      expect(client.buildWorkspace.browse).toHaveBeenCalledWith("env1", "ctx");
+      expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
+    });
+
+    it("arcane_build_workspace_browse sin path pasa undefined", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      registerBuildWorkspaceTools(server as any, client);
+
+      const handler = server.getHandler("arcane_build_workspace_browse");
+      await handler({ environmentId: "env1" });
+
+      expect(client.buildWorkspace.browse).toHaveBeenCalledWith("env1", undefined);
+    });
+
+    it("arcane_build_workspace_read no vuelca binarios", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      const binario = Buffer.from([0, 1, 2, 3]).toString("base64");
+      (client.buildWorkspace.read as any).mockResolvedValue({
+        success: true,
+        data: { content: binario, mimeType: "application/octet-stream" },
+      });
+      registerBuildWorkspaceTools(server, client as unknown as ArcaneClient);
+
+      const res = await (server as any)._registeredTools["arcane_build_workspace_read"]
+        .handler({ environmentId: "env1", path: "a.bin" });
+
+      expect(res.content[0].text).toContain("application/octet-stream");
+      expect(res.content[0].text).toContain("4 bytes");
+      expect(res.content[0].text).not.toContain(binario);
+      expect(client.buildWorkspace.read).toHaveBeenCalledWith("env1", "a.bin", undefined);
+    });
+
+    it("arcane_build_workspace_read si vuelca texto", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      (client.buildWorkspace.read as any).mockResolvedValue({
+        success: true,
+        data: { content: Buffer.from("FROM alpine:3.19\n").toString("base64"), mimeType: "text/plain" },
+      });
+      registerBuildWorkspaceTools(server, client as unknown as ArcaneClient);
+
+      const res = await (server as any)._registeredTools["arcane_build_workspace_read"]
+        .handler({ environmentId: "env1", path: "Dockerfile", maxBytes: 4096 });
+
+      expect(res.content[0].text).toBe("FROM alpine:3.19\n");
+      expect(client.buildWorkspace.read).toHaveBeenCalledWith("env1", "Dockerfile", 4096);
+    });
+
+    it("arcane_build_workspace_read binario CON maxBytes avisa que la lectura pudo quedar truncada", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      // 1024 bytes exactos == maxBytes: pudo ser el fichero entero o pudo
+      // quedar cortado ahi mismo. No hay forma de saberlo sin un tamano
+      // total que la API no da, asi que se avisa en vez de afirmar.
+      const binario = Buffer.alloc(1024, 7).toString("base64");
+      (client.buildWorkspace.read as any).mockResolvedValue({
+        success: true,
+        data: { content: binario, mimeType: "image/png" },
+      });
+      registerBuildWorkspaceTools(server, client as unknown as ArcaneClient);
+
+      const res = await (server as any)._registeredTools["arcane_build_workspace_read"]
+        .handler({ environmentId: "env1", path: "logo.png", maxBytes: 1024 });
+
+      expect(res.content[0].text).toContain("image/png");
+      expect(res.content[0].text).toContain("1024 bytes were read");
+      expect(res.content[0].text).toContain("maxBytes=1024");
+      // No debe afirmar que 1024 es el tamano del fichero.
+      expect(res.content[0].text).not.toMatch(/is image\/png, 1024 bytes/);
+    });
+
+    it("arcane_build_workspace_read binario SIN maxBytes no avisa de truncado", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      const binario = Buffer.from([9, 9, 9]).toString("base64");
+      (client.buildWorkspace.read as any).mockResolvedValue({
+        success: true,
+        data: { content: binario, mimeType: "image/png" },
+      });
+      registerBuildWorkspaceTools(server, client as unknown as ArcaneClient);
+
+      const res = await (server as any)._registeredTools["arcane_build_workspace_read"]
+        .handler({ environmentId: "env1", path: "logo.png" });
+
+      expect(res.content[0].text).toContain("3 bytes were read");
+      expect(res.content[0].text).not.toContain("maxBytes");
+    });
+
+    it("arcane_build_workspace_mkdir calls client.buildWorkspace.mkdir with envId and path", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      registerBuildWorkspaceTools(server as any, client);
+
+      const handler = server.getHandler("arcane_build_workspace_mkdir");
+      const result = await handler({ environmentId: "env1", path: "ctx" });
+
+      expect(client.buildWorkspace.mkdir).toHaveBeenCalledWith("env1", "ctx");
+      expect(result.content).toEqual([{ type: "text", text: "Created 'ctx' in the build workspace." }]);
+    });
+
+    it("arcane_build_workspace_delete calls client.buildWorkspace.delete with envId and path", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      registerBuildWorkspaceTools(server as any, client);
+
+      const handler = server.getHandler("arcane_build_workspace_delete");
+      const result = await handler({ environmentId: "env1", path: "ctx" });
+
+      expect(client.buildWorkspace.delete).toHaveBeenCalledWith("env1", "ctx");
+      expect(result.content).toEqual([{ type: "text", text: "Deleted 'ctx' from the build workspace." }]);
+    });
+
+    it("el schema de arcane_build_workspace_mkdir exige path no vacio", () => {
+      const server = createMockServer();
+      registerBuildWorkspaceTools(server as any, createMockClient());
+      const call = (server.tool as any).mock.calls.find((c: any[]) => c[0] === "arcane_build_workspace_mkdir");
+      const schema = z.object(call[2]);
+      // Sin path: rechazado. El mock de servidor no valida schemas, asi que
+      // sin este test relajar path a .optional() no haria fallar nada.
+      expect(() => schema.parse({ environmentId: "env1" })).toThrow();
+      // Path vacio: tambien rechazado (min(1)).
+      expect(() => schema.parse({ environmentId: "env1", path: "" })).toThrow();
+      // Path no vacio: aceptado.
+      expect(schema.parse({ environmentId: "env1", path: "ctx" }).path).toBe("ctx");
+    });
+
+    it("el schema de arcane_build_workspace_delete exige path no vacio", () => {
+      const server = createMockServer();
+      registerBuildWorkspaceTools(server as any, createMockClient());
+      const call = (server.tool as any).mock.calls.find((c: any[]) => c[0] === "arcane_build_workspace_delete");
+      const schema = z.object(call[2]);
+      expect(() => schema.parse({ environmentId: "env1" })).toThrow();
+      expect(() => schema.parse({ environmentId: "env1", path: "" })).toThrow();
+      expect(schema.parse({ environmentId: "env1", path: "ctx" }).path).toBe("ctx");
+    });
+
+    it("el schema de arcane_build_workspace_browse admite path ausente", () => {
+      const server = createMockServer();
+      registerBuildWorkspaceTools(server as any, createMockClient());
+      const call = (server.tool as any).mock.calls.find((c: any[]) => c[0] === "arcane_build_workspace_browse");
+      const schema = z.object(call[2]);
+      expect(schema.parse({ environmentId: "env1" }).path).toBeUndefined();
+    });
+
+    it("arcane_build_workspace_mkdir devuelve isError cuando la API falla", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      (client.buildWorkspace.mkdir as any).mockRejectedValue(
+        new ArcaneApiError(500, "failed to ensure builds directory: mkdir /builds: permission denied"),
+      );
+      registerBuildWorkspaceTools(server as any, client);
+
+      const handler = server.getHandler("arcane_build_workspace_mkdir");
+      const res = await handler({ environmentId: "env1", path: "ctx" });
+
+      expect(res.isError).toBe(true);
+      expect(res.content[0].text).toContain("permission denied");
+    });
+  });
+
+  describe("registerImageBuildTools", () => {
+    it("arcane_image_build devuelve isError cuando el stream trae {error}", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      (client.imageBuilds.build as any).mockResolvedValue({
+        success: false, message: "Build failed: build context not found",
+        activityId: "a1", logTail: [], droppedLines: 0,
+      });
+      registerImageBuildTools(server, client as unknown as ArcaneClient);
+
+      const res = await (server as any)._registeredTools["arcane_image_build"]
+        .handler({ environmentId: "env1", contextDir: "/x" });
+
+      expect(res.isError).toBe(true);
+      expect(res.content[0].text).toContain("build context not found");
+    });
+
+    it("arcane_image_build dice cuantas lineas de log omitio", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      (client.imageBuilds.build as any).mockResolvedValue({
+        success: true, message: "Build finished", activityId: "a1",
+        logTail: ["ultima"], droppedLines: 150,
+      });
+      registerImageBuildTools(server, client as unknown as ArcaneClient);
+
+      const res = await (server as any)._registeredTools["arcane_image_build"]
+        .handler({ environmentId: "env1", contextDir: "/builds" });
+
+      expect(res.isError).toBeUndefined();
+      expect(res.content[0].text).toContain("150 earlier lines omitted");
+    });
+
+    it("arcane_image_build NO dice nada de lineas omitidas cuando no omitio ninguna", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      (client.imageBuilds.build as any).mockResolvedValue({
+        success: true, message: "Build finished", activityId: "a1",
+        logTail: ["unica"], droppedLines: 0,
+      });
+      registerImageBuildTools(server, client as unknown as ArcaneClient);
+
+      const res = await (server as any)._registeredTools["arcane_image_build"]
+        .handler({ environmentId: "env1", contextDir: "/builds" });
+
+      expect(res.content[0].text).not.toContain("earlier lines omitted");
+    });
+
+    // 3b: el mock de arcane-client.test.ts (Tarea 7) no pasa por el handler
+    // MCP, y estos dos tests son los unicos que comprueban que
+    // arcane_image_build reenvia sus parametros al cliente. Cubren, a la
+    // vez, la restriccion 3 ("dos tests por parametro opcional, uno con el y
+    // otro sin el"): en vez de un par por cada uno de los 13 parametros
+    // opcionales (26 tests casi identicos, para un handler que solo hace
+    // `...req`), un test con TODOS presentes y otro con NINGUNO presente
+    // demuestran lo mismo con la misma fuerza — el handler no tiene ninguna
+    // rama condicional por parametro que un test aislado pudiera detectar y
+    // el otro no.
+    it("arcane_image_build pasa todos los parametros opcionales al cliente", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      registerImageBuildTools(server, client as unknown as ArcaneClient);
+
+      await (server as any)._registeredTools["arcane_image_build"].handler({
+        environmentId: "env1",
+        contextDir: "/builds",
+        dockerfile: "docker/Dockerfile",
+        dockerfileInline: "FROM alpine\n",
+        tags: ["a:1", "a:latest"],
+        buildArgs: { ARG1: "v1" },
+        labels: { "org.opencontainers.image.source": "https://example.invalid" },
+        target: "prod",
+        platforms: ["linux/amd64", "linux/arm64"],
+        noCache: true,
+        pull: true,
+        push: true,
+        load: false,
+        provider: "buildx",
+      });
+
+      expect(client.imageBuilds.build).toHaveBeenCalledWith("env1", {
+        contextDir: "/builds",
+        dockerfile: "docker/Dockerfile",
+        dockerfileInline: "FROM alpine\n",
+        tags: ["a:1", "a:latest"],
+        buildArgs: { ARG1: "v1" },
+        labels: { "org.opencontainers.image.source": "https://example.invalid" },
+        target: "prod",
+        platforms: ["linux/amd64", "linux/arm64"],
+        noCache: true,
+        pull: true,
+        push: true,
+        load: false,
+        provider: "buildx",
+      });
+    });
+
+    it("arcane_image_build sin parametros opcionales solo pasa contextDir (sin claves undefined coladas)", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      registerImageBuildTools(server, client as unknown as ArcaneClient);
+
+      await (server as any)._registeredTools["arcane_image_build"]
+        .handler({ environmentId: "env1", contextDir: "/builds" });
+
+      // toHaveBeenCalledWith por si sola no distinguiria una clave ausente de
+      // una presente con valor undefined (restriccion 3), asi que se
+      // comprueban las claves literales del objeto recibido.
+      const llamada = (client.imageBuilds.build as any).mock.calls[0];
+      expect(llamada[0]).toBe("env1");
+      expect(Object.keys(llamada[1])).toEqual(["contextDir"]);
+      expect(llamada[1].contextDir).toBe("/builds");
+    });
+
+    it("arcane_image_build_get avisa cuando el servidor trunco el log", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      (client.imageBuilds.get as any).mockResolvedValue({
+        success: true,
+        data: { id: "b1", outputTruncated: true, output: "x", environmentId: "0", status: "success",
+                createdAt: "x", contextDir: "/builds", noCache: false, pull: false, privileged: false,
+                push: false, load: false },
+      });
+      registerImageBuildTools(server, client as unknown as ArcaneClient);
+
+      const res = await (server as any)._registeredTools["arcane_image_build_get"]
+        .handler({ environmentId: "env1", buildId: "b1" });
+
+      expect(res.content[0].text).toContain("TRUNCATED");
+    });
+
+    it("arcane_image_build_get NO avisa cuando el log no esta truncado", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      (client.imageBuilds.get as any).mockResolvedValue({
+        success: true,
+        data: { id: "b1", outputTruncated: false, output: "x", environmentId: "0", status: "success",
+                createdAt: "x", contextDir: "/builds", noCache: false, pull: false, privileged: false,
+                push: false, load: false },
+      });
+      registerImageBuildTools(server, client as unknown as ArcaneClient);
+
+      const res = await (server as any)._registeredTools["arcane_image_build_get"]
+        .handler({ environmentId: "env1", buildId: "b1" });
+
+      expect(res.content[0].text).not.toContain("TRUNCATED");
+    });
+
+    it("arcane_image_build_get recorta output por la cola y dice cuantas lineas omitio", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      const totalLineas = LINEAS_DE_LOG_CONSERVADAS + 50;
+      const lineas = Array.from({ length: totalLineas }, (_, i) => `linea-${i}`);
+      (client.imageBuilds.get as any).mockResolvedValue({
+        success: true,
+        data: { id: "b1", outputTruncated: false, output: lineas.join("\n"), environmentId: "0", status: "success",
+                createdAt: "x", contextDir: "/builds", noCache: false, pull: false, privileged: false,
+                push: false, load: false },
+      });
+      registerImageBuildTools(server, client as unknown as ArcaneClient);
+
+      const res = await (server as any)._registeredTools["arcane_image_build_get"]
+        .handler({ environmentId: "env1", buildId: "b1" });
+
+      // Se dice cuantas lineas se omitieron (50 = 150 - 100)...
+      expect(res.content[0].text).toContain(`Showing the last ${LINEAS_DE_LOG_CONSERVADAS} log lines; 50 earlier lines omitted.`);
+      // ...la primera linea (fuera de la cola) no aparece...
+      expect(res.content[0].text).not.toContain("linea-0");
+      // ...y la ultima (dentro de la cola) si.
+      expect(res.content[0].text).toContain(`linea-${totalLineas - 1}`);
+    });
+
+    it("arcane_image_build_get NO dice nada de lineas omitidas cuando output cabe entero", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      const lineas = Array.from({ length: LINEAS_DE_LOG_CONSERVADAS }, (_, i) => `linea-${i}`);
+      (client.imageBuilds.get as any).mockResolvedValue({
+        success: true,
+        data: { id: "b1", outputTruncated: false, output: lineas.join("\n"), environmentId: "0", status: "success",
+                createdAt: "x", contextDir: "/builds", noCache: false, pull: false, privileged: false,
+                push: false, load: false },
+      });
+      registerImageBuildTools(server, client as unknown as ArcaneClient);
+
+      const res = await (server as any)._registeredTools["arcane_image_build_get"]
+        .handler({ environmentId: "env1", buildId: "b1" });
+
+      expect(res.content[0].text).not.toContain("earlier lines omitted");
+      expect(res.content[0].text).toContain("linea-0");
+    });
+
+    it("arcane_image_build_get pasa envId y buildId literales al cliente (3b)", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      registerImageBuildTools(server, client as unknown as ArcaneClient);
+
+      // buildId con '#' (restriccion 4): a este nivel no se construye ninguna
+      // URL (el cliente, ya mockeado, es quien codifica), pero el valor debe
+      // llegar intacto de todos modos.
+      await (server as any)._registeredTools["arcane_image_build_get"]
+        .handler({ environmentId: "env1", buildId: "b#1" });
+
+      expect(client.imageBuilds.get).toHaveBeenCalledWith("env1", "b#1");
+    });
+
+    it("arcane_image_build_list pasa todos los parametros opcionales al cliente, incluido start=0", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      registerImageBuildTools(server, client as unknown as ArcaneClient);
+
+      await (server as any)._registeredTools["arcane_image_build_list"].handler({
+        environmentId: "env1",
+        search: "ical-bridge",
+        sort: "createdAt",
+        order: "desc",
+        start: 0,
+        limit: 20,
+        status: "failed",
+        provider: "buildx",
+      });
+
+      expect(client.imageBuilds.list).toHaveBeenCalledWith("env1", {
+        search: "ical-bridge",
+        sort: "createdAt",
+        order: "desc",
+        start: 0,
+        limit: 20,
+        status: "failed",
+        provider: "buildx",
+      });
+    });
+
+    it("arcane_image_build_list sin parametros opcionales no cuela claves undefined", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      registerImageBuildTools(server, client as unknown as ArcaneClient);
+
+      await (server as any)._registeredTools["arcane_image_build_list"]
+        .handler({ environmentId: "env1" });
+
+      const llamada = (client.imageBuilds.list as any).mock.calls[0];
+      expect(llamada[0]).toBe("env1");
+      expect(Object.keys(llamada[1])).toEqual([]);
+    });
+
+    it("arcane_project_build pasa services, push, load y provider al cliente cuando projectId es conocido", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      registerImageBuildTools(server, client as unknown as ArcaneClient);
+
+      await (server as any)._registeredTools["arcane_project_build"].handler({
+        environmentId: "env1",
+        projectId: "proj#1",
+        services: ["web", "worker"],
+        push: true,
+        load: false,
+        provider: "buildx",
+      });
+
+      expect(client.imageBuilds.buildProject).toHaveBeenCalledWith("env1", "proj#1", {
+        services: ["web", "worker"],
+        push: true,
+        load: false,
+        provider: "buildx",
+      });
+    });
+
+    it("arcane_project_build sin parametros opcionales no cuela claves undefined", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      registerImageBuildTools(server, client as unknown as ArcaneClient);
+
+      await (server as any)._registeredTools["arcane_project_build"]
+        .handler({ environmentId: "env1", projectId: "proj1" });
+
+      const llamada = (client.imageBuilds.buildProject as any).mock.calls[0];
+      expect(llamada[0]).toBe("env1");
+      expect(llamada[1]).toBe("proj1");
+      expect(Object.keys(llamada[2])).toEqual([]);
+    });
+
+    it("arcane_project_build resuelve projectName a id via resolveProjectId (client.stacks.list)", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      (client.stacks.list as any).mockResolvedValue({
+        success: true,
+        data: [{ id: "proj-resuelto", name: "ical-bridge", path: "/ical-bridge", status: "running",
+                 serviceCount: 1, runningCount: 1, createdAt: "x", updatedAt: "x", tags: null }],
+        pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 20 },
+      });
+      registerImageBuildTools(server, client as unknown as ArcaneClient);
+
+      await (server as any)._registeredTools["arcane_project_build"]
+        .handler({ environmentId: "env1", projectName: "ical-bridge" });
+
+      expect(client.imageBuilds.buildProject).toHaveBeenCalledWith("env1", "proj-resuelto", {});
     });
   });
 });

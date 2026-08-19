@@ -5,6 +5,24 @@ export class ArcaneApiError extends Error {
   }
 }
 
+/**
+ * Lanza ArcaneApiError si la respuesta no es correcta, usando el `detail` del
+ * cuerpo de error cuando lo hay.
+ *
+ * Extraido en F5: el mismo bloque estaba repetido literalmente en request(),
+ * requestMultipart(), requestNdjson() y VolumeBackupsMethods.download(), y la
+ * fase añadia dos sitios mas.
+ */
+async function lanzaSiFalla(response: Response): Promise<void> {
+  if (response.ok) return;
+  let message = response.statusText;
+  try {
+    const err = (await response.json()) as { detail?: string };
+    if (err.detail) message = err.detail;
+  } catch {}
+  throw new ArcaneApiError(response.status, message);
+}
+
 export interface Environment {
   id: string;
   name?: string;
@@ -671,6 +689,55 @@ function summarizeComposeStream(events: ComposeStreamEvent[], action: string): A
   };
 }
 
+export const BUILD_ARG_OCULTO = "<hidden by arcane-mcp>";
+export const LINEAS_DE_LOG_CONSERVADAS = 100;
+
+/**
+ * Sustituye los valores de buildArgs y conserva las claves.
+ *
+ * Va en el CLIENTE y no en la capa de tool a proposito: en la tool, una
+ * segunda tool futura sobre el mismo endpoint reintroduciria la fuga sin que
+ * nada fallara. Es exactamente como se desplego rota arcane_image_update_check
+ * en F3, por una rama que nadie ejercito.
+ */
+function enmascaraBuildArgs<T extends { buildArgs?: Record<string, string> }>(registro: T): T {
+  if (!registro.buildArgs) return registro;
+  const ocultos: Record<string, string> = {};
+  for (const clave of Object.keys(registro.buildArgs)) ocultos[clave] = BUILD_ARG_OCULTO;
+  return { ...registro, buildArgs: ocultos };
+}
+
+/**
+ * Agrega el NDJSON de una build.
+ *
+ * No reutiliza summarizeComposeStream porque aquel une TODOS los logs en un
+ * solo `message`: un compose up produce unas lineas, una build produce
+ * cientos, sin cota. Comparte `extractStreamError`, que es lo unico igual.
+ */
+function summarizeBuildStream(events: ComposeStreamEvent[], action: string): BuildStreamSummary {
+  const activityId = events.find(e => typeof e.activityId === "string")?.activityId;
+  const logs = events
+    .filter(e => typeof e.log === "string")
+    .map(e => (e.log as string).trimEnd())
+    .filter(l => l.length > 0);
+  const logTail = logs.slice(-LINEAS_DE_LOG_CONSERVADAS);
+  const droppedLines = logs.length - logTail.length;
+
+  const errors = events.map(extractStreamError).filter((e): e is string => typeof e === "string");
+  if (errors.length > 0) {
+    return { success: false, message: `${action} failed: ${errors.join("; ")}`, activityId, logTail, droppedLines };
+  }
+
+  const done = events.some(e => e.done === true);
+  return {
+    success: done,
+    message: done ? `${action} finished` : `${action} ended without a completion event`,
+    activityId,
+    logTail,
+    droppedLines,
+  };
+}
+
 export interface ListOptions {
   search?: string;
   limit?: number;
@@ -1197,6 +1264,124 @@ export interface ContainerCreateOptions {
   networks?: string[];
   restartPolicy?: string;
   detach?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// F5 — workspace de builds
+// ---------------------------------------------------------------------------
+
+/**
+ * Entrada del workspace de builds.
+ *
+ * MEDIDO el 2026-08-19, y contradice openapi.txt: la respuesta real trae
+ * {modTime, name, path, mode, size, isDirectory, isSymlink} y se identifica
+ * como BaseApiResponseListVolumeFileEntry, NO como WorkspaceFileEntry. Faltan
+ * `relativePath` y `editable`, que el spec declara OBLIGATORIOS.
+ *
+ * El tipo sigue a la realidad. La auditoria de drift los marcara contra el
+ * spec: eso es correcto y esperado. NO los pongas obligatorios "para arreglar
+ * el drift" -romperias el consumo real-.
+ */
+export interface BuildWorkspaceEntry {
+  modTime: string;
+  name: string;
+  path: string;
+  size: number;
+  isDirectory: boolean;
+  isSymlink: boolean;
+  mode?: string;
+  relativePath?: string;
+  editable?: boolean;
+  linkTarget?: string;
+  readOnlyReason?: "binary" | "too_large" | "symlink" | "special";
+}
+
+export interface BuildFileContent {
+  /** base64 */
+  content: string;
+  mimeType: string;
+}
+
+/**
+ * Registro del historial de builds.
+ *
+ * `buildArgs` llega SIEMPRE enmascarado desde el cliente: medido el
+ * 2026-08-19, la API los persiste y los devuelve en claro, y los build args
+ * llevan tokens de rutina. Ver `enmascaraBuildArgs`.
+ *
+ * `output` NO se enmascara y NO se puede: un log de build contiene todo lo que
+ * la build imprimio. Se devuelve tal cual y la tool lo dice.
+ */
+export interface ImageBuildRecord {
+  id: string;
+  environmentId: string;
+  status: string;
+  createdAt: string;
+  contextDir: string;
+  noCache: boolean;
+  pull: boolean;
+  privileged: boolean;
+  push: boolean;
+  load: boolean;
+  outputTruncated: boolean;
+  buildArgs?: Record<string, string>;
+  labels?: Record<string, string>;
+  ulimits?: Record<string, string>;
+  cacheFrom?: string[] | null;
+  cacheTo?: string[] | null;
+  platforms?: string[] | null;
+  entitlements?: string[] | null;
+  extraHosts?: string[] | null;
+  tags?: string[] | null;
+  completedAt?: string;
+  digest?: string;
+  dockerfile?: string;
+  durationMs?: number;
+  errorMessage?: string;
+  isolation?: string;
+  network?: string;
+  output?: string;
+  provider?: string;
+  shmSize?: number;
+  target?: string;
+  userId?: string;
+  username?: string;
+}
+
+export interface BuildRequest {
+  contextDir: string;
+  dockerfile?: string;
+  dockerfileInline?: string;
+  tags?: string[];
+  buildArgs?: Record<string, string>;
+  labels?: Record<string, string>;
+  target?: string;
+  platforms?: string[];
+  noCache?: boolean;
+  pull?: boolean;
+  push?: boolean;
+  load?: boolean;
+  provider?: string;
+}
+
+export interface ProjectBuildRequest {
+  services?: string[];
+  push?: boolean;
+  load?: boolean;
+  provider?: string;
+}
+
+export interface BuildListOptions extends ListOptionsWithSort {
+  status?: string;
+  provider?: string;
+}
+
+export interface BuildStreamSummary {
+  success: boolean;
+  message: string;
+  activityId?: string;
+  logTail: string[];
+  droppedLines: number;
 }
 
 class EnvironmentsMethods {
@@ -1842,6 +2027,113 @@ class VulnerabilitiesMethods {
   }
 }
 
+/**
+ * Registro de contenedor. Medido el 2026-08-19 contra Arcane 2.8.0 con sondas
+ * `generic` y `ecr`: la respuesta NO incluye `token` ni `awsSecretAccessKey`
+ * -no es que vengan enmascarados, es que el campo no existe-, y por eso las
+ * lecturas se exponen. `awsAccessKeyId` si viene: es un identificador.
+ */
+export interface ContainerRegistry {
+  id: string;
+  url: string;
+  username: string;
+  insecure: boolean;
+  enabled: boolean;
+  registryType: string;
+  repositoryNames: string[] | null;
+  createdAt: string;
+  updatedAt: string;
+  description?: string;
+  awsAccessKeyId?: string;
+  awsRegion?: string;
+}
+
+export interface RegistryPullUsage {
+  registryId: string;
+  provider: string;
+  registry: string;
+  displayName: string;
+  observedPulls: number;
+  authMethod: string;
+  checkedAt: string;
+  authUsername?: string;
+  error?: string;
+  limit?: number;
+  remaining?: number;
+  repository?: string;
+  source?: string;
+  used?: number;
+  windowSeconds?: number;
+}
+
+export interface RegistryPullUsageResponse {
+  registries: RegistryPullUsage[] | null;
+}
+
+/**
+ * Respuesta de los endpoints que devuelven un mensaje. NO es `ActionResponse`:
+ * medido, el mensaje viene anidado bajo `data`, no en la raiz.
+ */
+export interface MessageResponse {
+  success: boolean;
+  data: { message: string };
+}
+
+/**
+ * Registro de plantillas: un catalogo de plantillas por URL. A diferencia de
+ * ContainerRegistry, NO guarda credenciales de ningun tipo -medido contra el
+ * spec y contra la instancia-, asi que su CRUD se expone entero.
+ */
+export interface TemplateRegistry {
+  id: string;
+  enabled: boolean;
+  name: string;
+  description: string;
+  url: string;
+  lastFetchError?: string;
+}
+
+export interface TemplateRegistryInput {
+  name: string;
+  url: string;
+  description: string;
+  enabled: boolean;
+}
+
+class TemplateRegistriesMethods {
+  constructor(private client: ArcaneClient) {}
+
+  async list(): Promise<{ success: boolean; data: TemplateRegistry[] | null }> {
+    return this.client.request<{ success: boolean; data: TemplateRegistry[] | null }>(
+      "GET",
+      "/templates/registries",
+    );
+  }
+
+  async create(dto: TemplateRegistryInput): Promise<{ success: boolean; data: TemplateRegistry }> {
+    return this.client.request<{ success: boolean; data: TemplateRegistry }>(
+      "POST",
+      "/templates/registries",
+      dto,
+    );
+  }
+
+  async update(id: string, dto: TemplateRegistryInput): Promise<MessageResponse> {
+    return this.client.request<MessageResponse>(
+      "PUT",
+      `/templates/registries/${encodeURIComponent(id)}`,
+      dto,
+    );
+  }
+
+  async delete(id: string): Promise<MessageResponse> {
+    return this.client.request<MessageResponse>(
+      "DELETE",
+      `/templates/registries/${encodeURIComponent(id)}`,
+    );
+  }
+}
+
 class GitRepositoriesMethods {
   constructor(private client: ArcaneClient) {}
 
@@ -2045,14 +2337,7 @@ class VolumeBackupsMethods {
       },
     });
 
-    if (!response.ok) {
-      let message = response.statusText;
-      try {
-        const err = (await response.json()) as { detail?: string };
-        if (err.detail) message = err.detail;
-      } catch {}
-      throw new ArcaneApiError(response.status, message);
-    }
+    await lanzaSiFalla(response);
 
     return response.blob();
   }
@@ -2110,6 +2395,127 @@ class VolumeFilesMethods {
   }
 }
 
+class ContainerRegistriesMethods {
+  constructor(private client: ArcaneClient) {}
+
+  async list(opts?: ListOptionsWithSort): Promise<PaginatedResponse<ContainerRegistry>> {
+    const params = new URLSearchParams();
+    appendListParams(params, opts);
+    const query = params.toString();
+    return this.client.request<PaginatedResponse<ContainerRegistry>>(
+      "GET",
+      `/container-registries${query ? `?${query}` : ""}`,
+    );
+  }
+
+  async get(id: string): Promise<{ success: boolean; data: ContainerRegistry }> {
+    return this.client.request<{ success: boolean; data: ContainerRegistry }>(
+      "GET",
+      `/container-registries/${encodeURIComponent(id)}`,
+    );
+  }
+
+  async pullUsage(): Promise<{ success: boolean; data: RegistryPullUsageResponse }> {
+    return this.client.request<{ success: boolean; data: RegistryPullUsageResponse }>(
+      "GET",
+      "/container-registries/pull-usage",
+    );
+  }
+
+  async test(id: string): Promise<MessageResponse> {
+    return this.client.request<MessageResponse>(
+      "POST",
+      `/container-registries/${encodeURIComponent(id)}/test`,
+    );
+  }
+}
+
+class ImageBuildsMethods {
+  constructor(private client: ArcaneClient) {}
+
+  // El endpoint transmite NDJSON (application/x-json-stream) y devuelve
+  // HTTP 200 aunque la build falle: el fracaso solo vive dentro del stream.
+  async build(envId: string, req: BuildRequest): Promise<BuildStreamSummary> {
+    const events = await this.client.requestNdjson<ComposeStreamEvent>(
+      "POST",
+      `/environments/${encodeURIComponent(envId)}/images/build`,
+      req,
+    );
+    return summarizeBuildStream(events, "Build");
+  }
+
+  async buildProject(envId: string, projectId: string, req: ProjectBuildRequest): Promise<BuildStreamSummary> {
+    const events = await this.client.requestNdjson<ComposeStreamEvent>(
+      "POST",
+      `/environments/${encodeURIComponent(envId)}/projects/${encodeURIComponent(projectId)}/build`,
+      req,
+    );
+    return summarizeBuildStream(events, "Project build");
+  }
+
+  async list(envId: string, opts?: BuildListOptions): Promise<PaginatedResponse<ImageBuildRecord>> {
+    const params = new URLSearchParams();
+    appendListParams(params, opts);
+    if (opts?.status) params.set("status", opts.status);
+    if (opts?.provider) params.set("provider", opts.provider);
+    const query = params.toString();
+    const res = await this.client.request<PaginatedResponse<ImageBuildRecord>>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/images/builds${query ? `?${query}` : ""}`,
+    );
+    return { ...res, data: res.data ? res.data.map(enmascaraBuildArgs) : res.data };
+  }
+
+  async get(envId: string, buildId: string): Promise<{ success: boolean; data: ImageBuildRecord }> {
+    const res = await this.client.request<{ success: boolean; data: ImageBuildRecord }>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/images/builds/${encodeURIComponent(buildId)}`,
+    );
+    return { ...res, data: res.data ? enmascaraBuildArgs(res.data) : res.data };
+  }
+}
+
+class BuildWorkspaceMethods {
+  constructor(private client: ArcaneClient) {}
+
+  private ruta(envId: string, sufijo: string, params: URLSearchParams): string {
+    const query = params.toString();
+    return `/environments/${encodeURIComponent(envId)}/builds/browse${sufijo}${query ? `?${query}` : ""}`;
+  }
+
+  async browse(envId: string, path?: string): Promise<{ success: boolean; data: BuildWorkspaceEntry[] | null }> {
+    const params = new URLSearchParams();
+    if (path !== undefined) params.set("path", path);
+    return this.client.request<{ success: boolean; data: BuildWorkspaceEntry[] | null }>(
+      "GET",
+      this.ruta(envId, "", params),
+    );
+  }
+
+  async read(envId: string, path: string, maxBytes?: number): Promise<{ success: boolean; data: BuildFileContent }> {
+    const params = new URLSearchParams();
+    params.set("path", path);
+    if (maxBytes !== undefined) params.set("maxBytes", String(maxBytes));
+    return this.client.request<{ success: boolean; data: BuildFileContent }>(
+      "GET",
+      this.ruta(envId, "/content", params),
+    );
+  }
+
+  // mkdir y delete devuelven 204 sin cuerpo: request() reventaria con res.json().
+  async mkdir(envId: string, path: string): Promise<void> {
+    const params = new URLSearchParams();
+    params.set("path", path);
+    return this.client.requestSinCuerpo("POST", this.ruta(envId, "/mkdir", params));
+  }
+
+  async delete(envId: string, path: string): Promise<void> {
+    const params = new URLSearchParams();
+    params.set("path", path);
+    return this.client.requestSinCuerpo("DELETE", this.ruta(envId, "", params));
+  }
+}
+
 export class ArcaneClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
@@ -2135,6 +2541,10 @@ export class ArcaneClient {
   readonly containerAdditional: ContainerAdditionalMethods;
   readonly volumeBackups: VolumeBackupsMethods;
   readonly volumeFiles: VolumeFilesMethods;
+  readonly containerRegistries: ContainerRegistriesMethods;
+  readonly templateRegistries: TemplateRegistriesMethods;
+  readonly buildWorkspace: BuildWorkspaceMethods;
+  readonly imageBuilds: ImageBuildsMethods;
 
   // When a Cloudflare VPC Fetcher is provided, routing to the Arcane backend
   // is handled by the service binding — only the path portion of URLs matters.
@@ -2171,6 +2581,10 @@ export class ArcaneClient {
     this.containerAdditional = new ContainerAdditionalMethods(this);
     this.volumeBackups = new VolumeBackupsMethods(this);
     this.volumeFiles = new VolumeFilesMethods(this);
+    this.containerRegistries = new ContainerRegistriesMethods(this);
+    this.templateRegistries = new TemplateRegistriesMethods(this);
+    this.buildWorkspace = new BuildWorkspaceMethods(this);
+    this.imageBuilds = new ImageBuildsMethods(this);
   }
 
   getBaseUrl(): string {
@@ -2196,14 +2610,7 @@ export class ArcaneClient {
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
 
-    if (!response.ok) {
-      let message = response.statusText;
-      try {
-        const err = (await response.json()) as { detail?: string };
-        if (err.detail) message = err.detail;
-      } catch {}
-      throw new ArcaneApiError(response.status, message);
-    }
+    await lanzaSiFalla(response);
 
     return response.json() as Promise<T>;
   }
@@ -2224,6 +2631,30 @@ export class ArcaneClient {
   }
 
   /**
+   * Como `request<T>`, pero para endpoints que responden 204 sin cuerpo.
+   *
+   * `request()` termina en `response.json()`, que con un cuerpo vacio lanza.
+   * Medido el 2026-08-19: POST /builds/browse/mkdir y DELETE /builds/browse
+   * devuelven 204 y ningun byte.
+   *
+   * A diferencia de `requestHead()`, aqui un estado de error SI lanza: alli el
+   * codigo era el dato ("el sistema no esta sano" es una respuesta valida), aqui
+   * "no pude crear el directorio" es un fallo de la llamada.
+   */
+  async requestSinCuerpo(method: string, path: string, body?: unknown): Promise<void> {
+    const response = await this._fetch(`${this.baseUrl}${path}`, {
+      method,
+      headers: {
+        "X-API-Key": this.apiKey,
+        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+
+    await lanzaSiFalla(response);
+  }
+
+  /**
    * Like `request<T>`, but sends a `FormData` body for multipart endpoints
    * (e.g. `PUT /volumes/{name}/workspace`).
    *
@@ -2238,14 +2669,7 @@ export class ArcaneClient {
       body: form,
     });
 
-    if (!response.ok) {
-      let message = response.statusText;
-      try {
-        const err = (await response.json()) as { detail?: string };
-        if (err.detail) message = err.detail;
-      } catch {}
-      throw new ArcaneApiError(response.status, message);
-    }
+    await lanzaSiFalla(response);
 
     return response.json() as Promise<T>;
   }
@@ -2266,14 +2690,7 @@ export class ArcaneClient {
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
 
-    if (!response.ok) {
-      let message = response.statusText;
-      try {
-        const err = (await response.json()) as { detail?: string };
-        if (err.detail) message = err.detail;
-      } catch {}
-      throw new ArcaneApiError(response.status, message);
-    }
+    await lanzaSiFalla(response);
 
     const text = await response.text();
     const events: T[] = [];
