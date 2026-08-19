@@ -2189,4 +2189,75 @@ describe("ArcaneClient", () => {
       );
     });
   });
+
+  describe("buildWorkspace", () => {
+    it(".browse(envId) sin path - GET sin query", async () => {
+      mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, data: [] }) } as Response);
+      await client.buildWorkspace.browse("env1");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/builds/browse",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".browse(envId, path) - GET con la query literal y el path escapado", async () => {
+      mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, data: [] }) } as Response);
+      await client.buildWorkspace.browse("env1", "sub dir/../x");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/builds/browse?path=sub+dir%2F..%2Fx",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".browse(envId, path) codifica el envId (no solo el path)", async () => {
+      mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, data: [] }) } as Response);
+      await client.buildWorkspace.browse("env/../otro", "ctx");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env%2F..%2Fotro/builds/browse?path=ctx",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".read(envId, path) sin maxBytes - no escribe maxBytes en la query", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true, json: async () => ({ success: true, data: { content: "", mimeType: "text/plain" } }),
+      } as Response);
+      await client.buildWorkspace.read("env1", "Dockerfile");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/builds/browse/content?path=Dockerfile",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".read(envId, path, maxBytes) - escribe maxBytes", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true, json: async () => ({ success: true, data: { content: "", mimeType: "text/plain" } }),
+      } as Response);
+      await client.buildWorkspace.read("env1", "Dockerfile", 4096);
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/builds/browse/content?path=Dockerfile&maxBytes=4096",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".mkdir(envId, path) - POST, y no revienta con un 204 sin cuerpo", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true, status: 204, json: async () => { throw new Error("no debe llamarse"); },
+      } as unknown as Response);
+      await expect(client.buildWorkspace.mkdir("env1", "ctx")).resolves.toBeUndefined();
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/builds/browse/mkdir?path=ctx",
+        expect.objectContaining({ method: "POST" }),
+      );
+    });
+
+    it(".delete(envId, path) - DELETE con el path en la query", async () => {
+      mockFetch.mockResolvedValue({ ok: true, status: 204 } as unknown as Response);
+      await client.buildWorkspace.delete("env1", "ctx");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/builds/browse?path=ctx",
+        expect.objectContaining({ method: "DELETE" }),
+      );
+    });
+  });
 });

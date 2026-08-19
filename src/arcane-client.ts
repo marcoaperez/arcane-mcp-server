@@ -1217,6 +1217,42 @@ export interface ContainerCreateOptions {
   detach?: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// F5 — workspace de builds
+// ---------------------------------------------------------------------------
+
+/**
+ * Entrada del workspace de builds.
+ *
+ * MEDIDO el 2026-08-19, y contradice openapi.txt: la respuesta real trae
+ * {modTime, name, path, mode, size, isDirectory, isSymlink} y se identifica
+ * como BaseApiResponseListVolumeFileEntry, NO como WorkspaceFileEntry. Faltan
+ * `relativePath` y `editable`, que el spec declara OBLIGATORIOS.
+ *
+ * El tipo sigue a la realidad. La auditoria de drift los marcara contra el
+ * spec: eso es correcto y esperado. NO los pongas obligatorios "para arreglar
+ * el drift" -romperias el consumo real-.
+ */
+export interface BuildWorkspaceEntry {
+  modTime: string;
+  name: string;
+  path: string;
+  size: number;
+  isDirectory: boolean;
+  isSymlink: boolean;
+  mode?: string;
+  relativePath?: string;
+  editable?: boolean;
+  linkTarget?: string;
+  readOnlyReason?: "binary" | "too_large" | "symlink" | "special";
+}
+
+export interface BuildFileContent {
+  /** base64 */
+  content: string;
+  mimeType: string;
+}
+
 class EnvironmentsMethods {
   constructor(private client: ArcaneClient) {}
 
@@ -2263,6 +2299,47 @@ class ContainerRegistriesMethods {
   }
 }
 
+class BuildWorkspaceMethods {
+  constructor(private client: ArcaneClient) {}
+
+  private ruta(envId: string, sufijo: string, params: URLSearchParams): string {
+    const query = params.toString();
+    return `/environments/${encodeURIComponent(envId)}/builds/browse${sufijo}${query ? `?${query}` : ""}`;
+  }
+
+  async browse(envId: string, path?: string): Promise<{ success: boolean; data: BuildWorkspaceEntry[] | null }> {
+    const params = new URLSearchParams();
+    if (path !== undefined) params.set("path", path);
+    return this.client.request<{ success: boolean; data: BuildWorkspaceEntry[] | null }>(
+      "GET",
+      this.ruta(envId, "", params),
+    );
+  }
+
+  async read(envId: string, path: string, maxBytes?: number): Promise<{ success: boolean; data: BuildFileContent }> {
+    const params = new URLSearchParams();
+    params.set("path", path);
+    if (maxBytes !== undefined) params.set("maxBytes", String(maxBytes));
+    return this.client.request<{ success: boolean; data: BuildFileContent }>(
+      "GET",
+      this.ruta(envId, "/content", params),
+    );
+  }
+
+  // mkdir y delete devuelven 204 sin cuerpo: request() reventaria con res.json().
+  async mkdir(envId: string, path: string): Promise<void> {
+    const params = new URLSearchParams();
+    params.set("path", path);
+    return this.client.requestSinCuerpo("POST", this.ruta(envId, "/mkdir", params));
+  }
+
+  async delete(envId: string, path: string): Promise<void> {
+    const params = new URLSearchParams();
+    params.set("path", path);
+    return this.client.requestSinCuerpo("DELETE", this.ruta(envId, "", params));
+  }
+}
+
 export class ArcaneClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
@@ -2290,6 +2367,7 @@ export class ArcaneClient {
   readonly volumeFiles: VolumeFilesMethods;
   readonly containerRegistries: ContainerRegistriesMethods;
   readonly templateRegistries: TemplateRegistriesMethods;
+  readonly buildWorkspace: BuildWorkspaceMethods;
 
   // When a Cloudflare VPC Fetcher is provided, routing to the Arcane backend
   // is handled by the service binding — only the path portion of URLs matters.
@@ -2328,6 +2406,7 @@ export class ArcaneClient {
     this.volumeFiles = new VolumeFilesMethods(this);
     this.containerRegistries = new ContainerRegistriesMethods(this);
     this.templateRegistries = new TemplateRegistriesMethods(this);
+    this.buildWorkspace = new BuildWorkspaceMethods(this);
   }
 
   getBaseUrl(): string {

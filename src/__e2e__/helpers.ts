@@ -87,3 +87,40 @@ export async function borraRegistroDeContenedor(id: string): Promise<void> {
     );
   }
 }
+
+/**
+ * Devuelve un entorno cuyo workspace de builds funciona.
+ *
+ * Medido el 2026-08-19: cinco de los seis entornos de esta instancia responden
+ * 500 "failed to ensure builds directory: mkdir /builds: permission denied";
+ * solo uno responde 200. Cablear ese id seria fabricar el defecto que ya tiene
+ * resolvers.e2e.ts -un test acoplado al inventario vivo-.
+ *
+ * Si NINGUNO funciona, FALLA. No salta. La regla dura del proyecto dice que
+ * ninguna tool se entrega sin e2e, asi que "no he podido comprobarlo" es rojo;
+ * y un fichero saltado se lee como verde, que es justo el disfraz a evitar.
+ */
+export async function entornoConWorkspaceDeBuilds(): Promise<string> {
+  const forzado = process.env.ARCANE_E2E_BUILD_ENV;
+  const client = e2eClient();
+  const candidatos = forzado
+    ? [forzado]
+    : ((await client.environments.list({ limit: 50, sort: "name" })).data ?? []).map(e => e.id);
+
+  const fallos: string[] = [];
+  for (const id of candidatos) {
+    try {
+      await client.buildWorkspace.browse(id);
+      return id;
+    } catch (e) {
+      fallos.push(`${id}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  throw new Error(
+    "Ningun entorno tiene un workspace de builds utilizable, asi que las tools de " +
+      "build-workspace NO se pueden verificar contra la instancia.\n" +
+      "Probados:\n  " + fallos.join("\n  ") + "\n" +
+      "Fuerza uno con ARCANE_E2E_BUILD_ENV=<id> si sabes de alguno que sirva.",
+  );
+}

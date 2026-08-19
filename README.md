@@ -76,7 +76,7 @@ percent-decodifica los segmentos `{imageId}`.
 
 <!-- BEGIN TOOLS -->
 
-Las **108** tools que expone el servidor, agrupadas por dominio. Esta tabla la
+Las **112** tools que expone el servidor, agrupadas por dominio. Esta tabla la
 genera `npm run gen-tools-table` a partir de `src/tools/`: las descripciones y los
 parámetros son los que registra el código, no una copia mantenida a mano.
 
@@ -297,6 +297,15 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | `arcane_container_registry_get` | Get one container registry by ID. Credentials are never returned by this API. | `registryId` |
 | `arcane_container_registry_pull_usage` | Report pull-rate usage per registry: observed pulls, and the remaining quota when the provider exposes one. | — |
 | `arcane_container_registry_test` | Test connectivity and authentication to a container registry. Does not change any state. On failure the error text is the registry login output, which names the host and the reason. | `registryId` |
+
+### Build workspace (4)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_build_workspace_browse` | List files and directories in the build workspace of an environment. The workspace is a directory inside the Arcane agent, not the host filesystem, and paths cannot escape it. | `environmentId?`, `environmentName?`, `path?` |
+| `arcane_build_workspace_read` | Read a file from the build workspace. Binary files are not returned: their type and size are reported instead. | `environmentId?`, `environmentName?`, `path`, `maxBytes?` |
+| `arcane_build_workspace_mkdir` | Create a directory in the build workspace. | `environmentId?`, `environmentName?`, `path` |
+| `arcane_build_workspace_delete` | Delete a file or directory from the build workspace. A path is required: this tool cannot delete the workspace root. | `environmentId?`, `environmentName?`, `path` |
 
 <!-- END TOOLS -->
 

@@ -23,6 +23,7 @@ import { registerUpdaterTools } from "../tools/updater";
 import { registerVulnerabilityTools } from "../tools/vulnerabilities";
 import { registerContainerRegistryTools } from "../tools/container-registries";
 import { registerTemplateRegistryTools } from "../tools/template-registries";
+import { registerBuildWorkspaceTools } from "../tools/build-workspace";
 
 type MockedFunction<T extends (...args: any[]) => any> = {
   (...args: Parameters<T>): ReturnType<T>;
@@ -237,6 +238,12 @@ describe("MCP Tools", () => {
         }),
         update: vi.fn().mockResolvedValue({ success: true, data: { message: "Registry updated" } }),
         delete: vi.fn().mockResolvedValue({ success: true, data: { message: "Registry deleted" } }),
+      },
+      buildWorkspace: {
+        browse: vi.fn().mockResolvedValue({ success: true, data: [] }),
+        read: vi.fn().mockResolvedValue({ success: true, data: { content: "", mimeType: "text/plain" } }),
+        mkdir: vi.fn(),
+        delete: vi.fn(),
       },
     } as unknown as ArcaneClient;
     return mockClient;
@@ -2491,6 +2498,137 @@ describe("MCP Tools", () => {
 
       expect(res.isError).toBe(true);
       expect(res.content[0].text).toContain("Template registry not found");
+    });
+  });
+
+  describe("registerBuildWorkspaceTools", () => {
+    it("arcane_build_workspace_browse calls client.buildWorkspace.browse with envId and path", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      registerBuildWorkspaceTools(server as any, client);
+
+      const handler = server.getHandler("arcane_build_workspace_browse");
+      const result = await handler({ environmentId: "env1", path: "ctx" });
+
+      expect(client.buildWorkspace.browse).toHaveBeenCalledWith("env1", "ctx");
+      expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
+    });
+
+    it("arcane_build_workspace_browse sin path pasa undefined", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      registerBuildWorkspaceTools(server as any, client);
+
+      const handler = server.getHandler("arcane_build_workspace_browse");
+      await handler({ environmentId: "env1" });
+
+      expect(client.buildWorkspace.browse).toHaveBeenCalledWith("env1", undefined);
+    });
+
+    it("arcane_build_workspace_read no vuelca binarios", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      const binario = Buffer.from([0, 1, 2, 3]).toString("base64");
+      (client.buildWorkspace.read as any).mockResolvedValue({
+        success: true,
+        data: { content: binario, mimeType: "application/octet-stream" },
+      });
+      registerBuildWorkspaceTools(server, client as unknown as ArcaneClient);
+
+      const res = await (server as any)._registeredTools["arcane_build_workspace_read"]
+        .handler({ environmentId: "env1", path: "a.bin" });
+
+      expect(res.content[0].text).toContain("application/octet-stream");
+      expect(res.content[0].text).toContain("4 bytes");
+      expect(res.content[0].text).not.toContain(binario);
+      expect(client.buildWorkspace.read).toHaveBeenCalledWith("env1", "a.bin", undefined);
+    });
+
+    it("arcane_build_workspace_read si vuelca texto", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      (client.buildWorkspace.read as any).mockResolvedValue({
+        success: true,
+        data: { content: Buffer.from("FROM alpine:3.19\n").toString("base64"), mimeType: "text/plain" },
+      });
+      registerBuildWorkspaceTools(server, client as unknown as ArcaneClient);
+
+      const res = await (server as any)._registeredTools["arcane_build_workspace_read"]
+        .handler({ environmentId: "env1", path: "Dockerfile", maxBytes: 4096 });
+
+      expect(res.content[0].text).toBe("FROM alpine:3.19\n");
+      expect(client.buildWorkspace.read).toHaveBeenCalledWith("env1", "Dockerfile", 4096);
+    });
+
+    it("arcane_build_workspace_mkdir calls client.buildWorkspace.mkdir with envId and path", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      registerBuildWorkspaceTools(server as any, client);
+
+      const handler = server.getHandler("arcane_build_workspace_mkdir");
+      const result = await handler({ environmentId: "env1", path: "ctx" });
+
+      expect(client.buildWorkspace.mkdir).toHaveBeenCalledWith("env1", "ctx");
+      expect(result.content).toEqual([{ type: "text", text: "Created 'ctx' in the build workspace." }]);
+    });
+
+    it("arcane_build_workspace_delete calls client.buildWorkspace.delete with envId and path", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      registerBuildWorkspaceTools(server as any, client);
+
+      const handler = server.getHandler("arcane_build_workspace_delete");
+      const result = await handler({ environmentId: "env1", path: "ctx" });
+
+      expect(client.buildWorkspace.delete).toHaveBeenCalledWith("env1", "ctx");
+      expect(result.content).toEqual([{ type: "text", text: "Deleted 'ctx' from the build workspace." }]);
+    });
+
+    it("el schema de arcane_build_workspace_mkdir exige path no vacio", () => {
+      const server = createMockServer();
+      registerBuildWorkspaceTools(server as any, createMockClient());
+      const call = (server.tool as any).mock.calls.find((c: any[]) => c[0] === "arcane_build_workspace_mkdir");
+      const schema = z.object(call[2]);
+      // Sin path: rechazado. El mock de servidor no valida schemas, asi que
+      // sin este test relajar path a .optional() no haria fallar nada.
+      expect(() => schema.parse({ environmentId: "env1" })).toThrow();
+      // Path vacio: tambien rechazado (min(1)).
+      expect(() => schema.parse({ environmentId: "env1", path: "" })).toThrow();
+      // Path no vacio: aceptado.
+      expect(schema.parse({ environmentId: "env1", path: "ctx" }).path).toBe("ctx");
+    });
+
+    it("el schema de arcane_build_workspace_delete exige path no vacio", () => {
+      const server = createMockServer();
+      registerBuildWorkspaceTools(server as any, createMockClient());
+      const call = (server.tool as any).mock.calls.find((c: any[]) => c[0] === "arcane_build_workspace_delete");
+      const schema = z.object(call[2]);
+      expect(() => schema.parse({ environmentId: "env1" })).toThrow();
+      expect(() => schema.parse({ environmentId: "env1", path: "" })).toThrow();
+      expect(schema.parse({ environmentId: "env1", path: "ctx" }).path).toBe("ctx");
+    });
+
+    it("el schema de arcane_build_workspace_browse admite path ausente", () => {
+      const server = createMockServer();
+      registerBuildWorkspaceTools(server as any, createMockClient());
+      const call = (server.tool as any).mock.calls.find((c: any[]) => c[0] === "arcane_build_workspace_browse");
+      const schema = z.object(call[2]);
+      expect(schema.parse({ environmentId: "env1" }).path).toBeUndefined();
+    });
+
+    it("arcane_build_workspace_mkdir devuelve isError cuando la API falla", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      (client.buildWorkspace.mkdir as any).mockRejectedValue(
+        new ArcaneApiError(500, "failed to ensure builds directory: mkdir /builds: permission denied"),
+      );
+      registerBuildWorkspaceTools(server as any, client);
+
+      const handler = server.getHandler("arcane_build_workspace_mkdir");
+      const res = await handler({ environmentId: "env1", path: "ctx" });
+
+      expect(res.isError).toBe(true);
+      expect(res.content[0].text).toContain("permission denied");
     });
   });
 });
