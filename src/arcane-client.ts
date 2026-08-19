@@ -689,6 +689,55 @@ function summarizeComposeStream(events: ComposeStreamEvent[], action: string): A
   };
 }
 
+export const BUILD_ARG_OCULTO = "<hidden by arcane-mcp>";
+export const LINEAS_DE_LOG_CONSERVADAS = 100;
+
+/**
+ * Sustituye los valores de buildArgs y conserva las claves.
+ *
+ * Va en el CLIENTE y no en la capa de tool a proposito: en la tool, una
+ * segunda tool futura sobre el mismo endpoint reintroduciria la fuga sin que
+ * nada fallara. Es exactamente como se desplego rota arcane_image_update_check
+ * en F3, por una rama que nadie ejercito.
+ */
+function enmascaraBuildArgs<T extends { buildArgs?: Record<string, string> }>(registro: T): T {
+  if (!registro.buildArgs) return registro;
+  const ocultos: Record<string, string> = {};
+  for (const clave of Object.keys(registro.buildArgs)) ocultos[clave] = BUILD_ARG_OCULTO;
+  return { ...registro, buildArgs: ocultos };
+}
+
+/**
+ * Agrega el NDJSON de una build.
+ *
+ * No reutiliza summarizeComposeStream porque aquel une TODOS los logs en un
+ * solo `message`: un compose up produce unas lineas, una build produce
+ * cientos, sin cota. Comparte `extractStreamError`, que es lo unico igual.
+ */
+function summarizeBuildStream(events: ComposeStreamEvent[], action: string): BuildStreamSummary {
+  const activityId = events.find(e => typeof e.activityId === "string")?.activityId;
+  const logs = events
+    .filter(e => typeof e.log === "string")
+    .map(e => (e.log as string).trimEnd())
+    .filter(l => l.length > 0);
+  const logTail = logs.slice(-LINEAS_DE_LOG_CONSERVADAS);
+  const droppedLines = logs.length - logTail.length;
+
+  const errors = events.map(extractStreamError).filter((e): e is string => typeof e === "string");
+  if (errors.length > 0) {
+    return { success: false, message: `${action} failed: ${errors.join("; ")}`, activityId, logTail, droppedLines };
+  }
+
+  const done = events.some(e => e.done === true);
+  return {
+    success: done,
+    message: done ? `${action} finished` : `${action} ended without a completion event`,
+    activityId,
+    logTail,
+    droppedLines,
+  };
+}
+
 export interface ListOptions {
   search?: string;
   limit?: number;
@@ -1251,6 +1300,88 @@ export interface BuildFileContent {
   /** base64 */
   content: string;
   mimeType: string;
+}
+
+/**
+ * Registro del historial de builds.
+ *
+ * `buildArgs` llega SIEMPRE enmascarado desde el cliente: medido el
+ * 2026-08-19, la API los persiste y los devuelve en claro, y los build args
+ * llevan tokens de rutina. Ver `enmascaraBuildArgs`.
+ *
+ * `output` NO se enmascara y NO se puede: un log de build contiene todo lo que
+ * la build imprimio. Se devuelve tal cual y la tool lo dice.
+ */
+export interface ImageBuildRecord {
+  id: string;
+  environmentId: string;
+  status: string;
+  createdAt: string;
+  contextDir: string;
+  noCache: boolean;
+  pull: boolean;
+  privileged: boolean;
+  push: boolean;
+  load: boolean;
+  outputTruncated: boolean;
+  buildArgs?: Record<string, string>;
+  labels?: Record<string, string>;
+  ulimits?: Record<string, string>;
+  cacheFrom?: string[] | null;
+  cacheTo?: string[] | null;
+  platforms?: string[] | null;
+  entitlements?: string[] | null;
+  extraHosts?: string[] | null;
+  tags?: string[] | null;
+  completedAt?: string;
+  digest?: string;
+  dockerfile?: string;
+  durationMs?: number;
+  errorMessage?: string;
+  isolation?: string;
+  network?: string;
+  output?: string;
+  provider?: string;
+  shmSize?: number;
+  target?: string;
+  userId?: string;
+  username?: string;
+}
+
+export interface BuildRequest {
+  contextDir: string;
+  dockerfile?: string;
+  dockerfileInline?: string;
+  tags?: string[];
+  buildArgs?: Record<string, string>;
+  labels?: Record<string, string>;
+  target?: string;
+  platforms?: string[];
+  noCache?: boolean;
+  pull?: boolean;
+  push?: boolean;
+  load?: boolean;
+  provider?: string;
+}
+
+export interface ProjectBuildRequest {
+  services?: string[];
+  push?: boolean;
+  load?: boolean;
+  provider?: string;
+}
+
+export interface BuildListOptions extends ListOptionsWithSort {
+  status?: string;
+  provider?: string;
+}
+
+export interface BuildStreamSummary {
+  success: boolean;
+  message: string;
+  activityId?: string;
+  logTail: string[];
+  droppedLines: number;
 }
 
 class EnvironmentsMethods {
@@ -2299,6 +2430,51 @@ class ContainerRegistriesMethods {
   }
 }
 
+class ImageBuildsMethods {
+  constructor(private client: ArcaneClient) {}
+
+  // El endpoint transmite NDJSON (application/x-json-stream) y devuelve
+  // HTTP 200 aunque la build falle: el fracaso solo vive dentro del stream.
+  async build(envId: string, req: BuildRequest): Promise<BuildStreamSummary> {
+    const events = await this.client.requestNdjson<ComposeStreamEvent>(
+      "POST",
+      `/environments/${encodeURIComponent(envId)}/images/build`,
+      req,
+    );
+    return summarizeBuildStream(events, "Build");
+  }
+
+  async buildProject(envId: string, projectId: string, req: ProjectBuildRequest): Promise<BuildStreamSummary> {
+    const events = await this.client.requestNdjson<ComposeStreamEvent>(
+      "POST",
+      `/environments/${encodeURIComponent(envId)}/projects/${encodeURIComponent(projectId)}/build`,
+      req,
+    );
+    return summarizeBuildStream(events, "Project build");
+  }
+
+  async list(envId: string, opts?: BuildListOptions): Promise<PaginatedResponse<ImageBuildRecord>> {
+    const params = new URLSearchParams();
+    appendListParams(params, opts);
+    if (opts?.status) params.set("status", opts.status);
+    if (opts?.provider) params.set("provider", opts.provider);
+    const query = params.toString();
+    const res = await this.client.request<PaginatedResponse<ImageBuildRecord>>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/images/builds${query ? `?${query}` : ""}`,
+    );
+    return { ...res, data: res.data ? res.data.map(enmascaraBuildArgs) : res.data };
+  }
+
+  async get(envId: string, buildId: string): Promise<{ success: boolean; data: ImageBuildRecord }> {
+    const res = await this.client.request<{ success: boolean; data: ImageBuildRecord }>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/images/builds/${encodeURIComponent(buildId)}`,
+    );
+    return { ...res, data: enmascaraBuildArgs(res.data) };
+  }
+}
+
 class BuildWorkspaceMethods {
   constructor(private client: ArcaneClient) {}
 
@@ -2368,6 +2544,7 @@ export class ArcaneClient {
   readonly containerRegistries: ContainerRegistriesMethods;
   readonly templateRegistries: TemplateRegistriesMethods;
   readonly buildWorkspace: BuildWorkspaceMethods;
+  readonly imageBuilds: ImageBuildsMethods;
 
   // When a Cloudflare VPC Fetcher is provided, routing to the Arcane backend
   // is handled by the service binding — only the path portion of URLs matters.
@@ -2407,6 +2584,7 @@ export class ArcaneClient {
     this.containerRegistries = new ContainerRegistriesMethods(this);
     this.templateRegistries = new TemplateRegistriesMethods(this);
     this.buildWorkspace = new BuildWorkspaceMethods(this);
+    this.imageBuilds = new ImageBuildsMethods(this);
   }
 
   getBaseUrl(): string {

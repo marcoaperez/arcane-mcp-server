@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { ArcaneClient, ArcaneApiError, type VersionInfo } from "../arcane-client";
+import { ArcaneClient, ArcaneApiError, BUILD_ARG_OCULTO, LINEAS_DE_LOG_CONSERVADAS, type VersionInfo } from "../arcane-client";
 
 describe("ArcaneClient", () => {
   let client: ArcaneClient;
@@ -2258,6 +2258,213 @@ describe("ArcaneClient", () => {
         "http://localhost:3552/api/environments/env1/builds/browse?path=ctx",
         expect.objectContaining({ method: "DELETE" }),
       );
+    });
+  });
+
+  describe("imageBuilds", () => {
+    const okVacio = () =>
+      ({ ok: true, json: async () => ({ success: true, data: [], pagination: {} }) }) as Response;
+
+    const registroBase = {
+      id: "b1", environmentId: "0", status: "success", createdAt: "x", contextDir: "/builds",
+      noCache: false, pull: false, privileged: false, push: false, load: false, outputTruncated: false,
+    };
+
+    it(".list() enmascara los valores de buildArgs y conserva las claves", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [{ ...registroBase, buildArgs: { NPM_TOKEN: "npm_secreto_de_verdad", OTRO: "tambien" } }],
+          pagination: {},
+        }),
+      } as Response);
+
+      const res = await client.imageBuilds.list("env1");
+
+      expect(JSON.stringify(res)).not.toContain("npm_secreto_de_verdad");
+      expect(JSON.stringify(res)).not.toContain("tambien");
+      expect(Object.keys(res.data![0].buildArgs!)).toEqual(["NPM_TOKEN", "OTRO"]);
+      expect(res.data![0].buildArgs!.NPM_TOKEN).toBe(BUILD_ARG_OCULTO);
+    });
+
+    it(".get() enmascara igual que .list(): la fuga no puede depender de la ruta", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: { ...registroBase, buildArgs: { GITHUB_TOKEN: "ghp_secreto_de_verdad" } },
+        }),
+      } as Response);
+
+      const res = await client.imageBuilds.get("env1", "b1");
+
+      expect(JSON.stringify(res)).not.toContain("ghp_secreto_de_verdad");
+      expect(res.data.buildArgs!.GITHUB_TOKEN).toBe(BUILD_ARG_OCULTO);
+    });
+
+    it(".get(buildId) codifica el buildId y no permite traversal", async () => {
+      mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, data: {} }) } as Response);
+      await client.imageBuilds.get("env1", "../../system/containers/stop-all#");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/builds/..%2F..%2Fsystem%2Fcontainers%2Fstop-all%23",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list() sin opciones - GET sin query", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.imageBuilds.list("env1");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/builds",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({search}) - GET con la query literal", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.imageBuilds.list("env1", { search: "my-app" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/builds?search=my-app",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({sort}) - GET con la query literal", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.imageBuilds.list("env1", { sort: "createdAt" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/builds?sort=createdAt",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({order}) - GET con la query literal", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.imageBuilds.list("env1", { order: "desc" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/builds?order=desc",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({start}) - GET con la query literal", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.imageBuilds.list("env1", { start: 40 });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/builds?start=40",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({start: 0}) se envia (es un valor valido, no una ausencia)", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.imageBuilds.list("env1", { start: 0 });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/builds?start=0",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({limit}) - GET con la query literal", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.imageBuilds.list("env1", { limit: 5 });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/builds?limit=5",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({status}) - GET con la query literal", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.imageBuilds.list("env1", { status: "failed" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/builds?status=failed",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".list({provider}) - GET con la query literal", async () => {
+      mockFetch.mockResolvedValue(okVacio());
+      await client.imageBuilds.list("env1", { provider: "buildx" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/builds?provider=buildx",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".build() trata {done:true} como exito y expone el activityId", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () =>
+          '{"type":"activity","activityId":"act-1"}\n{"log":"#1 paso"}\n{"done":true}\n',
+      } as unknown as Response);
+
+      const res = await client.imageBuilds.build("env1", { contextDir: "/builds" });
+
+      expect(res.success).toBe(true);
+      expect(res.activityId).toBe("act-1");
+      expect(res.logTail).toContain("#1 paso");
+    });
+
+    it(".build() trata {error} como fallo AUNQUE el HTTP sea 200", async () => {
+      // Medido el 2026-08-19: el endpoint responde 200 y el fracaso solo vive
+      // dentro del stream. Es la clase de bug que tuvo arcane_project_redeploy.
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () =>
+          '{"type":"activity","activityId":"act-2"}\n{"error":"build context not found: stat /x: no such file or directory"}\n',
+      } as unknown as Response);
+
+      const res = await client.imageBuilds.build("env1", { contextDir: "/x" });
+
+      expect(res.success).toBe(false);
+      expect(res.message).toContain("build context not found");
+    });
+
+    it(".build() conserva solo la cola del log y dice cuantas lineas descarto", async () => {
+      const lineas = Array.from({ length: 250 }, (_, i) => `{"log":"linea ${i}"}`).join("\n");
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () => `{"type":"activity","activityId":"a"}\n${lineas}\n{"done":true}\n`,
+      } as unknown as Response);
+
+      const res = await client.imageBuilds.build("env1", { contextDir: "/builds" });
+
+      expect(res.logTail).toHaveLength(LINEAS_DE_LOG_CONSERVADAS);
+      expect(res.logTail[res.logTail.length - 1]).toBe("linea 249");
+      expect(res.droppedLines).toBe(250 - LINEAS_DE_LOG_CONSERVADAS);
+    });
+
+    it(".build() sin {error} y sin {done:true} se considera fallo: el stream no completo", async () => {
+      // Ni error ni done: el stream se corto (o el provider no emitio el
+      // marcador final) sin reportar fallo explicito. success tiene que
+      // seguir a `done`, no asumir exito por ausencia de error.
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () => '{"type":"activity","activityId":"act-3"}\n{"log":"building..."}\n',
+      } as unknown as Response);
+
+      const res = await client.imageBuilds.build("env1", { contextDir: "/builds" });
+
+      expect(res.success).toBe(false);
+      expect(res.message).toContain("ended without a completion event");
+    });
+
+    it(".buildProject() codifica el projectId y usa el mismo resumidor", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () => '{"type":"activity","activityId":"a"}\n{"error":"project not found"}\n',
+      } as unknown as Response);
+
+      const res = await client.imageBuilds.buildProject("env1", "p#1", {});
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/projects/p%231/build",
+        expect.objectContaining({ method: "POST" }),
+      );
+      expect(res.success).toBe(false);
+      expect(res.message).toContain("project not found");
     });
   });
 });
