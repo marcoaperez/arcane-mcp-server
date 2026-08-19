@@ -107,3 +107,4 @@ enlaza desde aquí.
 | `npm run update-api-spec` | Refresca `openapi.txt` desde la instancia |
 | `npm run gen-tools-table` | Regenera la tabla de tools del `README.md` desde `src/tools/` (`-- --check` falla si está desactualizada) |
 | `node scripts/audit-schema-drift.mjs` | Audita el drift de campos |
+| `./scripts/e2e-remoto.sh` | Ejecuta la suite e2e desde `vm-control`, en la LAN de Arcane (evita el 16,7 % de caídas de Tailscale) |

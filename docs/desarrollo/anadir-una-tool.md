@@ -150,6 +150,12 @@ ARCANE_BASE_URL=http://192.168.180.210:3552 ARCANE_API_KEY=<clave> npm run test:
 npm run type-check
 ```
 
+**Ejecuta los e2e desde dentro de la LAN, no por Tailscale.** Medido el 2026-08-19:
+desde el Mac se cae el 16,7 % de las peticiones (50 de 60); desde `vm-control`, 0 de 120.
+`./scripts/e2e-remoto.sh` copia el árbol, instala con bun y ejecuta con node en
+contenedores sobre `vm-control`. Instala con bun pero **ejecuta con node**: bajo el
+runtime de bun, `zod` no resuelve y `src/tools/gitops-syncs.ts` revienta al importar.
+
 ## 6. Documentar y publicar
 
 - Añade la fila a la tabla de tools del `README.md`.
