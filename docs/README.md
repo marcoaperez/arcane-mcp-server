@@ -19,6 +19,12 @@ enlaza desde aquí.
 
 ## Balances de fase
 
+- [F4 (vulnerabilidades) — 2026-08-19](balances/2026-08-19-f4.md)
+  — doce tools sobre el Trivy que integra Arcane, con la siembra de datos dentro de
+  la propia suite e2e para resolver el problema de las 0 imágenes escaneadas. Destapa
+  y arregla tres bugs que ya estaban en producción, entre ellos una inyección de ruta
+  introducida durante la fase. Cifras medidas: 294 tests, 59 e2e, 100 tools,
+  98/249 operaciones cubiertas.
 - [F3 (actualizaciones de imágenes) — 2026-08-17](balances/2026-08-17-f3.md)
   — siete tools nuevas (estado de actualizaciones e imágenes, y `updater` con
   `resourceIds` obligatorio), cierre de las tres deudas diferidas por F2
