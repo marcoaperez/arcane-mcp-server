@@ -6,10 +6,10 @@ enlaza desde aquí.
 ## Arquitectura
 
 - [Criterio de exposición](arquitectura/criterio-exposicion.md) — **documento vivo**:
-  qué expone este fork y qué no, con los tres motivos de exclusión (radio de daño,
-  infraestructura inexistente, destrucción de evidencia), las cifras medidas y el
-  denominador honesto de cobertura (249 operaciones, no 347). Releva a la §2 del
-  spec de F2 como referencia.
+  qué expone este fork y qué no, con los cuatro motivos de exclusión (radio de daño,
+  infraestructura inexistente, destrucción de evidencia, y desde F5 el secreto que el
+  modelo tendría que redactar), las cifras medidas y el denominador honesto de
+  cobertura (244 operaciones, no 347). Releva a la §2 del spec de F2 como referencia.
 
 ## Desarrollo
 
@@ -19,6 +19,15 @@ enlaza desde aquí.
 
 ## Balances de fase
 
+- [F5 (build y registries) — 2026-08-19](balances/2026-08-19-f5.md)
+  — 16 de 17 tools previstas sobre registros de contenedor, registros de plantillas, el
+  workspace de builds y la construcción de imágenes/proyectos; la 17.ª
+  (`arcane_build_workspace_upload`) queda diferida por imposibilidad medida de
+  verificación e2e en cualquier entorno. La mayoría de los hallazgos de esta fase
+  vienen del propio plan, no del código: una afirmación falsa sobre el spec, un
+  ejemplo que violaba tres restricciones propias, y una mutación de falsabilidad que no
+  falsificaba nada. Cifras medidas: 376 tests, 76 e2e, 116 tools, 113/244 operaciones
+  cubiertas.
 - [F4 (vulnerabilidades) — 2026-08-19](balances/2026-08-19-f4.md)
   — doce tools sobre el Trivy que integra Arcane, con la siembra de datos dentro de
   la propia suite e2e para resolver el problema de las 0 imágenes escaneadas. Destapa
@@ -51,6 +60,14 @@ enlaza desde aquí.
   — causa raíz del redeploy de GitOps roto, su arreglo, y las 9 operaciones que 2.8.0
   elimina (2 de ellas en uso, migradas de `/browse` a `/workspace`).
 
+### Issues investigados, sin publicar
+
+- [`hasBuildDirective` siempre es `false` en `GET /projects/{id}` y en el listado (2026-08-19)](auditorias/2026-08-19-has-build-directive-upstream.md)
+  — causa raíz identificada contra el código fuente de Arcane 2.8.0: el endpoint que
+  expone el campo nunca activa el cálculo que sí usan `/compose`, `/updates` y el
+  `PUT`. Reproducido hoy con cuatro proyectos reales. Redactado y listo para publicar;
+  la decisión de abrirlo en el repositorio de un tercero es del propietario.
+
 ### Issues publicados en el upstream
 
 - [Paginación sin `sort` pierde elementos (2026-08-17)](auditorias/2026-08-17-paginacion-sin-sort-upstream.md)
@@ -70,6 +87,13 @@ enlaza desde aquí.
 
 ## Specs y planes
 
+- [Spec F5 (2026-08-19)](superpowers/specs/2026-08-19-f5-build-y-registries-design.md)
+  — build y registries: registros de contenedor, registros de plantillas, el workspace
+  de builds y la construcción de imágenes/proyectos; la diferida de
+  `arcane_build_workspace_upload` medida en su §3.1.
+- [Plan F5 (2026-08-19)](superpowers/plans/2026-08-19-f5-build-y-registries.md)
+  — 9 tareas con ciclo TDD paso a paso, de los tipos bajo auditoría de drift al cierre
+  de fase.
 - [Spec F4 (2026-08-18)](superpowers/specs/2026-08-18-f4-vulnerabilidades-design.md)
   — vulnerabilidades: siembra de escaneo, listados y detalle, y el par
   ignore/unignore con motivo obligatorio.
