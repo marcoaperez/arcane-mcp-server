@@ -185,7 +185,7 @@ describe("vulnerabilidades (e2e, Arcane 2.8.0)", () => {
 
   const MARCA = "e2e-arcane-mcp";
 
-  it("ciclo completo: ignore → aparece en ignored → unignore → desaparece", async () => {
+  it("ciclo completo: ignore → el conteo no cambia → aparece en ignored → unignore → desaparece", async () => {
     const lista = await client.vulnerabilities.imageList(envId, imageId, { sort: "severity", limit: 1 });
     const cve = (lista.data ?? [])[0];
     expect(cve).toBeDefined();
@@ -204,11 +204,25 @@ describe("vulnerabilidades (e2e, Arcane 2.8.0)", () => {
     expect(creado.data.imageId).toBe(imageId);
     expect(creado.data.pkgName).toBe(cve.pkgName);
 
+    // Medido el 2026-08-19 contra la instancia real: crear un ignore NO
+    // cambia el conteo que devuelven summary/list mientras el ignore está
+    // vivo (44/44 en la medición manual). La tool describe esto como un
+    // registro de triaje trazable, no como un filtro de reporting -esta
+    // aserción es la que sostiene esa descripción; si Arcane empieza a
+    // descontar el CVE, este assert es el primero en delatarlo.
+    const durante = await client.vulnerabilities.imageSummary(envId, imageId);
+    expect(durante.data.summary!.total).toBe(resultado.summary!.total);
+
     const con = await client.vulnerabilities.ignoredList(envId, { sort: "id", limit: 200 });
     expect((con.data ?? []).some((x) => x.id === creado.data.id)).toBe(true);
 
     const borrado = await client.vulnerabilities.unignore(envId, creado.data.id);
     expect(borrado.success).toBe(true);
+
+    // Testigo independiente del efecto de unignore: el conteo sigue igual
+    // tras revertir, coherente con que crear el ignore tampoco lo cambió.
+    const despues = await client.vulnerabilities.imageSummary(envId, imageId);
+    expect(despues.data.summary!.total).toBe(resultado.summary!.total);
 
     const sin = await client.vulnerabilities.ignoredList(envId, { sort: "id", limit: 200 });
     expect((sin.data ?? []).some((x) => x.id === creado.data.id)).toBe(false);

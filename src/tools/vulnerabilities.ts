@@ -200,7 +200,7 @@ export function registerVulnerabilityTools(server: McpServer, client: ArcaneClie
 
   server.tool(
     "arcane_vulnerability_ignore",
-    "Mark ONE vulnerability of ONE image as ignored. This persistently changes the environment's security reporting: the CVE stops counting against that image until un-ignored. Requires a reason, which is stored and shown in arcane_vulnerability_ignored_list. Reversible with arcane_vulnerability_unignore.",
+    "Mark ONE vulnerability of ONE image as ignored by creating a persistent ignore record. Requires a reason, which is stored and shown in arcane_vulnerability_ignored_list. Reversible with arcane_vulnerability_unignore. Measured against Arcane v2.8.0: creating the record does NOT change the CVE counts returned by arcane_vulnerability_image_summary or arcane_vulnerability_image_list — treat this as a tracked triage decision, not a reporting filter.",
     {
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
@@ -219,7 +219,7 @@ export function registerVulnerabilityTools(server: McpServer, client: ArcaneClie
 
   server.tool(
     "arcane_vulnerability_unignore",
-    "Stop ignoring a vulnerability: the CVE counts again in the environment's security reporting. The ignoreId comes from arcane_vulnerability_ignored_list or from the record returned by arcane_vulnerability_ignore.",
+    "Remove an ignore record created by arcane_vulnerability_ignore, so it no longer appears in arcane_vulnerability_ignored_list. The ignoreId comes from arcane_vulnerability_ignored_list or from the record returned by arcane_vulnerability_ignore. Measured against Arcane v2.8.0: removing the record does NOT change the CVE counts returned by arcane_vulnerability_image_summary or arcane_vulnerability_image_list.",
     {
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
