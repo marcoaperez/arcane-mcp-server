@@ -6,6 +6,22 @@ import { resolveEnvironmentId, resolveProjectId } from "./resolve";
 import { withErrors, listResponse, textResponse } from "./respond";
 import type { ToolResult } from "./respond";
 
+/**
+ * Recorta `output` (el log guardado de una build) por la cola, igual que
+ * `summarizeBuildStream()` recorta el stream en vivo. `output` no pasa por
+ * ese summarizer porque `_get` lee un registro ya guardado, no un stream: sin
+ * este recorte, un log de build sin cota (spec F5 §5.2, sin límite medido)
+ * se volcaria entero en el contexto del modelo. Misma forma del problema que
+ * `arcane_vulnerability_scan_result` resolvio recortando en la capa de tool.
+ */
+function recortaOutput(output: string | undefined): { output: string | undefined; omittedLines: number } {
+  if (typeof output !== "string") return { output, omittedLines: 0 };
+  const lineas = output.split("\n");
+  if (lineas.length <= LINEAS_DE_LOG_CONSERVADAS) return { output, omittedLines: 0 };
+  const cola = lineas.slice(-LINEAS_DE_LOG_CONSERVADAS);
+  return { output: cola.join("\n"), omittedLines: lineas.length - cola.length };
+}
+
 function respuestaDeBuild(resumen: BuildStreamSummary): ToolResult {
   const partes: string[] = [resumen.message];
   if (resumen.activityId) partes.push(`Activity: ${resumen.activityId}`);
@@ -91,7 +107,7 @@ export function registerImageBuildTools(server: McpServer, client: ArcaneClient)
 
   server.tool(
     "arcane_image_build_get",
-    "Get one build record with its full build log. Build argument values are hidden, but the log itself is returned verbatim and contains whatever the build printed, including anything it echoed by mistake.",
+    "Get one build record with its full build log. Build argument values are hidden, but the log itself is returned verbatim and contains whatever the build printed, including anything it echoed by mistake. The environmentId recorded on the build is the agent's own local id, not the environment you queried.",
     {
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
@@ -100,12 +116,18 @@ export function registerImageBuildTools(server: McpServer, client: ArcaneClient)
     withErrors(async ({ environmentId, environmentName, buildId }) => {
       const envId = await resolveEnvironmentId(client, environmentId, environmentName);
       const result = await client.imageBuilds.get(envId, buildId);
-      const aviso = result.data.outputTruncated
+      const { output, omittedLines } = recortaOutput(result.data.output);
+      const datos = { ...result.data, output };
+      const avisoServidor = result.data.outputTruncated
         ? "This build log is TRUNCATED by the server: it is not the complete output.\n"
         : "";
+      const avisoLocal =
+        omittedLines > 0
+          ? `Showing the last ${LINEAS_DE_LOG_CONSERVADAS} log lines; ${omittedLines} earlier lines omitted.\n`
+          : "";
       return textResponse(
-        `${aviso}Build argument values are hidden; their names are kept.\n` +
-          JSON.stringify(result.data, null, 2),
+        `${avisoServidor}${avisoLocal}Build argument values are hidden; their names are kept.\n` +
+          JSON.stringify(datos, null, 2),
       );
     }),
   );

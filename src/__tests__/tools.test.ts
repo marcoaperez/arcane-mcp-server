@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { ArcaneApiError } from "../arcane-client";
+import { ArcaneApiError, LINEAS_DE_LOG_CONSERVADAS } from "../arcane-client";
 import type { ArcaneClient, ListOptions } from "../arcane-client";
 import { registerEnvironmentTools } from "../tools/environments";
 import { registerStackTools } from "../tools/stacks";
@@ -2580,6 +2580,46 @@ describe("MCP Tools", () => {
       expect(client.buildWorkspace.read).toHaveBeenCalledWith("env1", "Dockerfile", 4096);
     });
 
+    it("arcane_build_workspace_read binario CON maxBytes avisa que la lectura pudo quedar truncada", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      // 1024 bytes exactos == maxBytes: pudo ser el fichero entero o pudo
+      // quedar cortado ahi mismo. No hay forma de saberlo sin un tamano
+      // total que la API no da, asi que se avisa en vez de afirmar.
+      const binario = Buffer.alloc(1024, 7).toString("base64");
+      (client.buildWorkspace.read as any).mockResolvedValue({
+        success: true,
+        data: { content: binario, mimeType: "image/png" },
+      });
+      registerBuildWorkspaceTools(server, client as unknown as ArcaneClient);
+
+      const res = await (server as any)._registeredTools["arcane_build_workspace_read"]
+        .handler({ environmentId: "env1", path: "logo.png", maxBytes: 1024 });
+
+      expect(res.content[0].text).toContain("image/png");
+      expect(res.content[0].text).toContain("1024 bytes were read");
+      expect(res.content[0].text).toContain("maxBytes=1024");
+      // No debe afirmar que 1024 es el tamano del fichero.
+      expect(res.content[0].text).not.toMatch(/is image\/png, 1024 bytes/);
+    });
+
+    it("arcane_build_workspace_read binario SIN maxBytes no avisa de truncado", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      const binario = Buffer.from([9, 9, 9]).toString("base64");
+      (client.buildWorkspace.read as any).mockResolvedValue({
+        success: true,
+        data: { content: binario, mimeType: "image/png" },
+      });
+      registerBuildWorkspaceTools(server, client as unknown as ArcaneClient);
+
+      const res = await (server as any)._registeredTools["arcane_build_workspace_read"]
+        .handler({ environmentId: "env1", path: "logo.png" });
+
+      expect(res.content[0].text).toContain("3 bytes were read");
+      expect(res.content[0].text).not.toContain("maxBytes");
+    });
+
     it("arcane_build_workspace_mkdir calls client.buildWorkspace.mkdir with envId and path", async () => {
       const server = createMockServer();
       const client = createMockClient();
@@ -2798,6 +2838,49 @@ describe("MCP Tools", () => {
         .handler({ environmentId: "env1", buildId: "b1" });
 
       expect(res.content[0].text).not.toContain("TRUNCATED");
+    });
+
+    it("arcane_image_build_get recorta output por la cola y dice cuantas lineas omitio", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      const totalLineas = LINEAS_DE_LOG_CONSERVADAS + 50;
+      const lineas = Array.from({ length: totalLineas }, (_, i) => `linea-${i}`);
+      (client.imageBuilds.get as any).mockResolvedValue({
+        success: true,
+        data: { id: "b1", outputTruncated: false, output: lineas.join("\n"), environmentId: "0", status: "success",
+                createdAt: "x", contextDir: "/builds", noCache: false, pull: false, privileged: false,
+                push: false, load: false },
+      });
+      registerImageBuildTools(server, client as unknown as ArcaneClient);
+
+      const res = await (server as any)._registeredTools["arcane_image_build_get"]
+        .handler({ environmentId: "env1", buildId: "b1" });
+
+      // Se dice cuantas lineas se omitieron (50 = 150 - 100)...
+      expect(res.content[0].text).toContain(`Showing the last ${LINEAS_DE_LOG_CONSERVADAS} log lines; 50 earlier lines omitted.`);
+      // ...la primera linea (fuera de la cola) no aparece...
+      expect(res.content[0].text).not.toContain("linea-0");
+      // ...y la ultima (dentro de la cola) si.
+      expect(res.content[0].text).toContain(`linea-${totalLineas - 1}`);
+    });
+
+    it("arcane_image_build_get NO dice nada de lineas omitidas cuando output cabe entero", async () => {
+      const server = new McpServer({ name: "t", version: "1" });
+      const client = createMockClient();
+      const lineas = Array.from({ length: LINEAS_DE_LOG_CONSERVADAS }, (_, i) => `linea-${i}`);
+      (client.imageBuilds.get as any).mockResolvedValue({
+        success: true,
+        data: { id: "b1", outputTruncated: false, output: lineas.join("\n"), environmentId: "0", status: "success",
+                createdAt: "x", contextDir: "/builds", noCache: false, pull: false, privileged: false,
+                push: false, load: false },
+      });
+      registerImageBuildTools(server, client as unknown as ArcaneClient);
+
+      const res = await (server as any)._registeredTools["arcane_image_build_get"]
+        .handler({ environmentId: "env1", buildId: "b1" });
+
+      expect(res.content[0].text).not.toContain("earlier lines omitted");
+      expect(res.content[0].text).toContain("linea-0");
     });
 
     it("arcane_image_build_get pasa envId y buildId literales al cliente (3b)", async () => {

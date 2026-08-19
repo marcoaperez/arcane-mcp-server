@@ -191,8 +191,8 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | Tool | Description | Inputs |
 |---|---|---|
 | `arcane_template_registry_list` | List the template registries Arcane fetches Compose templates from. Check lastFetchError to see whether a registry is failing to load. | — |
-| `arcane_template_registry_create` | Add a template registry. Template registries hold no credentials: only a name, a URL and a description. | `name`, `url`, `description`, `enabled` |
-| `arcane_template_registry_update` | Update a template registry. All four fields are required. | `registryId`, `name`, `url`, `description`, `enabled` |
+| `arcane_template_registry_create` | Add a template registry. Template registries hold no credentials: a name, a URL, a description and enabled — all four are required. | `name`, `url`, `description`, `enabled` |
+| `arcane_template_registry_update` | Update a template registry. All four fields are required and this replaces all of them, including the ones you didn't mean to change: read the current values with arcane_template_registry_list first, or you will silently overwrite a field with a guessed value. | `registryId`, `name`, `url`, `description`, `enabled` |
 | `arcane_template_registry_delete` | Delete a template registry. | `registryId` |
 
 ### Git repositories (8)
@@ -296,16 +296,16 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | `arcane_container_registry_list` | List the container registries Arcane pulls images from. Credentials are never returned by this API: tokens and AWS secret keys are absent from the response, so what you get is configuration only. | `search?`, `sort?`, `order?`, `start?`, `limit?` |
 | `arcane_container_registry_get` | Get one container registry by ID. Credentials are never returned by this API. | `registryId` |
 | `arcane_container_registry_pull_usage` | Report pull-rate usage per registry: observed pulls, and the remaining quota when the provider exposes one. | — |
-| `arcane_container_registry_test` | Test connectivity and authentication to a container registry. Does not change any state. On failure the error text is the registry login output, which names the host and the reason. | `registryId` |
+| `arcane_container_registry_test` | Test connectivity and authentication to a container registry. Does not modify the registry's configuration in Arcane. This performs a real registry login against the third-party host; only the failure path has been observed (host unreachable) — the success path has not been exercised against this instance, so what it does beyond that is not confirmed. On failure the error text is the registry login output, which names the host and the reason. | `registryId` |
 
 ### Build workspace (4)
 
 | Tool | Description | Inputs |
 |---|---|---|
-| `arcane_build_workspace_browse` | List files and directories in the build workspace of an environment. The workspace is a directory inside the Arcane agent, not the host filesystem, and paths cannot escape it. | `environmentId?`, `environmentName?`, `path?` |
-| `arcane_build_workspace_read` | Read a file from the build workspace. Binary files are not returned: their type and size are reported instead. | `environmentId?`, `environmentName?`, `path`, `maxBytes?` |
-| `arcane_build_workspace_mkdir` | Create a directory in the build workspace. | `environmentId?`, `environmentName?`, `path` |
-| `arcane_build_workspace_delete` | Delete a file or directory from the build workspace. A path is required: this tool cannot delete the workspace root. | `environmentId?`, `environmentName?`, `path` |
+| `arcane_build_workspace_browse` | List files and directories in the build workspace of an environment. The workspace is a directory inside the Arcane agent, not the host filesystem, and paths cannot escape it. Measured against this instance: only 1 of the 6 environments has a usable build workspace. The other 5 respond "500 failed to ensure builds directory: mkdir /builds: permission denied". | `environmentId?`, `environmentName?`, `path?` |
+| `arcane_build_workspace_read` | Read a file from the build workspace. Binary files are not returned: their MIME type and the number of bytes read are reported instead. Measured against this instance: only 1 of the 6 environments has a usable build workspace. The other 5 respond "500 failed to ensure builds directory: mkdir /builds: permission denied". | `environmentId?`, `environmentName?`, `path`, `maxBytes?` |
+| `arcane_build_workspace_mkdir` | Create a directory in the build workspace. Measured against this instance: only 1 of the 6 environments has a usable build workspace. The other 5 respond "500 failed to ensure builds directory: mkdir /builds: permission denied". | `environmentId?`, `environmentName?`, `path` |
+| `arcane_build_workspace_delete` | Delete a file or directory from the build workspace. A path is required: this tool cannot delete the workspace root. Measured against this instance: only 1 of the 6 environments has a usable build workspace. The other 5 respond "500 failed to ensure builds directory: mkdir /builds: permission denied". | `environmentId?`, `environmentName?`, `path` |
 
 ### Image builds (4)
 
@@ -314,7 +314,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | `arcane_image_build` | Build a Docker image with BuildKit. Note that load:false does NOT discard the image: it is still created and tagged. Build arguments are stored by Arcane and readable afterwards, so do not pass secrets. | `environmentId?`, `environmentName?`, `contextDir`, `dockerfile?`, `dockerfileInline?`, `tags?`, `buildArgs?`, `labels?`, `target?`, `platforms?`, `noCache?`, `pull?`, `push?`, `load?`, `provider?` |
 | `arcane_project_build` | Build the Compose services of a project that declare a build directive. Do not rely on the project's hasBuildDirective field to decide: it reports false even for projects that do have one. | `environmentId?`, `environmentName?`, `projectId?`, `projectName?`, `services?`, `push?`, `load?`, `provider?` |
 | `arcane_image_build_list` | List the image build history of an environment. Build argument values are hidden; their names are kept. The environmentId recorded on each build is the agent's own local id, not the environment you queried. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `status?`, `provider?` |
-| `arcane_image_build_get` | Get one build record with its full build log. Build argument values are hidden, but the log itself is returned verbatim and contains whatever the build printed, including anything it echoed by mistake. | `environmentId?`, `environmentName?`, `buildId` |
+| `arcane_image_build_get` | Get one build record with its full build log. Build argument values are hidden, but the log itself is returned verbatim and contains whatever the build printed, including anything it echoed by mistake. The environmentId recorded on the build is the agent's own local id, not the environment you queried. | `environmentId?`, `environmentName?`, `buildId` |
 
 <!-- END TOOLS -->
 

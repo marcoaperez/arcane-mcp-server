@@ -45,7 +45,7 @@ export function registerContainerRegistryTools(server: McpServer, client: Arcane
 
   server.tool(
     "arcane_container_registry_test",
-    "Test connectivity and authentication to a container registry. Does not change any state. On failure the error text is the registry login output, which names the host and the reason.",
+    "Test connectivity and authentication to a container registry. Does not modify the registry's configuration in Arcane. This performs a real registry login against the third-party host; only the failure path has been observed (host unreachable) — the success path has not been exercised against this instance, so what it does beyond that is not confirmed. On failure the error text is the registry login output, which names the host and the reason.",
     { registryId: z.string().describe("Registry ID") },
     withErrors(async ({ registryId }) => {
       const result = await client.containerRegistries.test(registryId);
