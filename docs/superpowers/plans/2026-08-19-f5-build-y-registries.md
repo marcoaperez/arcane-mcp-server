@@ -787,7 +787,7 @@ describe("registerContainerRegistryTools", () => {
     const client = createMockClient();
     registerContainerRegistryTools(server, client as unknown as ArcaneClient);
 
-    const res = await (server as any)._registeredTools["arcane_container_registry_pull_usage"].callback({});
+    const res = await (server as any)._registeredTools["arcane_container_registry_pull_usage"].handler({});
 
     expect(JSON.parse(res.content[0].text)).toEqual({ registries: [] });
   });
@@ -800,7 +800,7 @@ describe("registerContainerRegistryTools", () => {
     );
     registerContainerRegistryTools(server, client as unknown as ArcaneClient);
 
-    const res = await (server as any)._registeredTools["arcane_container_registry_test"].callback({ registryId: "r1" });
+    const res = await (server as any)._registeredTools["arcane_container_registry_test"].handler({ registryId: "r1" });
 
     expect(res.isError).toBe(true);
     expect(res.content[0].text).toContain("no such host");
@@ -1579,7 +1579,7 @@ describe("registerBuildWorkspaceTools", () => {
     registerBuildWorkspaceTools(server, client as unknown as ArcaneClient);
 
     const res = await (server as any)._registeredTools["arcane_build_workspace_read"]
-      .callback({ environmentId: "env1", path: "a.bin" });
+      .handler({ environmentId: "env1", path: "a.bin" });
 
     expect(res.content[0].text).toContain("application/octet-stream");
     expect(res.content[0].text).toContain("4 bytes");
@@ -1596,7 +1596,7 @@ describe("registerBuildWorkspaceTools", () => {
     registerBuildWorkspaceTools(server, client as unknown as ArcaneClient);
 
     const res = await (server as any)._registeredTools["arcane_build_workspace_read"]
-      .callback({ environmentId: "env1", path: "Dockerfile" });
+      .handler({ environmentId: "env1", path: "Dockerfile" });
 
     expect(res.content[0].text).toBe("FROM alpine:3.19\n");
   });
@@ -2498,7 +2498,7 @@ describe("registerImageBuildTools", () => {
     registerImageBuildTools(server, client as unknown as ArcaneClient);
 
     const res = await (server as any)._registeredTools["arcane_image_build"]
-      .callback({ environmentId: "env1", contextDir: "/x" });
+      .handler({ environmentId: "env1", contextDir: "/x" });
 
     expect(res.isError).toBe(true);
     expect(res.content[0].text).toContain("build context not found");
@@ -2514,7 +2514,7 @@ describe("registerImageBuildTools", () => {
     registerImageBuildTools(server, client as unknown as ArcaneClient);
 
     const res = await (server as any)._registeredTools["arcane_image_build"]
-      .callback({ environmentId: "env1", contextDir: "/builds" });
+      .handler({ environmentId: "env1", contextDir: "/builds" });
 
     expect(res.isError).toBeUndefined();
     expect(res.content[0].text).toContain("150 earlier lines omitted");
@@ -2530,7 +2530,7 @@ describe("registerImageBuildTools", () => {
     registerImageBuildTools(server, client as unknown as ArcaneClient);
 
     const res = await (server as any)._registeredTools["arcane_image_build"]
-      .callback({ environmentId: "env1", contextDir: "/builds" });
+      .handler({ environmentId: "env1", contextDir: "/builds" });
 
     expect(res.content[0].text).not.toContain("earlier lines omitted");
   });
@@ -2547,7 +2547,7 @@ describe("registerImageBuildTools", () => {
     registerImageBuildTools(server, client as unknown as ArcaneClient);
 
     const res = await (server as any)._registeredTools["arcane_image_build_get"]
-      .callback({ environmentId: "env1", buildId: "b1" });
+      .handler({ environmentId: "env1", buildId: "b1" });
 
     expect(res.content[0].text).toContain("TRUNCATED");
   });
