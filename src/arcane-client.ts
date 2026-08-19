@@ -5,6 +5,24 @@ export class ArcaneApiError extends Error {
   }
 }
 
+/**
+ * Lanza ArcaneApiError si la respuesta no es correcta, usando el `detail` del
+ * cuerpo de error cuando lo hay.
+ *
+ * Extraido en F5: el mismo bloque estaba repetido literalmente en request(),
+ * requestMultipart(), requestNdjson() y VolumeBackupsMethods.download(), y la
+ * fase añadia dos sitios mas.
+ */
+async function lanzaSiFalla(response: Response): Promise<void> {
+  if (response.ok) return;
+  let message = response.statusText;
+  try {
+    const err = (await response.json()) as { detail?: string };
+    if (err.detail) message = err.detail;
+  } catch {}
+  throw new ArcaneApiError(response.status, message);
+}
+
 export interface Environment {
   id: string;
   name?: string;
@@ -2045,14 +2063,7 @@ class VolumeBackupsMethods {
       },
     });
 
-    if (!response.ok) {
-      let message = response.statusText;
-      try {
-        const err = (await response.json()) as { detail?: string };
-        if (err.detail) message = err.detail;
-      } catch {}
-      throw new ArcaneApiError(response.status, message);
-    }
+    await lanzaSiFalla(response);
 
     return response.blob();
   }
@@ -2196,14 +2207,7 @@ export class ArcaneClient {
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
 
-    if (!response.ok) {
-      let message = response.statusText;
-      try {
-        const err = (await response.json()) as { detail?: string };
-        if (err.detail) message = err.detail;
-      } catch {}
-      throw new ArcaneApiError(response.status, message);
-    }
+    await lanzaSiFalla(response);
 
     return response.json() as Promise<T>;
   }
@@ -2238,14 +2242,7 @@ export class ArcaneClient {
       body: form,
     });
 
-    if (!response.ok) {
-      let message = response.statusText;
-      try {
-        const err = (await response.json()) as { detail?: string };
-        if (err.detail) message = err.detail;
-      } catch {}
-      throw new ArcaneApiError(response.status, message);
-    }
+    await lanzaSiFalla(response);
 
     return response.json() as Promise<T>;
   }
@@ -2266,14 +2263,7 @@ export class ArcaneClient {
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
 
-    if (!response.ok) {
-      let message = response.statusText;
-      try {
-        const err = (await response.json()) as { detail?: string };
-        if (err.detail) message = err.detail;
-      } catch {}
-      throw new ArcaneApiError(response.status, message);
-    }
+    await lanzaSiFalla(response);
 
     const text = await response.text();
     const events: T[] = [];
