@@ -2173,6 +2173,8 @@ describe("MCP Tools", () => {
       const out = await server.getHandler("arcane_vulnerability_image_summaries")!({ environmentId: "env1", imageIds: "sha256:a, sha256:b" });
       expect(out.content[0].text).toContain("omits 1 of 2");
       expect(out.content[0].text).toContain("sha256:b");
+      expect(out.content[0].text).toContain("does not say why");
+      expect(out.content[0].text).not.toContain("Most likely");
     });
 
     it("image_summaries NO avisa cuando el mapa está completo", async () => {

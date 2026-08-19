@@ -133,7 +133,7 @@ export function registerVulnerabilityTools(server: McpServer, client: ArcaneClie
 
   server.tool(
     "arcane_vulnerability_image_summaries",
-    "Get vulnerability scan summaries for a LIST of images in one call. The response map omits images that have never been scanned — the tool flags this in prose when it happens.",
+    "Get vulnerability scan summaries for a LIST of images in one call. The response map can omit some of the requested images, and the response does not say why — the tool flags this in prose when it happens. Use arcane_vulnerability_scan on the ones you expect to have results.",
     {
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
@@ -144,16 +144,20 @@ export function registerVulnerabilityTools(server: McpServer, client: ArcaneClie
       const pedidas = parseCommaList(imageIds);
       const result = await client.vulnerabilities.imageSummaries(envId, pedidas);
       const texto = JSON.stringify(result.data, null, 2);
-      // Comportamiento medido contra la instancia real: las imagenes sin
-      // escaneo se OMITEN del mapa sin decir por que. Mismo tratamiento que
-      // arcane_image_update_status con by-refs.
+      // Comprobado contra la instancia real: la API omite del mapa IDs pedidas
+      // sin decir por qué -incluso un ID que no existe (sha256:000...0) se omite
+      // igual que una imagen real sin escaneo, y openapi.txt no documenta ningún
+      // motivo para las omisiones. Se dice lo que se sabe -que faltan del mapa-
+      // sin afirmar por qué, porque la tool tampoco lo sabe, y se da la acción:
+      // verificar los IDs y pedir escaneo fresco con arcane_vulnerability_scan.
       const devueltas = new Set(Object.keys(result.data.summaries ?? {}));
       const faltantes = pedidas.filter((id) => !devueltas.has(id));
       if (faltantes.length > 0) {
         return textResponse(
           `The response omits ${faltantes.length} of ${pedidas.length} requested image(s): ` +
-            `${faltantes.join(", ")}. Most likely those images have never been scanned — ` +
-            `launch arcane_vulnerability_scan on them to get results.\n${texto}`,
+            `${faltantes.join(", ")}. The response does not say why they are missing: an image ` +
+            `that was never scanned and an image ID that does not exist are both omitted the same way. ` +
+            `Check the IDs, and use arcane_vulnerability_scan on the ones you expect to have results.\n${texto}`,
         );
       }
       return textResponse(texto);
