@@ -23,6 +23,7 @@ import { registerGitOpsSyncTools } from "./tools/gitops-syncs";
 import { registerProjectAdditionalTools } from "./tools/projects-additional";
 import { registerImageUpdateTools } from "./tools/image-updates";
 import { registerUpdaterTools } from "./tools/updater";
+import { registerVulnerabilityTools } from "./tools/vulnerabilities";
 
 export class ArcaneAgent extends McpAgent<Env, Record<string, never>, Props> {
   server = new McpServer({
@@ -63,6 +64,7 @@ export class ArcaneAgent extends McpAgent<Env, Record<string, never>, Props> {
     registerProjectAdditionalTools(this.server, client);
     registerImageUpdateTools(this.server, client);
     registerUpdaterTools(this.server, client);
+    registerVulnerabilityTools(this.server, client);
   }
 }
 

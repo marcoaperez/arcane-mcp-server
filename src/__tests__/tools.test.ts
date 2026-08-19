@@ -20,6 +20,7 @@ import { registerGitOpsSyncTools } from "../tools/gitops-syncs";
 import { registerVolumeBackupTools } from "../tools/volume-backups";
 import { registerImageUpdateTools } from "../tools/image-updates";
 import { registerUpdaterTools } from "../tools/updater";
+import { registerVulnerabilityTools } from "../tools/vulnerabilities";
 
 type MockedFunction<T extends (...args: any[]) => any> = {
   (...args: Parameters<T>): ReturnType<T>;
@@ -184,6 +185,37 @@ describe("MCP Tools", () => {
         }) as MockedFunction<(envId: string, volumeName: string, opts?: ListOptions) => any>,
         delete: vi.fn(),
         restore: vi.fn(),
+      },
+      vulnerabilities: {
+        scannerStatus: vi.fn().mockResolvedValue({ success: true, data: { available: true, version: "0.73.0" } }),
+        environmentSummary: vi.fn().mockResolvedValue({
+          success: true,
+          data: { totalImages: 19, scannedImages: 1, summary: { critical: 0, high: 6, medium: 21, low: 17, unknown: 0, total: 44 } },
+        }),
+        listAll: vi.fn().mockResolvedValue({
+          success: true, data: [],
+          pagination: { totalPages: 1, totalItems: 0, currentPage: 1, itemsPerPage: 20 },
+        }),
+        imageOptions: vi.fn().mockResolvedValue({ success: true, data: ["curlimages/curl:8.5.0"] }),
+        scanResult: vi.fn().mockResolvedValue({
+          success: true,
+          data: { imageId: "sha256:abc", imageName: "curlimages/curl:8.5.0", scanTime: "t", status: "completed" },
+        }),
+        imageList: vi.fn().mockResolvedValue({
+          success: true, data: [],
+          pagination: { totalPages: 1, totalItems: 0, currentPage: 1, itemsPerPage: 20 },
+        }),
+        imageSummary: vi.fn().mockResolvedValue({
+          success: true, data: { imageId: "sha256:abc", scanTime: "t", status: "completed" },
+        }),
+        imageSummaries: vi.fn().mockResolvedValue({ success: true, data: { summaries: {} } }),
+        ignoredList: vi.fn().mockResolvedValue({
+          success: true, data: [],
+          pagination: { totalPages: 1, totalItems: 0, currentPage: 1, itemsPerPage: 20 },
+        }),
+        scan: vi.fn(),
+        ignore: vi.fn(),
+        unignore: vi.fn(),
       },
     } as unknown as ArcaneClient;
     return mockClient;
@@ -2074,6 +2106,109 @@ describe("MCP Tools", () => {
 
       await server.getHandler("arcane_stack_list")({ environmentId: "env1", updates: "up_to_date" });
       expect(mockClient.stacks.list).toHaveBeenCalledWith("env1", expect.objectContaining({ updates: "up_to_date" }));
+    });
+  });
+
+  describe("vulnerability tools", () => {
+    const NOMBRES_LECTURA = [
+      "arcane_vulnerability_scanner_status",
+      "arcane_vulnerability_summary",
+      "arcane_vulnerability_list",
+      "arcane_vulnerability_image_options",
+      "arcane_vulnerability_scan_result",
+      "arcane_vulnerability_image_list",
+      "arcane_vulnerability_image_summary",
+      "arcane_vulnerability_image_summaries",
+      "arcane_vulnerability_ignored_list",
+    ];
+
+    it("registra las 9 tools de lectura", () => {
+      const server = createMockServer();
+      registerVulnerabilityTools(server as any, createMockClient());
+      for (const nombre of NOMBRES_LECTURA) {
+        expect(server.getHandler(nombre), nombre).toBeDefined();
+      }
+    });
+
+    it("scan_result RECORTA el detalle: metadatos sí, CVEs no", async () => {
+      const mockClient = createMockClient();
+      (mockClient.vulnerabilities.scanResult as any).mockResolvedValue({
+        success: true,
+        data: {
+          imageId: "sha256:abc", imageName: "curlimages/curl:8.5.0", scanTime: "t",
+          status: "completed", scanPhase: "storing_results", activityId: "act-1",
+          scannerVersion: "0.73.0", duration: 13,
+          summary: { critical: 0, high: 1, medium: 1, low: 1, unknown: 0, total: 3 },
+          vulnerabilities: [
+            { vulnerabilityId: "CVE-2023-42363", pkgName: "busybox", installedVersion: "1", severity: "MEDIUM", description: "use-after-free in awk", references: ["https://example.org/cve"] },
+            { vulnerabilityId: "CVE-2024-6119", pkgName: "libcrypto3", installedVersion: "3", severity: "HIGH", description: "denial of service", references: [] },
+            { vulnerabilityId: "CVE-2023-42364", pkgName: "busybox", installedVersion: "1", severity: "LOW", description: "otra", references: [] },
+          ],
+        },
+      });
+      const server = createMockServer();
+      registerVulnerabilityTools(server as any, mockClient);
+      const out = await server.getHandler("arcane_vulnerability_scan_result")!({ environmentId: "env1", imageId: "sha256:abc" });
+      const texto = out.content[0].text;
+      // Metadatos presentes...
+      expect(texto).toContain('"status": "completed"');
+      expect(texto).toContain('"activityId": "act-1"');
+      expect(texto).toContain('"total": 3');
+      // ...prosa que remite al listado paginado...
+      expect(texto).toContain("arcane_vulnerability_image_list");
+      // ...y NADA del detalle de las CVEs.
+      expect(texto).not.toContain("CVE-2023-42363");
+      expect(texto).not.toContain("use-after-free");
+      expect(texto).not.toContain('"references"');
+    });
+
+    it("image_summaries avisa cuando el mapa omite referencias pedidas", async () => {
+      const mockClient = createMockClient();
+      (mockClient.vulnerabilities.imageSummaries as any).mockResolvedValue({
+        success: true,
+        data: { summaries: { "sha256:a": { imageId: "sha256:a", scanTime: "t", status: "completed" } } },
+      });
+      const server = createMockServer();
+      registerVulnerabilityTools(server as any, mockClient);
+      const out = await server.getHandler("arcane_vulnerability_image_summaries")!({ environmentId: "env1", imageIds: "sha256:a, sha256:b" });
+      expect(out.content[0].text).toContain("omits 1 of 2");
+      expect(out.content[0].text).toContain("sha256:b");
+    });
+
+    it("image_summaries NO avisa cuando el mapa está completo", async () => {
+      const mockClient = createMockClient();
+      (mockClient.vulnerabilities.imageSummaries as any).mockResolvedValue({
+        success: true,
+        data: { summaries: { "sha256:a": { imageId: "sha256:a", scanTime: "t", status: "completed" } } },
+      });
+      const server = createMockServer();
+      registerVulnerabilityTools(server as any, mockClient);
+      const out = await server.getHandler("arcane_vulnerability_image_summaries")!({ environmentId: "env1", imageIds: "sha256:a" });
+      expect(out.content[0].text).not.toContain("omits");
+    });
+
+    it("vulnerability_list usa el contrato de listResponse con prosa multipágina", async () => {
+      const mockClient = createMockClient();
+      (mockClient.vulnerabilities.listAll as any).mockResolvedValue({
+        success: true,
+        data: [{ vulnerabilityId: "CVE-1", pkgName: "p", installedVersion: "1", severity: "HIGH", imageId: "sha256:a", imageName: "x" }],
+        pagination: { totalPages: 2, totalItems: 3, currentPage: 1, itemsPerPage: 2, grandTotalItems: 3 },
+      });
+      const server = createMockServer();
+      registerVulnerabilityTools(server as any, mockClient);
+      const out = await server.getHandler("arcane_vulnerability_list")!({ environmentId: "env1", severity: "high" });
+      expect(out.content[0].text).toContain("Showing 1 of 3 vulnerabilities (page 1 of 2).");
+      expect((mockClient.vulnerabilities.listAll as any).mock.calls[0][1]).toMatchObject({ severity: "high" });
+    });
+
+    it("las tools de lectura devuelven isError ante un fallo del cliente", async () => {
+      const mockClient = createMockClient();
+      (mockClient.vulnerabilities.scanResult as any).mockRejectedValue(new ArcaneApiError(404, "Vulnerability scan not found"));
+      const server = createMockServer();
+      registerVulnerabilityTools(server as any, mockClient);
+      const out = await server.getHandler("arcane_vulnerability_scan_result")!({ environmentId: "env1", imageId: "sha256:no" });
+      expect(out.isError).toBe(true);
+      expect(out.content[0].text).toContain("Vulnerability scan not found");
     });
   });
 });
