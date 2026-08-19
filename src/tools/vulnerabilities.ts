@@ -76,7 +76,7 @@ export function registerVulnerabilityTools(server: McpServer, client: ArcaneClie
 
   server.tool(
     "arcane_vulnerability_scan_result",
-    "Get the scan metadata for ONE image: status (scanning/completed/failed), scan time, scanner version, error if any, and the severity summary. The full CVE detail is deliberately NOT included — page through it with arcane_vulnerability_image_list. An error saying the scan was not found means the image has never been scanned: launch arcane_vulnerability_scan first.",
+    "Get the scan metadata for ONE image: status (scanning/completed/failed), scan time, scanner version, error if any, and the severity summary. The full CVE detail is deliberately NOT included — page through it with arcane_vulnerability_image_list. An error saying the scan was not found means there are no scan results for that image ID: either it was never scanned, or the ID is wrong — the error does not distinguish the two. Check the ID, then launch arcane_vulnerability_scan if you expect results.",
     {
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
@@ -101,7 +101,7 @@ export function registerVulnerabilityTools(server: McpServer, client: ArcaneClie
 
   server.tool(
     "arcane_vulnerability_image_list",
-    "List the vulnerabilities of ONE image, paginated, with full CVE detail per item. Filter by severity. An error saying the scan was not found means the image has never been scanned: launch arcane_vulnerability_scan first.",
+    "List the vulnerabilities of ONE image, paginated, with full CVE detail per item. Filter by severity. An error saying the scan was not found means there are no scan results for that image ID: either it was never scanned, or the ID is wrong — the error does not distinguish the two. Check the ID, then launch arcane_vulnerability_scan if you expect results.",
     {
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
@@ -118,7 +118,7 @@ export function registerVulnerabilityTools(server: McpServer, client: ArcaneClie
 
   server.tool(
     "arcane_vulnerability_image_summary",
-    "Get the vulnerability summary of ONE image: scan status, scan time and CVE counts by severity. An error saying the scan was not found means the image has never been scanned: launch arcane_vulnerability_scan first.",
+    "Get the vulnerability summary of ONE image: scan status, scan time and CVE counts by severity. An error saying the scan was not found means there are no scan results for that image ID: either it was never scanned, or the ID is wrong — the error does not distinguish the two. Check the ID, then launch arcane_vulnerability_scan if you expect results.",
     {
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),

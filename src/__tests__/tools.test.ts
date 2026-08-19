@@ -2212,5 +2212,23 @@ describe("MCP Tools", () => {
       expect(out.isError).toBe(true);
       expect(out.content[0].text).toContain("Vulnerability scan not found");
     });
+
+    it("scan_result, image_list e image_summary NO inventan la causa del 404", () => {
+      // El 404 de "scan not found" no distingue entre imagen inexistente e imagen
+      // no escaneada. Las descripciones deben decir lo observable: el error no
+      // distingue las dos causas; nunca afirmar "significa X" cuando podría ser X o Y.
+      const server = createMockServer();
+      registerVulnerabilityTools(server as any, createMockClient());
+
+      const toolsAauditar = ["arcane_vulnerability_scan_result", "arcane_vulnerability_image_list", "arcane_vulnerability_image_summary"];
+
+      for (const toolName of toolsAauditar) {
+        const call = (server.tool as any).mock.calls.find((c: any[]) => c[0] === toolName);
+        expect(call, `tool ${toolName} debería estar registrada`).toBeDefined();
+        const description = call[1];
+        expect(description, `${toolName}: no debe afirmar "means the image has never been scanned"`).not.toContain("means the image has never been scanned");
+        expect(description, `${toolName}: debe decir "does not distinguish"`).toContain("does not distinguish");
+      }
+    });
   });
 });
