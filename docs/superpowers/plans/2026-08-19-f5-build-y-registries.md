@@ -1718,7 +1718,22 @@ git add -A && git commit -m "feat(builds): explorar, leer, crear y borrar en el 
 
 ---
 
-## Tarea 6: Workspace de builds — `upload`
+## Tarea 6: Workspace de builds — `upload` — **DIFERIDA, no se implementa**
+
+> **Medido el 2026-08-19 y decidido por el propietario: esta tarea NO se ejecuta.**
+> El flujo son tres llamadas y ningun entorno soporta las tres — donde responde
+> `/uploads/{kind}` da 500 `/builds`, y donde `/builds` va bien `/uploads` da 404. Sin
+> e2e posible, y la regla dura del proyecto no admite excepcion. La tool pasa a
+> `criterio-exposicion.md` §2.4 como **diferida, no excluida**: reversible en cuanto un
+> entorno gane las dos rutas.
+>
+> Dos correcciones a lo que este plan afirmaba: **`openapi.txt` SI enumera `{kind}`**
+> (`["image","volume-backup","build-workspace"]`, y el valor bueno es `build-workspace`,
+> no `builds`), y `UploadSession.receivedChunks` es un **array**, no un numero.
+>
+> Lo de abajo se conserva como registro de lo que habria hecho falta.
+
+### Contenido original de la tarea
 
 Va aparte porque **no es una llamada, son tres**, y un revisor puede rechazarla sin
 rechazar la Tarea 5.

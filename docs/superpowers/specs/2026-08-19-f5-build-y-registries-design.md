@@ -4,7 +4,8 @@
 - **Punto de partida:** `e72bbcf` (cierre de F4) — 100 tools, 294 unitarios, 59 e2e,
   drift 21, cobertura 98 de 249
 - **Base:** Arcane **2.8.0** (`openapi.txt`, 273 paths, 347 operaciones)
-- **Alcance:** 17 tools sobre 17 de las 22 operaciones del dominio
+- **Alcance:** 16 tools entregadas sobre 22 operaciones. Una 17.a, `upload`, queda
+  **diferida** por imposibilidad de verificacion (§3.1)
 
 Todas las cifras y comportamientos de este documento salen de un comando ejecutado
 contra la instancia real el 2026-08-19. Ninguno viene de `openapi.txt` sin
@@ -133,7 +134,7 @@ nuevos. **Se reproduce, no se resta a mano.**
 | `GET /environments/{id}/builds/browse` | `arcane_build_workspace_browse` |
 | `GET .../builds/browse/content` | `arcane_build_workspace_read` |
 | `POST .../builds/browse/mkdir` | `arcane_build_workspace_mkdir` |
-| `POST .../builds/browse/upload` | `arcane_build_workspace_upload` |
+| `POST .../builds/browse/upload` | `arcane_build_workspace_upload` — **diferida, ver §3.1** |
 | `DELETE .../builds/browse` | `arcane_build_workspace_delete` |
 | `POST .../images/build` | `arcane_image_build` |
 | `GET .../images/builds` | `arcane_image_build_list` |
@@ -147,6 +148,41 @@ sujeto sobre el que ejercitarla— quedó cerrada en la §8: es `ical-bridge`.
 falsas. Cobertura, drift, número de tools y de tests se miden al cerrar la fase.
 
 ---
+
+### 3.1 `arcane_build_workspace_upload` queda diferida, no excluida
+
+**Medido el 2026-08-19, durante la implementacion:** el flujo de subida son tres
+llamadas encadenadas, y **ningun entorno de esta instancia soporta las tres**.
+
+| Entorno | `POST /uploads/build-workspace` | `GET /builds/browse` |
+|---|---|---|
+| Local Docker (`0`) | **200**, sesion creada | **500** `mkdir /builds: permission denied` |
+| Zabbix | **404** `endpoint not found` | **200** |
+| Los otros cuatro | **404** | **500** |
+
+Son conjuntos disjuntos: donde existe `/uploads` no existe `/builds`, y al reves. El
+flujo se ejecuto entero contra `environments/0`: los pasos 1 y 2 completan limpios
+—sesion creada, trozo subido, `complete:true`— y el paso 3 falla con el 500 de
+`/builds`. Ademas, **una finalizacion fallida consume la sesion**: no se puede
+reintentar el paso 3 sin repetir los dos anteriores.
+
+Es la situacion exacta de `swarm` en
+[`criterio-exposicion.md` §2.2](../../arquitectura/criterio-exposicion.md): la regla dura
+del proyecto exige e2e contra la instancia real, y aqui no es posible en ningun entorno.
+
+**Va a §2.4 como diferida, no excluida**, y sigue contando en el denominador: basta con
+que un entorno gane las dos rutas —arreglando el permiso de `/builds` en el contenedor de
+Arcane, o que el agente remoto empiece a reenviar `/uploads/{kind}`— para que se entregue.
+
+### 3.2 Una correccion: el spec SI documenta `kind`
+
+Este documento afirmaba que `openapi.txt` no enumeraba los valores de `{kind}`. **Era
+falso.** El spec los declara: `["image", "volume-backup", "build-workspace"]`, y el valor
+correcto para el workspace de builds es **`build-workspace`**, no `builds`. Lo destapo el
+implementador de la Tarea 6 leyendo el spec en vez de fiarse de este documento.
+
+Tambien difiere el shape: `UploadSession.receivedChunks` es un **array** de indices
+recibidos, no un numero.
 
 ## 4. Arquitectura
 
