@@ -1275,14 +1275,14 @@ describe("ArcaneClient", () => {
       );
     });
 
-    it(".scanResult codifica el imageId en la ruta", async () => {
+    it(".scanResult deja el imageId crudo en la ruta (Arcane no decodifica %3A)", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
         json: async () => ({ success: true, data: { imageId: "sha256:abc", imageName: "x", scanTime: "t", status: "completed" } }),
       } as Response);
       await client.vulnerabilities.scanResult("env1", "sha256:abc");
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env1/images/sha256%3Aabc/vulnerabilities",
+        "http://localhost:3552/api/environments/env1/images/sha256:abc/vulnerabilities",
         expect.objectContaining({ method: "GET" })
       );
     });
@@ -1294,7 +1294,7 @@ describe("ArcaneClient", () => {
       } as Response);
       await client.vulnerabilities.imageList("env1", "sha256:abc", { sort: "severity", limit: 3, severity: "high" });
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env1/images/sha256%3Aabc/vulnerabilities/list?sort=severity&limit=3&severity=high",
+        "http://localhost:3552/api/environments/env1/images/sha256:abc/vulnerabilities/list?sort=severity&limit=3&severity=high",
         expect.objectContaining({ method: "GET" })
       );
     });
@@ -1307,14 +1307,14 @@ describe("ArcaneClient", () => {
       // Caso A: con sort y limit, pero sin severity
       await client.vulnerabilities.imageList("env1", "sha256:abc", { sort: "severity", limit: 20 });
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env1/images/sha256%3Aabc/vulnerabilities/list?sort=severity&limit=20",
+        "http://localhost:3552/api/environments/env1/images/sha256:abc/vulnerabilities/list?sort=severity&limit=20",
         expect.objectContaining({ method: "GET" })
       );
       mockFetch.mockClear();
       // Caso B: sin opciones en absoluto (ninguna query)
       await client.vulnerabilities.imageList("env1", "sha256:abc");
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env1/images/sha256%3Aabc/vulnerabilities/list",
+        "http://localhost:3552/api/environments/env1/images/sha256:abc/vulnerabilities/list",
         expect.objectContaining({ method: "GET" })
       );
     });
@@ -1326,7 +1326,7 @@ describe("ArcaneClient", () => {
       } as Response);
       await client.vulnerabilities.imageSummary("env1", "sha256:abc");
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env1/images/sha256%3Aabc/vulnerabilities/summary",
+        "http://localhost:3552/api/environments/env1/images/sha256:abc/vulnerabilities/summary",
         expect.objectContaining({ method: "GET" })
       );
     });
@@ -1370,7 +1370,7 @@ describe("ArcaneClient", () => {
       } as Response);
       const r = await client.vulnerabilities.scan("env1", "sha256:abc");
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env1/images/sha256%3Aabc/vulnerabilities/scan",
+        "http://localhost:3552/api/environments/env1/images/sha256:abc/vulnerabilities/scan",
         expect.objectContaining({ method: "POST" })
       );
       expect(r.data.status).toBe("scanning");

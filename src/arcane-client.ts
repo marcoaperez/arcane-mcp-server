@@ -1728,10 +1728,21 @@ class VulnerabilitiesMethods {
     );
   }
 
+  /**
+   * El imageId va SIN encodeURIComponent en este segmento de ruta a
+   * propósito. Un image ID Docker tiene forma "sha256:08e466...": codificado
+   * queda "sha256%3A08e466...", y el router de Arcane NO decodifica ese
+   * segmento — la petición apunta a una imagen que no existe. Medido contra
+   * la instancia real el 2026-08-19: la versión codificada da 404 en este
+   * endpoint y en /summary, 500 "invalid reference format" en /scan, y en
+   * /list falla EN SILENCIO devolviendo 200 con 0 items (sin error visible,
+   * el más fácil de pasar por alto). Por eso NO "arreglar" esto volviendo a
+   * poner encodeURIComponent.
+   */
   async scanResult(envId: string, imageId: string): Promise<{ success: boolean; data: VulnerabilityScanResult }> {
     return this.client.request<{ success: boolean; data: VulnerabilityScanResult }>(
       "GET",
-      `/environments/${encodeURIComponent(envId)}/images/${encodeURIComponent(imageId)}/vulnerabilities`
+      `/environments/${encodeURIComponent(envId)}/images/${imageId}/vulnerabilities`
     );
   }
 
@@ -1746,14 +1757,14 @@ class VulnerabilitiesMethods {
     const query = params.toString();
     return this.client.request<PaginatedResponse<Vulnerability>>(
       "GET",
-      `/environments/${encodeURIComponent(envId)}/images/${encodeURIComponent(imageId)}/vulnerabilities/list${query ? `?${query}` : ""}`
+      `/environments/${encodeURIComponent(envId)}/images/${imageId}/vulnerabilities/list${query ? `?${query}` : ""}`
     );
   }
 
   async imageSummary(envId: string, imageId: string): Promise<{ success: boolean; data: VulnerabilityScanSummary }> {
     return this.client.request<{ success: boolean; data: VulnerabilityScanSummary }>(
       "GET",
-      `/environments/${encodeURIComponent(envId)}/images/${encodeURIComponent(imageId)}/vulnerabilities/summary`
+      `/environments/${encodeURIComponent(envId)}/images/${imageId}/vulnerabilities/summary`
     );
   }
 
@@ -1788,7 +1799,7 @@ class VulnerabilitiesMethods {
   async scan(envId: string, imageId: string): Promise<{ success: boolean; data: VulnerabilityScanResult }> {
     return this.client.request<{ success: boolean; data: VulnerabilityScanResult }>(
       "POST",
-      `/environments/${encodeURIComponent(envId)}/images/${encodeURIComponent(imageId)}/vulnerabilities/scan`
+      `/environments/${encodeURIComponent(envId)}/images/${imageId}/vulnerabilities/scan`
     );
   }
 
