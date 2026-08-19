@@ -76,7 +76,7 @@ percent-decodifica los segmentos `{imageId}`.
 
 <!-- BEGIN TOOLS -->
 
-Las **104** tools que expone el servidor, agrupadas por dominio. Esta tabla la
+Las **108** tools que expone el servidor, agrupadas por dominio. Esta tabla la
 genera `npm run gen-tools-table` a partir de `src/tools/`: las descripciones y los
 parámetros son los que registra el código, no una copia mantenida a mano.
 
@@ -185,6 +185,15 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | `arcane_template_create` | Create a new Docker Compose template. | `name`, `description`, `content`, `envContent` |
 | `arcane_template_update` | Update an existing template. The API replaces the whole template, so all fields are required. | `templateId`, `name`, `description`, `content`, `envContent` |
 | `arcane_template_delete` | Delete a template. | `templateId` |
+
+### Template registries (4)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_template_registry_list` | List the template registries Arcane fetches Compose templates from. Check lastFetchError to see whether a registry is failing to load. | — |
+| `arcane_template_registry_create` | Add a template registry. Template registries hold no credentials: only a name, a URL and a description. | `name`, `url`, `description`, `enabled` |
+| `arcane_template_registry_update` | Update a template registry. All four fields are required. | `registryId`, `name`, `url`, `description`, `enabled` |
+| `arcane_template_registry_delete` | Delete a template registry. | `registryId` |
 
 ### Git repositories (8)
 

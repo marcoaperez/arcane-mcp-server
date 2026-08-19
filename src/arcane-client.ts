@@ -1912,6 +1912,61 @@ export interface MessageResponse {
   data: { message: string };
 }
 
+/**
+ * Registro de plantillas: un catalogo de plantillas por URL. A diferencia de
+ * ContainerRegistry, NO guarda credenciales de ningun tipo -medido contra el
+ * spec y contra la instancia-, asi que su CRUD se expone entero.
+ */
+export interface TemplateRegistry {
+  id: string;
+  enabled: boolean;
+  name: string;
+  description: string;
+  url: string;
+  lastFetchError?: string;
+}
+
+export interface TemplateRegistryInput {
+  name: string;
+  url: string;
+  description: string;
+  enabled: boolean;
+}
+
+class TemplateRegistriesMethods {
+  constructor(private client: ArcaneClient) {}
+
+  async list(): Promise<{ success: boolean; data: TemplateRegistry[] | null }> {
+    return this.client.request<{ success: boolean; data: TemplateRegistry[] | null }>(
+      "GET",
+      "/templates/registries",
+    );
+  }
+
+  async create(dto: TemplateRegistryInput): Promise<{ success: boolean; data: TemplateRegistry }> {
+    return this.client.request<{ success: boolean; data: TemplateRegistry }>(
+      "POST",
+      "/templates/registries",
+      dto,
+    );
+  }
+
+  async update(id: string, dto: TemplateRegistryInput): Promise<MessageResponse> {
+    return this.client.request<MessageResponse>(
+      "PUT",
+      `/templates/registries/${encodeURIComponent(id)}`,
+      dto,
+    );
+  }
+
+  async delete(id: string): Promise<MessageResponse> {
+    return this.client.request<MessageResponse>(
+      "DELETE",
+      `/templates/registries/${encodeURIComponent(id)}`,
+    );
+  }
+}
+
 class GitRepositoriesMethods {
   constructor(private client: ArcaneClient) {}
 
@@ -2234,6 +2289,7 @@ export class ArcaneClient {
   readonly volumeBackups: VolumeBackupsMethods;
   readonly volumeFiles: VolumeFilesMethods;
   readonly containerRegistries: ContainerRegistriesMethods;
+  readonly templateRegistries: TemplateRegistriesMethods;
 
   // When a Cloudflare VPC Fetcher is provided, routing to the Arcane backend
   // is handled by the service binding — only the path portion of URLs matters.
@@ -2271,6 +2327,7 @@ export class ArcaneClient {
     this.volumeBackups = new VolumeBackupsMethods(this);
     this.volumeFiles = new VolumeFilesMethods(this);
     this.containerRegistries = new ContainerRegistriesMethods(this);
+    this.templateRegistries = new TemplateRegistriesMethods(this);
   }
 
   getBaseUrl(): string {

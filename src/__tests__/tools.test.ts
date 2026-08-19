@@ -22,6 +22,7 @@ import { registerImageUpdateTools } from "../tools/image-updates";
 import { registerUpdaterTools } from "../tools/updater";
 import { registerVulnerabilityTools } from "../tools/vulnerabilities";
 import { registerContainerRegistryTools } from "../tools/container-registries";
+import { registerTemplateRegistryTools } from "../tools/template-registries";
 
 type MockedFunction<T extends (...args: any[]) => any> = {
   (...args: Parameters<T>): ReturnType<T>;
@@ -227,6 +228,15 @@ describe("MCP Tools", () => {
         get: vi.fn().mockResolvedValue({ success: true, data: { id: "r1", url: "reg.example" } }),
         pullUsage: vi.fn().mockResolvedValue({ success: true, data: { registries: null } }),
         test: vi.fn().mockResolvedValue({ success: true, data: { message: "Registry reachable" } }),
+      },
+      templateRegistries: {
+        list: vi.fn().mockResolvedValue({ success: true, data: [] }),
+        create: vi.fn().mockResolvedValue({
+          success: true,
+          data: { id: "tr1", name: "catalogo", url: "https://ejemplo.invalid/t.json", description: "d", enabled: true },
+        }),
+        update: vi.fn().mockResolvedValue({ success: true, data: { message: "Registry updated" } }),
+        delete: vi.fn().mockResolvedValue({ success: true, data: { message: "Registry deleted" } }),
       },
     } as unknown as ArcaneClient;
     return mockClient;
@@ -2395,6 +2405,92 @@ describe("MCP Tools", () => {
 
       expect(res.isError).toBe(true);
       expect(res.content[0].text).toContain("no such host");
+    });
+  });
+
+  describe("template-registries.ts", () => {
+    it("arcane_template_registry_list calls client.templateRegistries.list", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      registerTemplateRegistryTools(server as any, client);
+
+      const handler = server.getHandler("arcane_template_registry_list");
+      const result = await handler({});
+
+      expect(client.templateRegistries.list).toHaveBeenCalledWith();
+      expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
+    });
+
+    it("arcane_template_registry_create calls client.templateRegistries.create with the four fields", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      registerTemplateRegistryTools(server as any, client);
+
+      const handler = server.getHandler("arcane_template_registry_create");
+      const result = await handler({
+        name: "catalogo",
+        url: "https://ejemplo.invalid/t.json",
+        description: "d",
+        enabled: false,
+      });
+
+      expect(client.templateRegistries.create).toHaveBeenCalledWith({
+        name: "catalogo",
+        url: "https://ejemplo.invalid/t.json",
+        description: "d",
+        enabled: false,
+      });
+      expect(result.content).toEqual([{ type: "text", text: expect.any(String) }]);
+    });
+
+    it("arcane_template_registry_update calls client.templateRegistries.update with registryId and the four fields", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      registerTemplateRegistryTools(server as any, client);
+
+      const handler = server.getHandler("arcane_template_registry_update");
+      const result = await handler({
+        registryId: "tr1",
+        name: "catalogo",
+        url: "https://ejemplo.invalid/t.json",
+        description: "d nueva",
+        enabled: false,
+      });
+
+      expect(client.templateRegistries.update).toHaveBeenCalledWith("tr1", {
+        name: "catalogo",
+        url: "https://ejemplo.invalid/t.json",
+        description: "d nueva",
+        enabled: false,
+      });
+      expect(result.content).toEqual([{ type: "text", text: "Registry updated" }]);
+    });
+
+    it("arcane_template_registry_delete calls client.templateRegistries.delete with registryId", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      registerTemplateRegistryTools(server as any, client);
+
+      const handler = server.getHandler("arcane_template_registry_delete");
+      const result = await handler({ registryId: "tr1" });
+
+      expect(client.templateRegistries.delete).toHaveBeenCalledWith("tr1");
+      expect(result.content).toEqual([{ type: "text", text: "Registry deleted" }]);
+    });
+
+    it("arcane_template_registry_delete devuelve isError cuando la API falla", async () => {
+      const server = createMockServer();
+      const client = createMockClient();
+      (client.templateRegistries.delete as any).mockRejectedValue(
+        new ArcaneApiError(404, "Template registry not found"),
+      );
+      registerTemplateRegistryTools(server as any, client);
+
+      const handler = server.getHandler("arcane_template_registry_delete");
+      const res = await handler!({ registryId: "tr1" });
+
+      expect(res.isError).toBe(true);
+      expect(res.content[0].text).toContain("Template registry not found");
     });
   });
 });

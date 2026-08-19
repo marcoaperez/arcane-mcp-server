@@ -31,6 +31,7 @@ const GROUPS = [
   ["volume-files.ts", "Volume files"],
   ["networks.ts", "Networks"],
   ["templates.ts", "Templates"],
+  ["template-registries.ts", "Template registries"],
   ["git-repositories.ts", "Git repositories"],
   ["gitops-syncs.ts", "GitOps syncs"],
   ["system.ts", "System"],

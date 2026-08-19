@@ -25,6 +25,7 @@ import { registerImageUpdateTools } from "./tools/image-updates";
 import { registerUpdaterTools } from "./tools/updater";
 import { registerVulnerabilityTools } from "./tools/vulnerabilities";
 import { registerContainerRegistryTools } from "./tools/container-registries";
+import { registerTemplateRegistryTools } from "./tools/template-registries";
 
 export class ArcaneAgent extends McpAgent<Env, Record<string, never>, Props> {
   server = new McpServer({
@@ -67,6 +68,7 @@ export class ArcaneAgent extends McpAgent<Env, Record<string, never>, Props> {
     registerUpdaterTools(this.server, client);
     registerVulnerabilityTools(this.server, client);
     registerContainerRegistryTools(this.server, client);
+    registerTemplateRegistryTools(this.server, client);
   }
 }
 

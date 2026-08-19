@@ -2144,4 +2144,49 @@ describe("ArcaneClient", () => {
       );
     });
   });
+
+  describe("templateRegistries", () => {
+    it(".list() - GET /templates/registries", async () => {
+      mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, data: [] }) } as Response);
+      await client.templateRegistries.list();
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/templates/registries",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it(".create(dto) - POST con el cuerpo serializado", async () => {
+      mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, data: {} }) } as Response);
+      await client.templateRegistries.create({
+        name: "catalogo", url: "https://ejemplo.invalid/t.json", description: "d", enabled: true,
+      });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/templates/registries",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ name: "catalogo", url: "https://ejemplo.invalid/t.json", description: "d", enabled: true }),
+        }),
+      );
+    });
+
+    it(".update(id, dto) codifica el id y no permite traversal", async () => {
+      mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, data: { message: "ok" } }) } as Response);
+      await client.templateRegistries.update("../../system/containers/stop-all#", {
+        name: "n", url: "https://ejemplo.invalid/t.json", description: "d", enabled: false,
+      });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/templates/registries/..%2F..%2Fsystem%2Fcontainers%2Fstop-all%23",
+        expect.objectContaining({ method: "PUT" }),
+      );
+    });
+
+    it(".delete(id) codifica el id", async () => {
+      mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, data: { message: "ok" } }) } as Response);
+      await client.templateRegistries.delete("reg#1");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/templates/registries/reg%231",
+        expect.objectContaining({ method: "DELETE" }),
+      );
+    });
+  });
 });

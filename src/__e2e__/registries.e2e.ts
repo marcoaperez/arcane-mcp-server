@@ -47,3 +47,45 @@ describe("e2e: registros de contenedor contra Arcane real", () => {
     );
   });
 });
+
+describe("e2e: registros de plantillas contra Arcane real", () => {
+  let id: string;
+
+  afterAll(async () => {
+    if (id) {
+      try { await client.templateRegistries.delete(id); }
+      catch (e) {
+        console.error(`\n[e2e] RESIDUO: registro de plantillas ${id} sin borrar: ${e}\n`);
+      }
+    }
+  });
+
+  it("create() devuelve el registro creado", async () => {
+    const res = await client.templateRegistries.create({
+      name: "arcane-mcp-e2e",
+      url: "https://arcane-mcp-e2e.invalid/templates.json",
+      description: "sonda e2e de arcane-mcp - borrar si sobrevive",
+      enabled: false,
+    });
+    id = res.data.id;
+    expect(res.data.name).toBe("arcane-mcp-e2e");
+    expect(res.data.enabled).toBe(false);
+  });
+
+  it("list() lo encuentra", async () => {
+    const res = await client.templateRegistries.list();
+    expect((res.data ?? []).map(r => r.id)).toContain(id);
+  });
+
+  it("update() cambia la descripcion y el cambio se ve en list()", async () => {
+    await client.templateRegistries.update(id, {
+      name: "arcane-mcp-e2e",
+      url: "https://arcane-mcp-e2e.invalid/templates.json",
+      description: "descripcion cambiada por el e2e",
+      enabled: false,
+    });
+    const res = await client.templateRegistries.list();
+    const actual = (res.data ?? []).find(r => r.id === id);
+    expect(actual!.description).toBe("descripcion cambiada por el e2e");
+  });
+});
