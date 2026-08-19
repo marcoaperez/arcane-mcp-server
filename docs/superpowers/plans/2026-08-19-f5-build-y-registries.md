@@ -314,7 +314,7 @@ grep -c "if (err.detail) message = err.detail" src/arcane-client.ts
 ```
 
 Esperado: **el mismo numero de tests del Paso 1**, type-check limpio, y el `grep -c` da
-**0**.
+**1** — la unica ocurrencia que queda es la del cuerpo del propio `lanzaSiFalla()`.
 
 **Falsabilidad:** cambia `if (response.ok) return;` por `return;` y comprueba que caen
 los tests existentes que asertan errores de la API. Revierte.
