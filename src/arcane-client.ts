@@ -294,6 +294,133 @@ export interface AutoUpdateRecord {
   updatedAt?: string;
 }
 
+/** Estado del escáner Trivy (spec: ScannerStatus). */
+export interface ScannerStatus {
+  available: boolean;
+  version?: string;
+}
+
+/** Contadores por severidad (spec: VulnerabilitySeveritySummary). */
+export interface VulnerabilitySeveritySummary {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  unknown: number;
+  total: number;
+}
+
+/** Puntuaciones CVSS (spec: VulnerabilityCVSSInfo). */
+export interface VulnerabilityCVSSInfo {
+  v2Score?: number;
+  v2Vector?: string;
+  v3Score?: number;
+  v3Vector?: string;
+}
+
+/** Una CVE de un escaneo (spec: VulnerabilityVulnerability). */
+export interface Vulnerability {
+  vulnerabilityId: string;
+  pkgName: string;
+  installedVersion: string;
+  severity: string;
+  fixedVersion?: string;
+  title?: string;
+  description?: string;
+  references?: string[] | null;
+  cvss?: VulnerabilityCVSSInfo;
+  publishedDate?: string;
+  lastModifiedDate?: string;
+}
+
+/** Una CVE con la imagen a la que pertenece (spec: VulnerabilityVulnerabilityWithImage). */
+export interface VulnerabilityWithImage {
+  vulnerabilityId: string;
+  pkgName: string;
+  installedVersion: string;
+  severity: string;
+  imageId: string;
+  imageName: string;
+  fixedVersion?: string;
+  title?: string;
+  description?: string;
+  references?: string[] | null;
+  cvss?: VulnerabilityCVSSInfo;
+  publishedDate?: string;
+  lastModifiedDate?: string;
+}
+
+/**
+ * Resultado de un escaneo (spec: VulnerabilityScanResult). El MISMO schema es
+ * el acuse del POST scan (status "scanning", sin array) y el resultado del GET
+ * (status "completed", con array). Medido en la puerta de F4 (spec §2.1).
+ */
+export interface VulnerabilityScanResult {
+  imageId: string;
+  imageName: string;
+  scanTime: string;
+  status: string;
+  scanPhase?: string;
+  activityId?: string;
+  duration?: number;
+  error?: string;
+  scannerVersion?: string;
+  summary?: VulnerabilitySeveritySummary;
+  vulnerabilities?: Vulnerability[] | null;
+}
+
+/** Resumen del escaneo de una imagen (spec: VulnerabilityScanSummary). */
+export interface VulnerabilityScanSummary {
+  imageId: string;
+  scanTime: string;
+  status: string;
+  scanPhase?: string;
+  error?: string;
+  summary?: VulnerabilitySeveritySummary;
+}
+
+/**
+ * Respuesta del batch (spec: VulnerabilityScanSummariesResponse). El mapa
+ * OMITE las imágenes sin escaneo — medido contra la instancia real, mismo
+ * comportamiento que by-refs en F3.
+ */
+export interface VulnerabilityScanSummariesResponse {
+  summaries: Record<string, VulnerabilityScanSummary>;
+}
+
+/** Resumen de vulnerabilidades del entorno (spec: VulnerabilityEnvironmentVulnerabilitySummary). */
+export interface EnvironmentVulnerabilitySummary {
+  totalImages: number;
+  scannedImages: number;
+  summary?: VulnerabilitySeveritySummary;
+}
+
+/** Registro persistido de una vulnerabilidad ignorada (spec: VulnerabilityIgnoredVulnerability). */
+export interface IgnoredVulnerability {
+  id: string;
+  environmentId: string;
+  imageId: string;
+  vulnerabilityId: string;
+  pkgName: string;
+  installedVersion: string;
+  createdAt: string;
+  createdBy: string;
+  reason?: string;
+}
+
+/**
+ * Payload de ignore (spec: VulnerabilityIgnorePayload), endurecido: `reason` es
+ * obligatorio AQUÍ aunque el spec lo declare opcional (spec F4 §3.2), y
+ * `createdBy` NO se expone — lo rellena el servidor con el usuario autenticado.
+ */
+export interface VulnerabilityIgnoreRequest {
+  imageId: string;
+  vulnerabilityId: string;
+  pkgName: string;
+  reason: string;
+  installedVersion?: string;
+}
+
 export interface Volume {
   id: string;
   name: string;
@@ -584,6 +711,18 @@ export interface ImageListOptions extends ListOptionsWithSort {
   inUse?: string;
   /** "true" | "false" — en images es booleano expresado como cadena, no el enumerado de los otros */
   updates?: string;
+}
+
+export interface VulnerabilityListOptions extends ListOptionsWithSort {
+  /** critical | high | medium | low | unknown */
+  severity?: string;
+  /** Nombre exacto de imagen, p. ej. "curlimages/curl:8.5.0" */
+  imageName?: string;
+}
+
+export interface ImageVulnerabilityListOptions extends ListOptionsWithSort {
+  /** critical | high | medium | low | unknown */
+  severity?: string;
 }
 
 export interface VolumeListOptions extends ListOptionsWithSort {
@@ -1194,6 +1333,21 @@ class ContainersMethods {
   }
 }
 
+/**
+ * Codifica un segmento de ruta conservando los dos puntos literales.
+ *
+ * Medido el 2026-08-19: Arcane NO decodifica %3A en el segmento imageId
+ * -devuelve 404 en los GET, 500 en el scan, y un 200 con cero items en el
+ * listado, que es el fallo silencioso-, asi que el sha256: tiene que viajar
+ * crudo. Pero interpolar el valor entero sin codificar permitia inyectar
+ * ruta: un imageId con "../" y "#" resolvia a cualquier endpoint de Arcane,
+ * incluido system/containers/stop-all. Se codifica todo lo demas y se
+ * devuelven los dos puntos a su forma literal.
+ */
+function segmentoDeRuta(valor: string): string {
+  return encodeURIComponent(valor).replace(/%3A/gi, ":");
+}
+
 class ImagesMethods {
   constructor(private client: ArcaneClient) {}
 
@@ -1214,7 +1368,7 @@ class ImagesMethods {
   }
 
   async remove(envId: string, imageId: string): Promise<ActionResponse> {
-    return this.client.request<ActionResponse>("DELETE", `/environments/${encodeURIComponent(envId)}/images/${encodeURIComponent(imageId)}`);
+    return this.client.request<ActionResponse>("DELETE", `/environments/${encodeURIComponent(envId)}/images/${segmentoDeRuta(imageId)}`);
   }
 
   async prune(envId: string): Promise<{ success: boolean; data: ImagePruneReport }> {
@@ -1471,7 +1625,7 @@ class ImageUpdatesMethods {
     if (opts.imageId) {
       return this.client.request<{ success: boolean; data: ImageUpdateResponse }>(
         "GET",
-        `${base}/check/${encodeURIComponent(opts.imageId)}`
+        `${base}/check/${segmentoDeRuta(opts.imageId)}`
       );
     }
     if (opts.imageRef) {
@@ -1541,6 +1695,149 @@ class UpdaterMethods {
       "POST",
       `/environments/${encodeURIComponent(envId)}/updater/run`,
       body
+    );
+  }
+}
+
+/**
+ * Vulnerabilidades (Trivy integrado en Arcane). Los endpoints por imagen
+ * responden 404 "Vulnerability scan not found" si la imagen no se ha
+ * escaneado: es su estado normal, no una avería.
+ */
+class VulnerabilitiesMethods {
+  constructor(private client: ArcaneClient) {}
+
+  async scannerStatus(envId: string): Promise<{ success: boolean; data: ScannerStatus }> {
+    return this.client.request<{ success: boolean; data: ScannerStatus }>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/vulnerabilities/scanner-status`
+    );
+  }
+
+  async environmentSummary(envId: string): Promise<{ success: boolean; data: EnvironmentVulnerabilitySummary }> {
+    return this.client.request<{ success: boolean; data: EnvironmentVulnerabilitySummary }>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/vulnerabilities/summary`
+    );
+  }
+
+  async listAll(envId: string, opts?: VulnerabilityListOptions): Promise<PaginatedResponse<VulnerabilityWithImage>> {
+    const params = new URLSearchParams();
+    appendListParams(params, opts);
+    if (opts?.severity) params.set("severity", opts.severity);
+    if (opts?.imageName) params.set("imageName", opts.imageName);
+    const query = params.toString();
+    return this.client.request<PaginatedResponse<VulnerabilityWithImage>>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/vulnerabilities/all${query ? `?${query}` : ""}`
+    );
+  }
+
+  async imageOptions(envId: string, severity?: string): Promise<{ success: boolean; data: string[] }> {
+    const params = new URLSearchParams();
+    if (severity) params.set("severity", severity);
+    const query = params.toString();
+    return this.client.request<{ success: boolean; data: string[] }>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/vulnerabilities/image-options${query ? `?${query}` : ""}`
+    );
+  }
+
+  /**
+   * El imageId pasa por segmentoDeRuta(), no por encodeURIComponent() a
+   * secas. Un image ID Docker tiene forma "sha256:08e466...": el router de
+   * Arcane no decodifica un %3A en este segmento -medido el 2026-08-19: 404
+   * en este endpoint y en /summary, 500 "invalid reference format" en
+   * /scan, y en /list falla EN SILENCIO devolviendo 200 con 0 items-, asi
+   * que los dos puntos tienen que viajar crudos. Pero un imageId es
+   * atacante-controlable, y el fetch subyacente resuelve "../" y trunca en
+   * "#": sin codificar el resto del valor, un imageId como
+   * "../../0/system/containers/stop-all#" reescribe la ruta entera hacia
+   * cualquier endpoint de Arcane. segmentoDeRuta() codifica todo excepto
+   * los dos puntos.
+   */
+  async scanResult(envId: string, imageId: string): Promise<{ success: boolean; data: VulnerabilityScanResult }> {
+    return this.client.request<{ success: boolean; data: VulnerabilityScanResult }>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/images/${segmentoDeRuta(imageId)}/vulnerabilities`
+    );
+  }
+
+  async imageList(
+    envId: string,
+    imageId: string,
+    opts?: ImageVulnerabilityListOptions
+  ): Promise<PaginatedResponse<Vulnerability>> {
+    const params = new URLSearchParams();
+    appendListParams(params, opts);
+    if (opts?.severity) params.set("severity", opts.severity);
+    const query = params.toString();
+    return this.client.request<PaginatedResponse<Vulnerability>>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/images/${segmentoDeRuta(imageId)}/vulnerabilities/list${query ? `?${query}` : ""}`
+    );
+  }
+
+  async imageSummary(envId: string, imageId: string): Promise<{ success: boolean; data: VulnerabilityScanSummary }> {
+    return this.client.request<{ success: boolean; data: VulnerabilityScanSummary }>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/images/${segmentoDeRuta(imageId)}/vulnerabilities/summary`
+    );
+  }
+
+  /**
+   * Resúmenes en lote. El mapa de la respuesta OMITE las imágenes sin escaneo
+   * (medido contra la instancia real): la capa tool avisa de las omisiones.
+   */
+  async imageSummaries(envId: string, imageIds: string[]): Promise<{ success: boolean; data: VulnerabilityScanSummariesResponse }> {
+    return this.client.request<{ success: boolean; data: VulnerabilityScanSummariesResponse }>(
+      "POST",
+      `/environments/${encodeURIComponent(envId)}/images/vulnerabilities/summaries`,
+      { imageIds }
+    );
+  }
+
+  async ignoredList(envId: string, opts?: ListOptionsWithSort): Promise<PaginatedResponse<IgnoredVulnerability>> {
+    const params = new URLSearchParams();
+    appendListParams(params, opts);
+    const query = params.toString();
+    return this.client.request<PaginatedResponse<IgnoredVulnerability>>(
+      "GET",
+      `/environments/${encodeURIComponent(envId)}/vulnerabilities/ignored${query ? `?${query}` : ""}`
+    );
+  }
+
+  /**
+   * MUTANTE: lanza un escaneo ASÍNCRONO de UNA imagen. Devuelve el ACUSE
+   * (status "scanning" + activityId), no el resultado — medido en la puerta
+   * de F4: el resultado se recoge después con scanResult(). Acotado a una
+   * imagen por construcción: el endpoint exige imageId en la ruta.
+   */
+  async scan(envId: string, imageId: string): Promise<{ success: boolean; data: VulnerabilityScanResult }> {
+    return this.client.request<{ success: boolean; data: VulnerabilityScanResult }>(
+      "POST",
+      `/environments/${encodeURIComponent(envId)}/images/${segmentoDeRuta(imageId)}/vulnerabilities/scan`
+    );
+  }
+
+  /**
+   * MUTANTE: silencia una vulnerabilidad de forma persistente. `reason` es
+   * obligatorio en esta firma aunque el spec lo declare opcional (spec F4
+   * §3.2). Devuelve el registro creado, con el `id` que usa unignore().
+   */
+  async ignore(envId: string, payload: VulnerabilityIgnoreRequest): Promise<{ success: boolean; data: IgnoredVulnerability }> {
+    return this.client.request<{ success: boolean; data: IgnoredVulnerability }>(
+      "POST",
+      `/environments/${encodeURIComponent(envId)}/vulnerabilities/ignore`,
+      payload
+    );
+  }
+
+  /** MUTANTE: deja de ignorar. El ignoreId sale de ignoredList() o del retorno de ignore(). */
+  async unignore(envId: string, ignoreId: string): Promise<{ success: boolean }> {
+    return this.client.request<{ success: boolean }>(
+      "DELETE",
+      `/environments/${encodeURIComponent(envId)}/vulnerabilities/ignore/${encodeURIComponent(ignoreId)}`
     );
   }
 }
@@ -1831,6 +2128,7 @@ export class ArcaneClient {
   readonly jobs: JobsMethods;
   readonly imageUpdates: ImageUpdatesMethods;
   readonly updater: UpdaterMethods;
+  readonly vulnerabilities: VulnerabilitiesMethods;
   readonly gitRepositories: GitRepositoriesMethods;
   readonly gitOpsSyncs: GitOpsSyncsMethods;
   readonly projectAdditional: ProjectAdditionalMethods;
@@ -1866,6 +2164,7 @@ export class ArcaneClient {
     this.jobs = new JobsMethods(this);
     this.imageUpdates = new ImageUpdatesMethods(this);
     this.updater = new UpdaterMethods(this);
+    this.vulnerabilities = new VulnerabilitiesMethods(this);
     this.gitRepositories = new GitRepositoriesMethods(this);
     this.gitOpsSyncs = new GitOpsSyncsMethods(this);
     this.projectAdditional = new ProjectAdditionalMethods(this);

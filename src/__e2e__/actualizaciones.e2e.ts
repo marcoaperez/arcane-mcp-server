@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { e2eClient, IDEMPOTENT_STACK } from "./helpers";
+import { e2eClient, IDEMPOTENT_STACK, SCAN_IMAGE } from "./helpers";
 
 /**
  * Invariantes de las actualizaciones de imagenes contra la instancia real.
@@ -71,6 +71,35 @@ describe("actualizaciones (e2e, Arcane 2.8.0)", () => {
     expect(r.success).toBe(true);
     expect(typeof r.data.hasUpdate).toBe("boolean");
     expect(typeof r.data.updateType).toBe("string");
+  });
+
+  it("check en vivo por imageId responde para una imagen real de la instancia", async () => {
+    // Root cause de un bug de produccion: check(envId, {imageId}) enviaba el
+    // imageId codificado con encodeURIComponent (sha256%3A...), que Arcane no
+    // decodifica -devolvia 500 "image not found"-. El unico e2e anterior de
+    // check() usaba imageRef, asi que nunca ejercito esta rama contra la
+    // instancia real.
+    //
+    // El imageId se resuelve en vivo via images.list buscando SCAN_IMAGE por
+    // repoTags, no tomando la primera de la lista por posicion: probado
+    // contra la instancia real, las primeras imagenes del listado tenian
+    // prefijo arcane.local/, cuyo registro no resuelve por DNS (mismo bug de
+    // upstream documentado en checkBatch mas abajo) y el check fallaria por
+    // un motivo ajeno al codigo bajo prueba.
+    const imgs = await client.images.list(envId, { limit: 200 });
+    const img = (imgs.data ?? []).find((i) => (i.repoTags ?? []).includes(SCAN_IMAGE));
+    if (!img) throw new Error(`No existe ${SCAN_IMAGE} en el entorno; ajusta ARCANE_E2E_SCAN_IMAGE`);
+    expect(img.id).toMatch(/^sha256:/);
+
+    const r = await client.imageUpdates.check(envId, { imageId: img.id });
+    expect(r.success).toBe(true);
+    // Datos reales, no solo "no lanzo": checkTime lo pone el servidor en el
+    // momento de la comprobacion, no puede venir vacio en una respuesta 200.
+    expect(typeof r.data.checkTime).toBe("string");
+    expect(r.data.checkTime.length).toBeGreaterThan(0);
+    expect(typeof r.data.hasUpdate).toBe("boolean");
+    expect(typeof r.data.updateType).toBe("string");
+    expect(typeof r.data.responseTimeMs).toBe("number");
   });
 
   it("checkBatch comprueba en vivo una lista explicita de referencias", async () => {
@@ -145,6 +174,19 @@ describe("actualizaciones (e2e, Arcane 2.8.0)", () => {
     // note. Si el cliente dejara de reenviar `limit`, ambas llamadas
     // devolverian `total` y esta asercion fallaria.
     expect(largo).toBeLessThan(total);
+  });
+
+  it("images.remove con un imageId sha256 inexistente falla por 'no existe', no por formato invalido", async () => {
+    // Mismo root cause que check(): images.remove() mandaba el imageId
+    // codificado con encodeURIComponent. Medido contra la instancia real con
+    // este mismo ID (64 '1' hex, deliberadamente inexistente, no borra nada):
+    // crudo, Docker responde "No such image" (la ruta se parseo bien, la
+    // imagen simplemente no existe); codificado, responde "invalid reference
+    // format" (Docker recibio el %3A literal y ni siquiera pudo parsear la
+    // referencia). Se afirma el primer mensaje para que una regresion futura
+    // de la codificacion haga fallar este test con el segundo.
+    const imageId = `sha256:${"1".repeat(64)}`;
+    await expect(client.images.remove(envId, imageId)).rejects.toThrow(/no such image/i);
   });
 
   it("updater.run exige resourceIds y no llega a llamar a la API sin ellos", async () => {

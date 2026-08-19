@@ -19,6 +19,12 @@ enlaza desde aquí.
 
 ## Balances de fase
 
+- [F4 (vulnerabilidades) — 2026-08-19](balances/2026-08-19-f4.md)
+  — doce tools sobre el Trivy que integra Arcane, con la siembra de datos dentro de
+  la propia suite e2e para resolver el problema de las 0 imágenes escaneadas. Destapa
+  y arregla tres bugs que ya estaban en producción, entre ellos una inyección de ruta
+  introducida durante la fase. Cifras medidas: 294 tests, 59 e2e, 100 tools,
+  98/249 operaciones cubiertas.
 - [F3 (actualizaciones de imágenes) — 2026-08-17](balances/2026-08-17-f3.md)
   — siete tools nuevas (estado de actualizaciones e imágenes, y `updater` con
   `resourceIds` obligatorio), cierre de las tres deudas diferidas por F2
@@ -64,14 +70,31 @@ enlaza desde aquí.
 
 ## Specs y planes
 
-- [Spec F0 + F1 (2026-08-16)](superpowers/specs/2026-08-16-fork-arcane-mcp-f0-f1-design.md)
-  — decisión de no migrar a RandomSynergy17/Arcane-MCP-Server, y alcance de
-  F0 (cimientos) y F1 (visibilidad).
+- [Spec F4 (2026-08-18)](superpowers/specs/2026-08-18-f4-vulnerabilidades-design.md)
+  — vulnerabilidades: siembra de escaneo, listados y detalle, y el par
+  ignore/unignore con motivo obligatorio.
+- [Plan F4 (2026-08-18)](superpowers/plans/2026-08-18-f4-vulnerabilidades.md)
+  — 8 tareas con ciclo TDD paso a paso, de los tipos bajo auditoría de drift al cierre de fase.
+- [Spec F3 (2026-08-17)](superpowers/specs/2026-08-17-f3-actualizaciones-imagenes-design.md)
+  — actualizaciones de imágenes: qué está desactualizado, qué se rompería al
+  actualizar y la tool mutante acotada verificada con `dryRun`.
+- [Plan F3 (2026-08-17)](superpowers/plans/2026-08-17-f3-actualizaciones-imagenes.md)
+  — dos ficheros de tools nuevos sobre dos clases de métodos del cliente, y tres
+  deudas de F2 cerradas de paso.
+- [Spec de coherencia de la superficie de listado (2026-08-17)](superpowers/specs/2026-08-17-coherencia-superficie-listado-design.md)
+  — deuda previa a F3: las 13 tools de listado aceptan el juego de parámetros
+  que el spec declara para su endpoint y devuelven la paginación.
+- [Plan de coherencia de la superficie de listado (2026-08-17)](superpowers/plans/2026-08-17-coherencia-superficie-listado.md)
+  — helpers compartidos (`withErrors`, `listResponse`, `collectAllPages`) y los
+  resolvers nombre→id dejan de mirar solo la primera página.
 - [Spec F2 (2026-08-16)](superpowers/specs/2026-08-16-fork-arcane-mcp-f2-design.md)
   — observabilidad y núcleo del host: 13 tools de activities, events, jobs y system.
   Fija además el criterio de exposición que rige de F2 a F5.
 - [Plan F2 (2026-08-16)](superpowers/plans/2026-08-16-fork-arcane-mcp-f2.md)
   — 7 tareas con ciclo TDD paso a paso, de los cimientos del cliente al cierre de fase.
+- [Spec F0 + F1 (2026-08-16)](superpowers/specs/2026-08-16-fork-arcane-mcp-f0-f1-design.md)
+  — decisión de no migrar a RandomSynergy17/Arcane-MCP-Server, y alcance de
+  F0 (cimientos) y F1 (visibilidad).
 - [Plan F0 + F1 (2026-08-16)](superpowers/plans/2026-08-16-fork-arcane-mcp-f0-f1.md)
 
 ## Operación

@@ -54,6 +54,16 @@ const MAP = {
   UpdaterResourceResult: "UpdaterResourceResult",
   UpdaterStatus: "UpdaterStatus",
   AutoUpdateRecord: "AutoUpdateRecord",
+  ScannerStatus: "ScannerStatus",
+  VulnerabilitySeveritySummary: "VulnerabilitySeveritySummary",
+  VulnerabilityCVSSInfo: "VulnerabilityCVSSInfo",
+  Vulnerability: "VulnerabilityVulnerability",
+  VulnerabilityWithImage: "VulnerabilityVulnerabilityWithImage",
+  VulnerabilityScanResult: "VulnerabilityScanResult",
+  VulnerabilityScanSummary: "VulnerabilityScanSummary",
+  VulnerabilityScanSummariesResponse: "VulnerabilityScanSummariesResponse",
+  EnvironmentVulnerabilitySummary: "VulnerabilityEnvironmentVulnerabilitySummary",
+  IgnoredVulnerability: "VulnerabilityIgnoredVulnerability",
 };
 
 function tsInterfaceProps(file) {

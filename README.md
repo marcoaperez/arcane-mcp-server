@@ -1,10 +1,10 @@
 # Arcane Docker MCP Server
 
 > **Fork mantenido activamente por [Taiko Solutions](https://taikosolutions.com).**
-> Verificado contra **Arcane v2.8.0**: las **86** combinaciones método+ruta que usa el
-> cliente existen en el spec de la instancia, sin ausencias — **86 de las 249**
+> Verificado contra **Arcane v2.8.0**: las **98** combinaciones método+ruta que usa el
+> cliente existen en el spec de la instancia, sin ausencias — **98 de las 249**
 > operaciones que este fork pretende cubrir (denominador honesto, ver
-> [criterio de exposición](docs/arquitectura/criterio-exposicion.md); 86 de 347 en bruto).
+> [criterio de exposición](docs/arquitectura/criterio-exposicion.md); 98 de 347 en bruto).
 > Origen del fork: [`cougz/arcane-mcp-server`](https://github.com/cougz/arcane-mcp-server),
 > inactivo desde marzo de 2026.
 >
@@ -12,7 +12,7 @@
 > |---|---|
 > | **Compatibilidad** | Arcane v2.x (probado contra v2.8.0) |
 > | **Spec de referencia** | [`openapi.txt`](openapi.txt) — descargado de la instancia con `npm run update-api-spec` |
-> | **Tools** | 88 |
+> | **Tools** | 100 |
 > | **Documentación** | [`docs/`](docs/README.md) |
 
 A Model Context Protocol (MCP) server for managing Docker environments through [Arcane](https://getarcane.app/), deployed on Cloudflare Workers.
@@ -34,7 +34,7 @@ Built on Cloudflare Workers using the official Cloudflare `agents` package, this
 | Compatibilidad de shapes | Escrito contra Arcane v1.x | Interfaces alineadas con v2.8.0 y auditadas por `scripts/audit-schema-drift.mjs` |
 | Despliegue | Solo Cloudflare Workers | Cloudflare Workers **o** contenedor Docker autoalojado (`docker-compose.yml` + `wrangler.local.jsonc`) |
 | Cliente | `baseUrl` fijo hacia el binding VPC | Modo dual: binding VPC en Workers, URL real en local/Docker |
-| Verificación | Sin runner de tests funcional | 262 tests unitarios + 46 tests e2e contra una instancia Arcane real |
+| Verificación | Sin runner de tests funcional | 291 tests unitarios + 57 tests e2e contra una instancia Arcane real |
 
 El fix de los endpoints NDJSON se ha ofrecido al upstream como PR autocontenido.
 
@@ -42,7 +42,7 @@ El fix de los endpoints NDJSON se ha ofrecido al upstream como PR autocontenido.
 
 <!-- BEGIN TOOLS -->
 
-Las **88** tools que expone el servidor, agrupadas por dominio. Esta tabla la
+Las **100** tools que expone el servidor, agrupadas por dominio. Esta tabla la
 genera `npm run gen-tools-table` a partir de `src/tools/`: las descripciones y los
 parámetros son los que registra el código, no una copia mantenida a mano.
 
@@ -228,6 +228,23 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | `arcane_updater_status` | Report which containers and projects are being updated right now. | `environmentId?`, `environmentName?` |
 | `arcane_updater_history` | List past automatic update runs. This endpoint reports no total count and cannot be paged, so the list may be incomplete: raise limit if you need to be sure you are seeing everything. | `environmentId?`, `environmentName?`, `limit?` |
 | `arcane_updater_run` | Apply pending updates to SPECIFIC containers or projects, recreating them. You must name the targets: updating everything at once is deliberately not available. Pass dryRun to see what would happen without changing anything. | `environmentId?`, `environmentName?`, `resourceIds`, `type?`, `dryRun?`, `forceUpdate?` |
+
+### Vulnerabilities (12)
+
+| Tool | Description | Inputs |
+|---|---|---|
+| `arcane_vulnerability_scanner_status` | Check whether the vulnerability scanner (Trivy) is available in an environment, and its version. Check this before launching a scan with arcane_vulnerability_scan. | `environmentId?`, `environmentName?` |
+| `arcane_vulnerability_summary` | Get the environment-wide vulnerability summary: how many images exist, how many have been scanned, and the aggregate CVE counts by severity. Images never scanned contribute nothing: check scannedImages vs totalImages before reading the counts as the whole picture. | `environmentId?`, `environmentName?` |
+| `arcane_vulnerability_list` | List vulnerabilities across all scanned images in an environment, paginated. Filter by severity (critical, high, medium, low, unknown) and/or by exact image name. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `severity?`, `imageName?` |
+| `arcane_vulnerability_image_options` | List the names of images that have vulnerability scan results, optionally only those with findings of a given severity. Useful to discover what has been scanned before drilling down. | `environmentId?`, `environmentName?`, `severity?` |
+| `arcane_vulnerability_scan_result` | Get the scan metadata for ONE image: status (scanning/completed/failed), scan time, scanner version, error if any, and the severity summary. The full CVE detail is deliberately NOT included — page through it with arcane_vulnerability_image_list. An error saying the scan was not found means there are no scan results for that image ID: either it was never scanned, or the ID is wrong — the error does not distinguish the two. Check the ID, then launch arcane_vulnerability_scan if you expect results. | `environmentId?`, `environmentName?`, `imageId` |
+| `arcane_vulnerability_image_list` | List the vulnerabilities of ONE image, paginated, with full CVE detail per item. Filter by severity. An error saying the scan was not found means there are no scan results for that image ID: either it was never scanned, or the ID is wrong — the error does not distinguish the two. Check the ID, then launch arcane_vulnerability_scan if you expect results. | `environmentId?`, `environmentName?`, `imageId`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `severity?` |
+| `arcane_vulnerability_image_summary` | Get the vulnerability summary of ONE image: scan status, scan time and CVE counts by severity. An error saying the scan was not found means there are no scan results for that image ID: either it was never scanned, or the ID is wrong — the error does not distinguish the two. Check the ID, then launch arcane_vulnerability_scan if you expect results. | `environmentId?`, `environmentName?`, `imageId` |
+| `arcane_vulnerability_image_summaries` | Get vulnerability scan summaries for a LIST of images in one call. The response map can omit some of the requested images, and the response does not say why — the tool flags this in prose when it happens. Use arcane_vulnerability_scan on the ones you expect to have results. | `environmentId?`, `environmentName?`, `imageIds` |
+| `arcane_vulnerability_ignored_list` | List the vulnerabilities that have been marked as ignored in an environment, paginated. Each record includes who ignored it, when, and the stated reason. Use the record id with arcane_vulnerability_unignore to reverse one. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?` |
+| `arcane_vulnerability_scan` | Launch a vulnerability scan (Trivy) of ONE image. The scan is asynchronous: this returns an acknowledgement with an activityId, not the result. Follow progress with arcane_activity_get, and read the outcome with arcane_vulnerability_scan_result once completed (~15 s for a small image). Scanning consumes CPU on the host. Check arcane_vulnerability_scanner_status first if unsure the scanner is available. | `environmentId?`, `environmentName?`, `imageId` |
+| `arcane_vulnerability_ignore` | Mark ONE vulnerability of ONE image as ignored by creating a persistent ignore record. Requires a reason, which is stored and shown in arcane_vulnerability_ignored_list. Reversible with arcane_vulnerability_unignore. Measured against Arcane v2.8.0: creating the record does NOT change the CVE counts returned by arcane_vulnerability_image_summary or arcane_vulnerability_image_list — treat this as a tracked triage decision, not a reporting filter. | `environmentId?`, `environmentName?`, `imageId`, `vulnerabilityId`, `pkgName`, `reason`, `installedVersion?` |
+| `arcane_vulnerability_unignore` | Remove an ignore record created by arcane_vulnerability_ignore, so it no longer appears in arcane_vulnerability_ignored_list. The ignoreId comes from arcane_vulnerability_ignored_list or from the record returned by arcane_vulnerability_ignore. Measured against Arcane v2.8.0: removing the record does NOT change the CVE counts returned by arcane_vulnerability_image_summary or arcane_vulnerability_image_list. | `environmentId?`, `environmentName?`, `ignoreId` |
 
 <!-- END TOOLS -->
 

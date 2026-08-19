@@ -774,6 +774,37 @@ describe("ArcaneClient", () => {
       );
     });
 
+    it(".remove deja el imageId crudo en la ruta (Arcane no decodifica %3A)", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, message: "Removed" }),
+      } as Response);
+
+      await client.images.remove("env123", "sha256:abc");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/images/sha256:abc",
+        expect.objectContaining({ method: "DELETE" })
+      );
+    });
+
+    it(".remove neutraliza un imageId con path traversal (inyeccion de ruta)", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, message: "Removed" }),
+      } as Response);
+
+      // Mismo imageId hostil que en vulnerabilities.scanResult/.scan: si viajara
+      // crudo, fetch lo resolveria contra /environments/env123/system/containers/stop-all.
+      const imageId = "../../0/system/containers/stop-all#";
+      await client.images.remove("env123", imageId);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env123/images/..%2F..%2F0%2Fsystem%2Fcontainers%2Fstop-all%23",
+        expect.objectContaining({ method: "DELETE" })
+      );
+    });
+
     it(".prune(envId) - POST /environments/{envId}/images/prune", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
@@ -1132,11 +1163,23 @@ describe("ArcaneClient", () => {
       );
     });
 
-    it("check(envId, {imageId}) usa el endpoint por ID", async () => {
+    it("check(envId, {imageId}) usa el endpoint por ID y deja el imageId crudo en la ruta (Arcane no decodifica %3A)", async () => {
       mockFetch.mockResolvedValue(ok({ checkTime: "t", currentVersion: "1", hasUpdate: false, responseTimeMs: 5, updateType: "digest" }));
       await client.imageUpdates.check("env1", { imageId: "sha256:abc" });
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env1/image-updates/check/sha256%3Aabc",
+        "http://localhost:3552/api/environments/env1/image-updates/check/sha256:abc",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+
+    it("check(envId, {imageId}) neutraliza un imageId con path traversal (inyeccion de ruta)", async () => {
+      mockFetch.mockResolvedValue(ok({ checkTime: "t", currentVersion: "1", hasUpdate: false, responseTimeMs: 5, updateType: "digest" }));
+      // Mismo imageId hostil que en vulnerabilities.scanResult/.scan: si viajara
+      // crudo, fetch lo resolveria contra /environments/env1/system/containers/stop-all.
+      const imageId = "../../0/system/containers/stop-all#";
+      await client.imageUpdates.check("env1", { imageId });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/image-updates/check/..%2F..%2F0%2Fsystem%2Fcontainers%2Fstop-all%23",
         expect.objectContaining({ method: "GET" }),
       );
     });
@@ -1202,6 +1245,241 @@ describe("ArcaneClient", () => {
     it("run(envId, {resourceIds: []}) lanza sin llamar a la API", async () => {
       await expect(client.updater.run("env1", { resourceIds: [] })).rejects.toThrow(/resourceIds/);
       expect(mockFetch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("VulnerabilitiesMethods", () => {
+    it(".scannerStatus(envId) - GET /vulnerabilities/scanner-status", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { available: true, version: "0.73.0" } }),
+      } as Response);
+      const r = await client.vulnerabilities.scannerStatus("env1");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/vulnerabilities/scanner-status",
+        expect.objectContaining({ method: "GET" })
+      );
+      expect(r.data.available).toBe(true);
+    });
+
+    it(".environmentSummary(envId) - GET /vulnerabilities/summary", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { totalImages: 19, scannedImages: 1 } }),
+      } as Response);
+      await client.vulnerabilities.environmentSummary("env1");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/vulnerabilities/summary",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".listAll con todos los filtros construye la query completa", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: { totalPages: 1, totalItems: 0, currentPage: 1, itemsPerPage: 5 } }),
+      } as Response);
+      await client.vulnerabilities.listAll("env1", {
+        sort: "severity", limit: 5, severity: "high", imageName: "curlimages/curl:8.5.0",
+      });
+      // URL literal completa: si severity o imageName dejan de escribirse, esto falla.
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/vulnerabilities/all?sort=severity&limit=5&severity=high&imageName=curlimages%2Fcurl%3A8.5.0",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".listAll sin opciones no lleva query", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: { totalPages: 1, totalItems: 0, currentPage: 1, itemsPerPage: 20 } }),
+      } as Response);
+      await client.vulnerabilities.listAll("env1");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/vulnerabilities/all",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".imageOptions con severity y sin severity", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [] }),
+      } as Response);
+      await client.vulnerabilities.imageOptions("env1", "critical");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/vulnerabilities/image-options?severity=critical",
+        expect.objectContaining({ method: "GET" })
+      );
+      await client.vulnerabilities.imageOptions("env1");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/vulnerabilities/image-options",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".scanResult deja el imageId crudo en la ruta (Arcane no decodifica %3A)", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { imageId: "sha256:abc", imageName: "x", scanTime: "t", status: "completed" } }),
+      } as Response);
+      await client.vulnerabilities.scanResult("env1", "sha256:abc");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/sha256:abc/vulnerabilities",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".scanResult neutraliza un imageId con path traversal (inyeccion de ruta)", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { imageId: "x", imageName: "x", scanTime: "t", status: "completed" } }),
+      } as Response);
+      // imageId hostil: "../" quiere escapar de /images/{id}/vulnerabilities
+      // y "#" quiere truncar el resto de la plantilla. Si esto viajara crudo,
+      // fetch lo resolveria contra /environments/env1/system/containers/stop-all.
+      const imageId = "../../0/system/containers/stop-all#";
+      await client.vulnerabilities.scanResult("env1", imageId);
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/..%2F..%2F0%2Fsystem%2Fcontainers%2Fstop-all%23/vulnerabilities",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".scan neutraliza un imageId con path traversal (inyeccion de ruta)", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { imageId: "x", imageName: "x", scanTime: "t", status: "scanning", activityId: "act-1" } }),
+      } as Response);
+      // Mismo imageId hostil, contra el POST mutante: sin codificar, esto
+      // seria un POST sin cuerpo contra /system/containers/stop-all, que
+      // tumbaria todos los contenedores del host, incluido el que sirve esta sesion.
+      const imageId = "../../0/system/containers/stop-all#";
+      await client.vulnerabilities.scan("env1", imageId);
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/..%2F..%2F0%2Fsystem%2Fcontainers%2Fstop-all%23/vulnerabilities/scan",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
+
+    it(".imageList con severity construye la query", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: { totalPages: 1, totalItems: 0, currentPage: 1, itemsPerPage: 3 } }),
+      } as Response);
+      await client.vulnerabilities.imageList("env1", "sha256:abc", { sort: "severity", limit: 3, severity: "high" });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/sha256:abc/vulnerabilities/list?sort=severity&limit=3&severity=high",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".imageList sin severity omite el parametro (regresion: null nunca deberia escribirse)", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: { totalPages: 1, totalItems: 0, currentPage: 1, itemsPerPage: 20 } }),
+      } as Response);
+      // Caso A: con sort y limit, pero sin severity
+      await client.vulnerabilities.imageList("env1", "sha256:abc", { sort: "severity", limit: 20 });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/sha256:abc/vulnerabilities/list?sort=severity&limit=20",
+        expect.objectContaining({ method: "GET" })
+      );
+      mockFetch.mockClear();
+      // Caso B: sin opciones en absoluto (ninguna query)
+      await client.vulnerabilities.imageList("env1", "sha256:abc");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/sha256:abc/vulnerabilities/list",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".imageSummary - GET /images/{id}/vulnerabilities/summary", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { imageId: "sha256:abc", scanTime: "t", status: "completed" } }),
+      } as Response);
+      await client.vulnerabilities.imageSummary("env1", "sha256:abc");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/sha256:abc/vulnerabilities/summary",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".imageSummaries envía el body {imageIds}", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: { summaries: {} } }),
+      } as Response);
+      await client.vulnerabilities.imageSummaries("env1", ["sha256:a", "sha256:b"]);
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/vulnerabilities/summaries",
+        expect.objectContaining({ method: "POST", body: JSON.stringify({ imageIds: ["sha256:a", "sha256:b"] }) })
+      );
+    });
+
+    it(".ignoredList con y sin query", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, data: [], pagination: { totalPages: 1, totalItems: 0, currentPage: 1, itemsPerPage: 20 } }),
+      } as Response);
+      await client.vulnerabilities.ignoredList("env1", { sort: "id", limit: 200 });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/vulnerabilities/ignored?sort=id&limit=200",
+        expect.objectContaining({ method: "GET" })
+      );
+      await client.vulnerabilities.ignoredList("env1");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/vulnerabilities/ignored",
+        expect.objectContaining({ method: "GET" })
+      );
+    });
+
+    it(".scan(envId, imageId) - POST .../vulnerabilities/scan (acuse asincrono)", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: { imageId: "sha256:abc", imageName: "x", scanTime: "t", status: "scanning", activityId: "act-1" },
+        }),
+      } as Response);
+      const r = await client.vulnerabilities.scan("env1", "sha256:abc");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/images/sha256:abc/vulnerabilities/scan",
+        expect.objectContaining({ method: "POST" })
+      );
+      expect(r.data.status).toBe("scanning");
+      expect(r.data.activityId).toBe("act-1");
+    });
+
+    it(".ignore envía el payload exacto, sin createdBy", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: { id: "ign-1", environmentId: "env1", imageId: "sha256:abc", vulnerabilityId: "CVE-1", pkgName: "p", installedVersion: "1", createdAt: "t", createdBy: "arcane" },
+        }),
+      } as Response);
+      const payload = { imageId: "sha256:abc", vulnerabilityId: "CVE-1", pkgName: "p", reason: "triaje", installedVersion: "1" };
+      await client.vulnerabilities.ignore("env1", payload);
+      const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe("http://localhost:3552/api/environments/env1/vulnerabilities/ignore");
+      expect(init.method).toBe("POST");
+      // Body serializado real: el payload entero, y NADA más.
+      expect(init.body).toBe(JSON.stringify(payload));
+      expect(String(init.body)).not.toContain("createdBy");
+    });
+
+    it(".unignore(envId, ignoreId) - DELETE .../ignore/{ignoreId} y codifica el ignoreId", async () => {
+      mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true }) } as Response);
+      // Un ignoreId con un carácter que el encoding si cambia (# → %23)
+      // para que el test falle si alguien borra el encodeURIComponent.
+      const r = await client.vulnerabilities.unignore("env1", "ign#1");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/environments/env1/vulnerabilities/ignore/ign%231",
+        expect.objectContaining({ method: "DELETE" })
+      );
+      expect(r.success).toBe(true);
     });
   });
 

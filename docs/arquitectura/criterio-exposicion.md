@@ -4,7 +4,7 @@
 §2 del [spec de F2](../superpowers/specs/2026-08-16-fork-arcane-mcp-f2-design.md),
 que sigue siendo válida como registro histórico de cuándo se decidió cada cosa.
 
-- **Última revisión:** 2026-08-18
+- **Última revisión:** 2026-08-19
 - **Base:** Arcane **2.8.0** (`openapi.txt`, 273 paths, 347 operaciones)
 
 ---
@@ -115,8 +115,8 @@ API que incluye lo que nunca se va a tocar.
   249  operaciones que este fork pretende poder cubrir
 ```
 
-**Los balances publican la cobertura explicando el denominador** — a fecha de F3,
-`86 de 249`, no `86 de 347`. Ambas cifras son ciertas; la segunda subestima el avance
+**Los balances publican la cobertura explicando el denominador** — a fecha de F4,
+`98 de 249`, no `98 de 347`. Ambas cifras son ciertas; la segunda subestima el avance
 en un tercio y no dice nada útil sobre lo que queda por hacer.
 
 Las cifras que aparecen en balances ya escritos se dejan como están: son ciertas en
