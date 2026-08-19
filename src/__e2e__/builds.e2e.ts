@@ -97,6 +97,11 @@ describe("e2e: builds contra Arcane real", () => {
     buildId = mia!.id;
     expect(JSON.stringify(res)).not.toContain("valor-de-prueba-no-secreto");
     expect(Object.keys(mia!.buildArgs ?? {})).toContain("ARCANE_MCP_E2E_ARG");
+    // Medido (spec F5 §5.2): el listado NO trae `output`. Se asierta aqui
+    // para que si un dia la API empieza a incluirlo, esta linea rompa antes
+    // de que arcane_image_build_list vuelque logs de build sin cota y sin
+    // que nada avise (la tool _list no pasa por recortaOutput()).
+    expect(mia).not.toHaveProperty("output");
   });
 
   it("get() devuelve el log y tampoco el valor del build arg", async () => {

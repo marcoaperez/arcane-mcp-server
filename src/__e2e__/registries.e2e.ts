@@ -88,4 +88,17 @@ describe("e2e: registros de plantillas contra Arcane real", () => {
     const actual = (res.data ?? []).find(r => r.id === id);
     expect(actual!.description).toBe("descripcion cambiada por el e2e");
   });
+
+  it("delete() borra el registro y list() deja de verlo", async () => {
+    // Cierra la cadena crear -> listar -> actualizar -> borrar (spec §7.2b).
+    // Antes, delete() solo se ejercitaba en el afterAll dentro de un
+    // try/catch que solo logueaba: si fallaba, la suite seguia en verde.
+    await client.templateRegistries.delete(id);
+    const res = await client.templateRegistries.list();
+    expect((res.data ?? []).map(r => r.id)).not.toContain(id);
+    // Ya esta borrado: que el afterAll no intente borrarlo otra vez (residuo
+    // inexistente no es un residuo que reportar), pero sigue siendo la red
+    // de seguridad si este it() falla antes de llegar aqui.
+    id = "";
+  });
 });
