@@ -1395,11 +1395,13 @@ describe("ArcaneClient", () => {
       expect(String(init.body)).not.toContain("createdBy");
     });
 
-    it(".unignore(envId, ignoreId) - DELETE .../ignore/{ignoreId}", async () => {
+    it(".unignore(envId, ignoreId) - DELETE .../ignore/{ignoreId} y codifica el ignoreId", async () => {
       mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true }) } as Response);
-      const r = await client.vulnerabilities.unignore("env1", "ign-1");
+      // Un ignoreId con un carácter que el encoding si cambia (# → %23)
+      // para que el test falle si alguien borra el encodeURIComponent.
+      const r = await client.vulnerabilities.unignore("env1", "ign#1");
       expect(mockFetch).toHaveBeenCalledWith(
-        "http://localhost:3552/api/environments/env1/vulnerabilities/ignore/ign-1",
+        "http://localhost:3552/api/environments/env1/vulnerabilities/ignore/ign%231",
         expect.objectContaining({ method: "DELETE" })
       );
       expect(r.success).toBe(true);
