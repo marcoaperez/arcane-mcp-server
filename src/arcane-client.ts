@@ -2228,6 +2228,30 @@ export class ArcaneClient {
   }
 
   /**
+   * Como `request<T>`, pero para endpoints que responden 204 sin cuerpo.
+   *
+   * `request()` termina en `response.json()`, que con un cuerpo vacio lanza.
+   * Medido el 2026-08-19: POST /builds/browse/mkdir y DELETE /builds/browse
+   * devuelven 204 y ningun byte.
+   *
+   * A diferencia de `requestHead()`, aqui un estado de error SI lanza: alli el
+   * codigo era el dato ("el sistema no esta sano" es una respuesta valida), aqui
+   * "no pude crear el directorio" es un fallo de la llamada.
+   */
+  async requestSinCuerpo(method: string, path: string, body?: unknown): Promise<void> {
+    const response = await this._fetch(`${this.baseUrl}${path}`, {
+      method,
+      headers: {
+        "X-API-Key": this.apiKey,
+        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+
+    await lanzaSiFalla(response);
+  }
+
+  /**
    * Like `request<T>`, but sends a `FormData` body for multipart endpoints
    * (e.g. `PUT /volumes/{name}/workspace`).
    *

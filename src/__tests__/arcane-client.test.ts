@@ -122,6 +122,58 @@ describe("ArcaneClient", () => {
 
       expect(resultado).toEqual({ ok: false, status: 503 });
     });
+
+    it("requestSinCuerpo() no intenta parsear el cuerpo de un 204", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 204,
+        json: async () => { throw new Error("no debe llamarse"); },
+      } as unknown as Response);
+
+      await expect(client.requestSinCuerpo("POST", "/algo")).resolves.toBeUndefined();
+    });
+
+    it("requestSinCuerpo() lanza ArcaneApiError con el detail del error", async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: "Internal Server Error",
+        json: async () => ({ detail: "invalid path: path traversal not allowed" }),
+      } as unknown as Response);
+
+      await expect(client.requestSinCuerpo("DELETE", "/algo")).rejects.toThrow(
+        "invalid path: path traversal not allowed",
+      );
+    });
+
+    it("requestSinCuerpo() sin body no envia Content-Type", async () => {
+      mockFetch.mockResolvedValue({ ok: true, status: 204 } as unknown as Response);
+
+      await client.requestSinCuerpo("POST", "/ruta");
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/ruta",
+        expect.objectContaining({
+          method: "POST",
+          headers: { "X-API-Key": "test-api-key" },
+        }),
+      );
+    });
+
+    it("requestSinCuerpo() con body lo serializa y anade Content-Type", async () => {
+      mockFetch.mockResolvedValue({ ok: true, status: 204 } as unknown as Response);
+
+      await client.requestSinCuerpo("POST", "/ruta", { uploadId: "up1" });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:3552/api/ruta",
+        expect.objectContaining({
+          method: "POST",
+          headers: { "X-API-Key": "test-api-key", "Content-Type": "application/json" },
+          body: JSON.stringify({ uploadId: "up1" }),
+        }),
+      );
+    });
   });
 
   describe("environments", () => {
