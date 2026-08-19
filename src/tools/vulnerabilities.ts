@@ -178,4 +178,57 @@ export function registerVulnerabilityTools(server: McpServer, client: ArcaneClie
       return listResponse(result, "ignored vulnerabilities");
     }),
   );
+
+  server.tool(
+    "arcane_vulnerability_scan",
+    "Launch a vulnerability scan (Trivy) of ONE image. The scan is asynchronous: this returns an acknowledgement with an activityId, not the result. Follow progress with arcane_activity_get, and read the outcome with arcane_vulnerability_scan_result once completed (~15 s for a small image). Scanning consumes CPU on the host. Check arcane_vulnerability_scanner_status first if unsure the scanner is available.",
+    {
+      environmentId: z.string().optional().describe("Environment ID (use if known)"),
+      environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
+      imageId: z.string().describe("Image ID (sha256:...) to scan, from arcane_image_list"),
+    },
+    withErrors(async ({ environmentId, environmentName, imageId }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const result = await client.vulnerabilities.scan(envId, imageId);
+      return textResponse(
+        "Scan launched (asynchronous). Follow it with arcane_activity_get using the activityId, " +
+          "and read the outcome with arcane_vulnerability_scan_result once completed.\n" +
+          JSON.stringify(result.data, null, 2),
+      );
+    }),
+  );
+
+  server.tool(
+    "arcane_vulnerability_ignore",
+    "Mark ONE vulnerability of ONE image as ignored. This persistently changes the environment's security reporting: the CVE stops counting against that image until un-ignored. Requires a reason, which is stored and shown in arcane_vulnerability_ignored_list. Reversible with arcane_vulnerability_unignore.",
+    {
+      environmentId: z.string().optional().describe("Environment ID (use if known)"),
+      environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
+      imageId: z.string().describe("Image ID (sha256:...) the vulnerability belongs to"),
+      vulnerabilityId: z.string().describe("CVE identifier, e.g. 'CVE-2024-6119'"),
+      pkgName: z.string().describe("Package the CVE applies to, e.g. 'libcrypto3'"),
+      reason: z.string().describe("Why this vulnerability is being ignored. Required: an ignore without a written reason is invisible debt."),
+      installedVersion: z.string().optional().describe("Installed version of the package, from the CVE detail"),
+    },
+    withErrors(async ({ environmentId, environmentName, imageId, vulnerabilityId, pkgName, reason, installedVersion }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const result = await client.vulnerabilities.ignore(envId, { imageId, vulnerabilityId, pkgName, reason, installedVersion });
+      return textResponse(JSON.stringify(result.data, null, 2));
+    }),
+  );
+
+  server.tool(
+    "arcane_vulnerability_unignore",
+    "Stop ignoring a vulnerability: the CVE counts again in the environment's security reporting. The ignoreId comes from arcane_vulnerability_ignored_list or from the record returned by arcane_vulnerability_ignore.",
+    {
+      environmentId: z.string().optional().describe("Environment ID (use if known)"),
+      environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
+      ignoreId: z.string().describe("Id of the ignore record to remove"),
+    },
+    withErrors(async ({ environmentId, environmentName, ignoreId }) => {
+      const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+      const result = await client.vulnerabilities.unignore(envId, ignoreId);
+      return textResponse(JSON.stringify(result, null, 2));
+    }),
+  );
 }

@@ -2230,5 +2230,73 @@ describe("MCP Tools", () => {
         expect(description, `${toolName}: debe decir "does not distinguish"`).toContain("does not distinguish");
       }
     });
+
+    it("registra las 3 tools mutantes", () => {
+      const server = createMockServer();
+      registerVulnerabilityTools(server as any, createMockClient());
+      for (const nombre of ["arcane_vulnerability_scan", "arcane_vulnerability_ignore", "arcane_vulnerability_unignore"]) {
+        expect(server.getHandler(nombre), nombre).toBeDefined();
+      }
+    });
+
+    it("vulnerability_scan devuelve el acuse con activityId", async () => {
+      const mockClient = createMockClient();
+      (mockClient.vulnerabilities.scan as any).mockResolvedValue({
+        success: true,
+        data: { imageId: "sha256:abc", imageName: "x", scanTime: "t", status: "scanning", scanPhase: "creating_container", activityId: "act-9" },
+      });
+      const server = createMockServer();
+      registerVulnerabilityTools(server as any, mockClient);
+      const out = await server.getHandler("arcane_vulnerability_scan")!({ environmentId: "env1", imageId: "sha256:abc" });
+      expect((mockClient.vulnerabilities.scan as any).mock.calls[0]).toEqual(["env1", "sha256:abc"]);
+      expect(out.content[0].text).toContain('"activityId": "act-9"');
+      expect(out.content[0].text).toContain("asynchronous");
+    });
+
+    it("el schema de vulnerability_ignore exige reason y no admite createdBy", () => {
+      const server = createMockServer();
+      registerVulnerabilityTools(server as any, createMockClient());
+      const call = (server.tool as any).mock.calls.find((c: any[]) => c[0] === "arcane_vulnerability_ignore");
+      const schemaShape = call[2];
+      const schema = z.object(schemaShape);
+      // Sin reason: rechazado. Es la garantia falsable de la salvaguarda 1
+      // del spec §3.2 — el mock de servidor no valida schemas, asi que sin
+      // este test relajar reason a .optional() no haria fallar nada.
+      expect(() =>
+        schema.parse({ imageId: "sha256:abc", vulnerabilityId: "CVE-1", pkgName: "p" })
+      ).toThrow();
+      // Con reason: aceptado.
+      const parsed = schema.parse({ imageId: "sha256:abc", vulnerabilityId: "CVE-1", pkgName: "p", reason: "no aplica" });
+      expect(parsed.reason).toBe("no aplica");
+      // createdBy no existe en el schema: lo pone el servidor.
+      expect(schemaShape.createdBy).toBeUndefined();
+    });
+
+    it("vulnerability_ignore pasa el payload al cliente y devuelve el registro", async () => {
+      const mockClient = createMockClient();
+      (mockClient.vulnerabilities.ignore as any).mockResolvedValue({
+        success: true,
+        data: { id: "ign-7", environmentId: "env1", imageId: "sha256:abc", vulnerabilityId: "CVE-1", pkgName: "p", installedVersion: "1", createdAt: "t", createdBy: "arcane", reason: "no aplica" },
+      });
+      const server = createMockServer();
+      registerVulnerabilityTools(server as any, mockClient);
+      const out = await server.getHandler("arcane_vulnerability_ignore")!({
+        environmentId: "env1", imageId: "sha256:abc", vulnerabilityId: "CVE-1", pkgName: "p", reason: "no aplica",
+      });
+      expect((mockClient.vulnerabilities.ignore as any).mock.calls[0][1]).toMatchObject({
+        imageId: "sha256:abc", vulnerabilityId: "CVE-1", pkgName: "p", reason: "no aplica",
+      });
+      expect(out.content[0].text).toContain('"id": "ign-7"');
+    });
+
+    it("vulnerability_unignore pasa el ignoreId", async () => {
+      const mockClient = createMockClient();
+      (mockClient.vulnerabilities.unignore as any).mockResolvedValue({ success: true });
+      const server = createMockServer();
+      registerVulnerabilityTools(server as any, mockClient);
+      const out = await server.getHandler("arcane_vulnerability_unignore")!({ environmentId: "env1", ignoreId: "ign-7" });
+      expect((mockClient.vulnerabilities.unignore as any).mock.calls[0]).toEqual(["env1", "ign-7"]);
+      expect(out.isError).toBeUndefined();
+    });
   });
 });

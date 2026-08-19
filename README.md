@@ -42,7 +42,7 @@ El fix de los endpoints NDJSON se ha ofrecido al upstream como PR autocontenido.
 
 <!-- BEGIN TOOLS -->
 
-Las **97** tools que expone el servidor, agrupadas por dominio. Esta tabla la
+Las **100** tools que expone el servidor, agrupadas por dominio. Esta tabla la
 genera `npm run gen-tools-table` a partir de `src/tools/`: las descripciones y los
 parámetros son los que registra el código, no una copia mantenida a mano.
 
@@ -229,7 +229,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | `arcane_updater_history` | List past automatic update runs. This endpoint reports no total count and cannot be paged, so the list may be incomplete: raise limit if you need to be sure you are seeing everything. | `environmentId?`, `environmentName?`, `limit?` |
 | `arcane_updater_run` | Apply pending updates to SPECIFIC containers or projects, recreating them. You must name the targets: updating everything at once is deliberately not available. Pass dryRun to see what would happen without changing anything. | `environmentId?`, `environmentName?`, `resourceIds`, `type?`, `dryRun?`, `forceUpdate?` |
 
-### Vulnerabilities (9)
+### Vulnerabilities (12)
 
 | Tool | Description | Inputs |
 |---|---|---|
@@ -242,6 +242,9 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | `arcane_vulnerability_image_summary` | Get the vulnerability summary of ONE image: scan status, scan time and CVE counts by severity. An error saying the scan was not found means there are no scan results for that image ID: either it was never scanned, or the ID is wrong — the error does not distinguish the two. Check the ID, then launch arcane_vulnerability_scan if you expect results. | `environmentId?`, `environmentName?`, `imageId` |
 | `arcane_vulnerability_image_summaries` | Get vulnerability scan summaries for a LIST of images in one call. The response map can omit some of the requested images, and the response does not say why — the tool flags this in prose when it happens. Use arcane_vulnerability_scan on the ones you expect to have results. | `environmentId?`, `environmentName?`, `imageIds` |
 | `arcane_vulnerability_ignored_list` | List the vulnerabilities that have been marked as ignored in an environment, paginated. Each record includes who ignored it, when, and the stated reason. Use the record id with arcane_vulnerability_unignore to reverse one. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?` |
+| `arcane_vulnerability_scan` | Launch a vulnerability scan (Trivy) of ONE image. The scan is asynchronous: this returns an acknowledgement with an activityId, not the result. Follow progress with arcane_activity_get, and read the outcome with arcane_vulnerability_scan_result once completed (~15 s for a small image). Scanning consumes CPU on the host. Check arcane_vulnerability_scanner_status first if unsure the scanner is available. | `environmentId?`, `environmentName?`, `imageId` |
+| `arcane_vulnerability_ignore` | Mark ONE vulnerability of ONE image as ignored. This persistently changes the environment's security reporting: the CVE stops counting against that image until un-ignored. Requires a reason, which is stored and shown in arcane_vulnerability_ignored_list. Reversible with arcane_vulnerability_unignore. | `environmentId?`, `environmentName?`, `imageId`, `vulnerabilityId`, `pkgName`, `reason`, `installedVersion?` |
+| `arcane_vulnerability_unignore` | Stop ignoring a vulnerability: the CVE counts again in the environment's security reporting. The ignoreId comes from arcane_vulnerability_ignored_list or from the record returned by arcane_vulnerability_ignore. | `environmentId?`, `environmentName?`, `ignoreId` |
 
 <!-- END TOOLS -->
 
