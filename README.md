@@ -157,7 +157,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | `arcane_volume_backup_create` | Create a backup of a Docker volume. | `environmentId?`, `environmentName?`, `volumeName` |
 | `arcane_volume_backup_list` | List backups of a Docker volume. Returns pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `volumeName`, `search?`, `sort?`, `order?`, `start?`, `limit?` |
 | `arcane_volume_backup_delete` | Delete a volume backup. | `environmentId?`, `environmentName?`, `backupId` |
-| `arcane_volume_backup_download` | Download a volume backup. Returns download URL or instructions. | `environmentId?`, `environmentName?`, `backupId` |
+| `arcane_volume_backup_download` | Look up a volume backup and get the command to download it. This tool cannot stream the binary backup file to an MCP client, so it does NOT return the file itself: it verifies the backup really exists (isError if not), returns its metadata, and gives the exact curl command for a human to run to fetch the file directly from the Arcane API. | `environmentId?`, `environmentName?`, `volumeName`, `backupId` |
 | `arcane_volume_backup_restore` | Restore a volume from a backup. | `environmentId?`, `environmentName?`, `volumeName`, `backupId` |
 
 ### Volume files (2)

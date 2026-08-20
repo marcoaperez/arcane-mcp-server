@@ -35,6 +35,7 @@ type MockedFunction<T extends (...args: any[]) => any> = {
 describe("MCP Tools", () => {
   const createMockClient = () => {
     const mockClient = {
+      getBaseUrl: vi.fn().mockReturnValue("http://mock-arcane.invalid/api"),
       environments: {
         list: vi.fn().mockResolvedValue({
           success: true,
@@ -1877,6 +1878,111 @@ describe("MCP Tools", () => {
 
       const [primera] = result.content[0].text.split("\n");
       expect(primera).toBe("Showing 20 of 45 volume backups (page 1 of 3). Pass start=20 to see the rest.");
+    });
+
+    it("arcane_volume_backup_download llama a list con envId y volumeName reales", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerVolumeBackupTools(server as any, mockClient);
+
+      (mockClient.volumeBackups.list as any).mockResolvedValue({
+        success: true,
+        data: [{ id: "backup1", volumeName: "data-vol", size: 2048, createdAt: "2024-01-01" }],
+        pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 200 },
+      });
+
+      const handler = server.getHandler("arcane_volume_backup_download");
+      await handler({ environmentId: "env1", volumeName: "data-vol", backupId: "backup1" });
+
+      expect(mockClient.volumeBackups.list).toHaveBeenCalledWith(
+        "env1",
+        "data-vol",
+        expect.objectContaining({ start: 0 }),
+      );
+    });
+
+    it("arcane_volume_backup_download encuentra el backup real y devuelve sus metadatos y el comando de descarga", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerVolumeBackupTools(server as any, mockClient);
+
+      const backup = { id: "backup1", volumeName: "data-vol", size: 2048, createdAt: "2024-01-01", activityId: "act1" };
+      (mockClient.volumeBackups.list as any).mockResolvedValue({
+        success: true,
+        // El backup buscado no es el unico de la pagina: si el handler
+        // ignorase backupId y devolviera el primero de la lista sin
+        // filtrar, este otro elemento lo delataria.
+        data: [{ id: "otro-backup", volumeName: "data-vol", size: 1, createdAt: "2023-01-01" }, backup],
+        pagination: { totalItems: 2, totalPages: 1, currentPage: 1, itemsPerPage: 200 },
+      });
+
+      const handler = server.getHandler("arcane_volume_backup_download");
+      const result = await handler({ environmentId: "env1", volumeName: "data-vol", backupId: "backup1" });
+
+      expect(result.isError).toBeUndefined();
+      // Metadatos reales del tipo VolumeBackup, no un texto generico.
+      expect(result.content[0].text).toContain(JSON.stringify(backup, null, 2));
+      // Comando accionable contra la ruta real de descarga del cliente
+      // (env + backupId, sin volumeName en el path), sin filtrar la API key.
+      expect(result.content[0].text).toContain(
+        "/environments/env1/volumes/backups/backup1/download",
+      );
+      expect(result.content[0].text).toContain("curl");
+      expect(result.content[0].text).not.toContain("Binary download is not supported");
+    });
+
+    it("arcane_volume_backup_download da isError si el backupId no existe (coleccion vista entera)", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerVolumeBackupTools(server as any, mockClient);
+
+      (mockClient.volumeBackups.list as any).mockResolvedValue({
+        success: true,
+        data: [{ id: "otro-backup", volumeName: "data-vol", size: 1, createdAt: "2023-01-01" }],
+        pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 200 },
+      });
+
+      const handler = server.getHandler("arcane_volume_backup_download");
+      const result = await handler({ environmentId: "env1", volumeName: "data-vol", backupId: "inventado" });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("not found");
+      expect(result.content[0].text).toContain("inventado");
+    });
+
+    it("arcane_volume_backup_download no concluye 'no existe' de una coleccion que no ha visto entera", async () => {
+      const mockClient = createMockClient();
+      const server = createMockServer();
+      registerVolumeBackupTools(server as any, mockClient);
+
+      // Igual que el resolver de proyectos: una coleccion tan grande que
+      // agota el tope de collectAllPages (2000 de 5000) sin encontrar el
+      // backupId buscado. El mensaje debe admitir que no lo ha mirado todo,
+      // no afirmar que no existe.
+      (mockClient.volumeBackups.list as any).mockImplementation(
+        async (_envId: string, _volumeName: string, opts?: { start?: number; limit?: number }) => {
+          const start = opts?.start ?? 0;
+          const limit = opts?.limit ?? 200;
+          const total = 5000;
+          const data = Array.from({ length: Math.max(0, Math.min(limit, total - start)) }, (_, i) => ({
+            id: `relleno${start + i}`,
+            volumeName: "data-vol",
+            size: 1,
+            createdAt: "2023-01-01",
+          }));
+          return {
+            success: true,
+            data,
+            pagination: { totalItems: total, totalPages: Math.ceil(total / limit), currentPage: start / limit + 1, itemsPerPage: limit },
+          };
+        },
+      );
+
+      const handler = server.getHandler("arcane_volume_backup_download");
+      const result = await handler({ environmentId: "env1", volumeName: "data-vol", backupId: "nunca-listado" });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toMatch(/among the first 2000 of 5000 backups/);
     });
 
     it("arcane_job_list con jobs:null devuelve una lista vacia, no el texto 'null'", async () => {

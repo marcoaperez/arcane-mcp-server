@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { ArcaneClient } from "../arcane-client";
 import { resolveEnvironmentId } from "./resolve";
 import { withErrors, listResponse } from "./respond";
+import { collectAllPages } from "./paging";
 
 const LIST_PARAMS = {
   search: z.string().optional().describe("Free-text search over backup names"),
@@ -65,16 +66,55 @@ export function registerVolumeBackupTools(server: McpServer, client: ArcaneClien
 
   server.tool(
     "arcane_volume_backup_download",
-    "Download a volume backup. Returns download URL or instructions.",
+    "Look up a volume backup and get the command to download it. This tool cannot stream the binary backup file to an MCP client, so it does NOT return the file itself: it verifies the backup really exists (isError if not), returns its metadata, and gives the exact curl command for a human to run to fetch the file directly from the Arcane API.",
     {
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
+      volumeName: z.string().describe("Volume name the backup belongs to"),
       backupId: z.string().describe("Backup ID"),
     },
-    withErrors(async ({ environmentId, environmentName, backupId }) => {
+    withErrors(async ({ environmentId, environmentName, volumeName, backupId }) => {
       const envId = await resolveEnvironmentId(client, environmentId, environmentName);
+
+      // No hay endpoint "get" para un backup suelto: la unica forma de
+      // verificar que existe de verdad es recorrer el listado del volumen y
+      // buscarlo por id, igual que hacen los resolvers nombre->id.
+      const { items, complete, totalItems } = await collectAllPages("createdAt", (req) =>
+        client.volumeBackups.list(envId, volumeName, req),
+      );
+      const backup = items.find((b) => b.id === backupId);
+
+      if (!backup) {
+        if (!complete) {
+          return {
+            content: [{
+              type: "text",
+              text: `Backup '${backupId}' not found among the first ${items.length} of ${totalItems} backups ` +
+                `for volume '${volumeName}' in environment '${envId}'. The collection is large; this check did not see all of it.`,
+            }],
+            isError: true,
+          };
+        }
+        return {
+          content: [{
+            type: "text",
+            text: `Backup '${backupId}' not found for volume '${volumeName}' in environment '${envId}'.`,
+          }],
+          isError: true,
+        };
+      }
+
+      // Mismo endpoint que usa ArcaneClient.volumeBackups.download(): sin
+      // volumeName en la ruta, solo envId + backupId.
+      const downloadUrl = `${client.getBaseUrl()}/environments/${encodeURIComponent(envId)}/volumes/backups/${encodeURIComponent(backupId)}/download`;
+      const command = `curl -H "X-API-Key: $ARCANE_API_KEY" -o "${volumeName}-${backupId}.backup" "${downloadUrl}"`;
+
       return {
-        content: [{ type: "text", text: `Download available for backup '${backupId}' in environment '${envId}'.\nNote: Binary download is not supported via MCP tool interface. Use the API directly to download the backup file.` }],
+        content: [{
+          type: "text",
+          text: `Backup found. Metadata:\n${JSON.stringify(backup, null, 2)}\n\n` +
+            `This MCP tool interface cannot stream binary data, so run this to download the file:\n${command}`,
+        }],
       };
     }),
   );

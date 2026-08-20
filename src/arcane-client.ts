@@ -10,8 +10,9 @@ export class ArcaneApiError extends Error {
  * cuerpo de error cuando lo hay.
  *
  * Extraido en F5: el mismo bloque estaba repetido literalmente en request(),
- * requestMultipart(), requestNdjson() y VolumeBackupsMethods.download(), y la
- * fase añadia dos sitios mas.
+ * requestMultipart(), requestNdjson() y VolumeBackupsMethods.download() (esta
+ * ultima eliminada en el arreglo de la tool falsa: era codigo muerto, sin
+ * ninguna tool que la alcanzara), y la fase añadia dos sitios mas.
  */
 async function lanzaSiFalla(response: Response): Promise<void> {
   if (response.ok) return;
@@ -2329,18 +2330,12 @@ class VolumeBackupsMethods {
     return this.client.request<ActionResponse>("DELETE", `/environments/${encodeURIComponent(envId)}/volumes/backups/${encodeURIComponent(backupId)}`);
   }
 
-  async download(envId: string, backupId: string): Promise<Blob> {
-    const response = await this.client.fetchFn(`${this.client.getBaseUrl()}/environments/${encodeURIComponent(envId)}/volumes/backups/${encodeURIComponent(backupId)}/download`, {
-      method: "GET",
-      headers: {
-        "X-API-Key": this.client.getApiKey(),
-      },
-    });
-
-    await lanzaSiFalla(response);
-
-    return response.blob();
-  }
+  // No hay metodo download(): un cliente MCP no puede recibir un flujo
+  // binario. arcane_volume_backup_download (src/tools/volume-backups.ts)
+  // verifica el backup con list() y devuelve el comando curl exacto contra
+  // el endpoint /environments/{envId}/volumes/backups/{backupId}/download
+  // para que lo ejecute un humano. Antes de este arreglo este metodo existia
+  // pero ninguna tool lo llamaba: era codigo muerto.
 
   async restore(envId: string, volumeName: string, backupId: string): Promise<ActionResponse> {
     return this.client.request<ActionResponse>(
@@ -2589,14 +2584,6 @@ export class ArcaneClient {
 
   getBaseUrl(): string {
     return this.baseUrl;
-  }
-
-  getApiKey(): string {
-    return this.apiKey;
-  }
-
-  get fetchFn(): (input: string | URL | Request, init?: RequestInit) => Promise<Response> {
-    return this._fetch;
   }
 
   async request<T>(method: string, path: string, body?: unknown): Promise<T> {
