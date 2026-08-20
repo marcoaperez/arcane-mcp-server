@@ -1931,6 +1931,35 @@ describe("MCP Tools", () => {
       expect(result.content[0].text).not.toContain("Binary download is not supported");
     });
 
+    it("arcane_volume_backup_download en modo Workers no promete un curl exacto: avisa de que la URL es la vista interna del servidor", async () => {
+      const mockClient = createMockClient();
+      // Vista interna real del cliente en modo Cloudflare Workers (ver
+      // constructor de ArcaneClient): no es una URL alcanzable desde la
+      // maquina de un humano, solo desde el service binding.
+      (mockClient.getBaseUrl as any).mockReturnValue("http://placeholder/api");
+      const server = createMockServer();
+      registerVolumeBackupTools(server as any, mockClient);
+
+      const backup = { id: "backup1", volumeName: "data-vol", size: 2048, createdAt: "2024-01-01" };
+      (mockClient.volumeBackups.list as any).mockResolvedValue({
+        success: true,
+        data: [backup],
+        pagination: { totalItems: 1, totalPages: 1, currentPage: 1, itemsPerPage: 200 },
+      });
+
+      const handler = server.getHandler("arcane_volume_backup_download");
+      const result = await handler({ environmentId: "env1", volumeName: "data-vol", backupId: "backup1" });
+
+      const text = result.content[0].text as string;
+      expect(text).toContain("http://placeholder/api");
+      // No debe afirmar que el curl es exacto/directamente ejecutable por un
+      // humano: debe avisar de que es la vista interna del servidor y de que
+      // puede hacer falta cambiar el host.
+      expect(text).not.toMatch(/exact curl command/i);
+      expect(text).toMatch(/this server's own view/i);
+      expect(text).toMatch(/replace the host/i);
+    });
+
     it("arcane_volume_backup_download da isError si el backupId no existe (coleccion vista entera)", async () => {
       const mockClient = createMockClient();
       const server = createMockServer();

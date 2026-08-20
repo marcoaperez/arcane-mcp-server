@@ -66,7 +66,7 @@ export function registerVolumeBackupTools(server: McpServer, client: ArcaneClien
 
   server.tool(
     "arcane_volume_backup_download",
-    "Look up a volume backup and get the command to download it. This tool cannot stream the binary backup file to an MCP client, so it does NOT return the file itself: it verifies the backup really exists (isError if not), returns its metadata, and gives the exact curl command for a human to run to fetch the file directly from the Arcane API.",
+    "Look up a volume backup and get a starting-point curl command to download it. This tool cannot stream the binary backup file to an MCP client, so it does NOT return the file itself: it verifies the backup really exists (isError if not), returns its metadata, and builds a curl command from THIS SERVER's own view of the Arcane API base URL (e.g. an internal Docker hostname, or a placeholder in Cloudflare Workers mode) — not necessarily a URL reachable from the machine that will run the curl. The human may need to swap in a different host before running it.",
     {
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),
@@ -115,7 +115,10 @@ export function registerVolumeBackupTools(server: McpServer, client: ArcaneClien
         content: [{
           type: "text",
           text: `Backup found. Metadata:\n${JSON.stringify(backup, null, 2)}\n\n` +
-            `This MCP tool interface cannot stream binary data, so run this to download the file:\n${command}`,
+            `This MCP tool interface cannot stream binary data. Below is a starting-point curl ` +
+            `command built from this server's own view of the Arcane API base URL ` +
+            `(${client.getBaseUrl()}) — that is how THIS SERVER reaches Arcane, not necessarily a ` +
+            `host reachable from wherever you run this command. Replace the host if needed:\n${command}`,
         }],
       };
     }),

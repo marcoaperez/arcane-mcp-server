@@ -1,3 +1,4 @@
+/** Contadores por severidad (spec: VulnerabilitySeveritySummary). */
 export interface VulnerabilitySeveritySummary {
   critical: number;
   high: number;

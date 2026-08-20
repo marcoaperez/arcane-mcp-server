@@ -112,8 +112,33 @@ function ficherosDelCliente() {
   return ficheros;
 }
 
-const iface = {};
-for (const f of ficherosDelCliente()) Object.assign(iface, tsInterfaceProps(f));
+/**
+ * Fusiona las interfaces de todos los ficheros del cliente, pero a diferencia
+ * de un `Object.assign` liso, NO deja que un nombre duplicado gane en
+ * silencio ("gana el ultimo fichero leido"): si dos dominios declaran la
+ * misma interfaz, este auditor contrastaria contra la declaracion equivocada
+ * sin que nadie se entere. Revienta en vez de fusionar.
+ */
+function fusionaInterfaces(ficheros) {
+  const iface = {};
+  const origenDe = new Map();
+  for (const f of ficheros) {
+    for (const [nombre, miembros] of Object.entries(tsInterfaceProps(f))) {
+      const origenPrevio = origenDe.get(nombre);
+      if (origenPrevio) {
+        throw new Error(
+          `Interfaz \`${nombre}\` declarada en mas de un fichero: ${origenPrevio} y ${f}. ` +
+            `El auditor de drift no puede saber cual de las dos representa el tipo real; renombra una de las dos.`,
+        );
+      }
+      iface[nombre] = miembros;
+      origenDe.set(nombre, f);
+    }
+  }
+  return iface;
+}
+
+const iface = fusionaInterfaces(ficherosDelCliente());
 const spec = JSON.parse(readFileSync("openapi.txt", "utf8"));
 const schemas = spec.components.schemas;
 

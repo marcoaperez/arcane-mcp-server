@@ -292,5 +292,3 @@ export interface ScannerStatus {
   available: boolean;
   version?: string;
 }
-
-/** Contadores por severidad (spec: VulnerabilitySeveritySummary). */

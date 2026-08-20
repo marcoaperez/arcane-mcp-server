@@ -35,7 +35,28 @@ node -e "const s=JSON.parse(require('fs').readFileSync('openapi.txt','utf8')); c
 (`"content": {}`) en vez de `application/json`, el endpoint **transmite NDJSON**
 (`application/x-json-stream`). Ver el paso 3.
 
-## 2. Declarar el tipo en `src/arcane-client.ts`
+## 2. Declarar el tipo en `src/arcane-client/types-*.ts`
+
+Desde el refactor que partió `src/arcane-client.ts` por dominios, ese fichero
+raíz **ya no aloja tipos ni métodos** — son 224 líneas de solo transporte
+(`request`, `requestNdjson`, `requestSinCuerpo`, `requestMultipart`,
+`requestHead`, el constructor que conecta las clases de dominio, y sus
+`export *`). Los tipos viven en `src/arcane-client/types-*.ts`, uno por
+dominio:
+
+| Fichero | Qué guarda |
+|---|---|
+| `types-resources.ts` | `Environment*`, `Project*`, `Container*` (resumen/detalle), `Image*` |
+| `types-catalog.ts` | `Volume*`, `Network*`, `Template*`, `Pagination`, `PaginatedResponse` |
+| `types-git-activity.ts` | `GitRepository*`, `GitBranch`, `GitFileNode`, `GitOpsSync*`, `VolumeBackup` |
+| `types-registries.ts` | `ContainerRegistry`, `RegistryPullUsage*`, `TemplateRegistry*`, `MessageResponse` |
+| `types-system-build.ts` | `SystemPrune*`, `SystemConvertResult`, `DockerInfo`, `ContainerCreateOptions`, `BuildWorkspaceEntry`, `BuildFileContent`, `ImageBuildRecord` |
+| `types-vulnerabilities.ts` | `Vulnerability*`, `VulnerabilityScan*`, `IgnoredVulnerability`, `VulnerabilityIgnoreRequest` |
+
+Si tu tipo no encaja con claridad en ninguno, añádelo al fichero cuyo dominio
+esté más cerca (o, si es un dominio realmente nuevo, crea
+`types-<dominio>.ts` y expórtalo desde `src/arcane-client.ts` con un
+`export * from "./arcane-client/types-<dominio>";` más).
 
 Copia el shape del schema del spec, campo por campo. Respeta la opcionalidad:
 lo que el spec liste en `required` va **sin** `?`.
@@ -50,7 +71,31 @@ const MAP = {
 };
 ```
 
-## 3. Añadir el método al cliente
+## 3. Añadir el método al fichero de dominio en `src/arcane-client/`
+
+Los métodos tampoco viven en el raíz: cada clase `*Methods` vive en el
+fichero de dominio que le corresponde, y `src/arcane-client.ts` solo la
+importa y la conecta en el constructor de `ArcaneClient`.
+
+| Fichero | Clases que contiene |
+|---|---|
+| `environments-stacks.ts` | `EnvironmentsMethods`, `StacksMethods`, `ProjectAdditionalMethods` |
+| `containers.ts` | `ContainersMethods`, `ContainerAdditionalMethods`, `ContainerRegistriesMethods` |
+| `images-builds.ts` | `ImagesMethods`, `ImageUpdatesMethods`, `ImageBuildsMethods`, `BuildWorkspaceMethods` |
+| `volumes-networks.ts` | `VolumesMethods`, `NetworksMethods`, `VolumeBackupsMethods`, `VolumeFilesMethods` |
+| `templates-git.ts` | `TemplatesMethods`, `TemplateRegistriesMethods`, `GitRepositoriesMethods`, `GitOpsSyncsMethods` |
+| `system-activity.ts` | `SystemMethods`, `ActivitiesMethods`, `EventsMethods`, `JobsMethods` |
+| `vulnerabilities-updater.ts` | `UpdaterMethods`, `VulnerabilitiesMethods` |
+
+Añade el método a la clase que corresponda a tu dominio. Cada clase recibe
+`client: ArcaneClient` en el constructor y llama a `this.client.request(...)`
+(o la variante que toque) igual que antes de la partición.
+
+Si el dominio es realmente nuevo (ninguna clase existente encaja), crea
+`src/arcane-client/<dominio>.ts` con tu clase `*Methods`, y en
+`src/arcane-client.ts`: (a) impórtala, (b) añade la propiedad `readonly` a
+`ArcaneClient`, y (c) instáncíala en el constructor — son los tres únicos
+sitios donde el raíz sigue tocando código de dominio.
 
 Endpoint normal (JSON único):
 
