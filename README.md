@@ -38,39 +38,69 @@ Built on Cloudflare Workers using the official Cloudflare `agents` package, this
 
 El fix de los endpoints NDJSON se ha ofrecido al upstream como PR autocontenido.
 
-## Pendiente al actualizar a Arcane v2.8.1
+## Pendiente al actualizar Arcane (v2.8.0 → siguiente release)
 
 La instancia de referencia corre **v2.8.0** deliberadamente: es la versión contra la que
 están verificadas las 98 combinaciones método+ruta y los comportamientos que describen las
-tools de este README. v2.8.1 (publicada el 2026-08-19) **no corrige ninguno** de los issues
-abiertos desde este proyecto, así que el salto no corre prisa. Cuando se haga, esto es lo
-que hay que atender:
+tools de este README.
+
+**v2.8.1** (2026-08-19) no aporta nada a este fork: no corrige ninguno de los issues
+abiertos desde aquí. **La siguiente release sí**. A fecha de 2026-08-20 hay dos fixes
+nuestros mergeados en `main` y todavía sin publicar, y uno de ellos cambia el contrato de
+la API. Cuando salga esa versión, el salto pasa a ser recomendable en lugar de opcional.
+
+### Lo que traerá la siguiente release
+
+- **Cambio de contrato que hay que absorber: `arcane_vulnerability_image_list`.** El PR
+  [#3682](https://github.com/getarcaneapp/arcane/pull/3682) hace que
+  `GET /images/{imageId}/vulnerabilities/list` devuelva **404** cuando no existe scan para
+  ese id, en vez del **200 con página vacía** que devuelve hoy
+  (`ListVulnerabilities` pasa a retornar `ErrVulnerabilityScanNotFound`). Es una mejora
+  —hoy una imagen sin scan es indistinguible de una imagen limpia— pero la tool debe
+  tratar ese 404 como "sin resultados de scan", no como error duro, igual que ya hace
+  `arcane_vulnerability_scan_result`.
+- **Los `{imageId}` percent-codificados dejan de fallar.** El mismo PR decodifica los
+  parámetros de ruta en la capa de routing (`UnescapePathParamValues` en Echo), de modo
+  que `sha256:…`, `sha256%3A…` y `%73ha256:…` resuelven a la misma imagen. El
+  emparejamiento de rutas se sigue haciendo sobre el path escapado, así que un `/`
+  codificado no puede cambiar qué ruta casa. Cierra
+  [#3657](https://github.com/getarcaneapp/arcane/issues/3657).
+- **Paginación estable sin `sort` explícito.** El PR
+  [#3648](https://github.com/getarcaneapp/arcane/pull/3648) cierra
+  [#3645](https://github.com/getarcaneapp/arcane/issues/3645): recorrer páginas con
+  `start` sin ordenación explícita deja de devolver resultados no deterministas.
+
+### Lo que ya trajo v2.8.1
 
 - **`arcane_image_update_check` gana un estado nuevo.** El PR
   [#3631](https://github.com/getarcaneapp/arcane/pull/3631) hace que las imágenes nunca
   descargadas reporten un estado propio `not pulled` en lugar de fallar la comprobación.
-  Es el único cambio de v2.8.1 que toca la superficie que usa este fork.
 - **El contrato JSON no cambia.** El refactor de `models` a paquetes de dominio
   ([#3636](https://github.com/getarcaneapp/arcane/pull/3636)) mueve los structs de fichero
   pero conserva los tags `json`. Verificado campo a campo sobre `VulnerabilityIgnore` en
   `backend/internal/vulnerability/model.go` de v2.8.1, y el diff `v2.8.0...v2.8.1` no
-  contiene ningún campo eliminado ni renombrado. No se espera drift de shapes.
+  contiene ningún campo eliminado ni renombrado.
+
+### En cualquier caso, al saltar
+
 - **Rehacer la línea base de verificación.** Regenerar `openapi.txt` con
   `npm run update-api-spec` y pasar `scripts/audit-schema-drift.mjs`. Los comportamientos
   medidos que documentan las descripciones de las tools (`arcane_system_health` siempre
   500, `arcane_vulnerability_ignore` sin efecto sobre los recuentos) dejan de estar
   garantizados hasta volver a medirlos.
-- **Requisitos operativos del salto.** Pinear la imagen antes de actualizar — la instancia
-  arrastra las etiquetas `:latest` y `:v2.8.0` sobre el mismo digest — y contar con que
-  v2.8.1 **migra el esquema de la base de datos**: backup previo.
+- **Requisitos operativos.** Pinear la imagen antes de actualizar — la instancia arrastra
+  las etiquetas `:latest` y `:v2.8.0` sobre el mismo digest — y contar con que el salto
+  **migra el esquema de la base de datos**: backup previo.
 
-Issues abiertos contra upstream desde este proyecto, ninguno resuelto en v2.8.1:
-[#3638](https://github.com/getarcaneapp/arcane/issues/3638),
-[#3640](https://github.com/getarcaneapp/arcane/issues/3640),
-[#3645](https://github.com/getarcaneapp/arcane/issues/3645) — cuyo fix, el PR
-[#3648](https://github.com/getarcaneapp/arcane/pull/3648), sigue sin mergear — y
-[#3657](https://github.com/getarcaneapp/arcane/issues/3657), que documenta que la API no
-percent-decodifica los segmentos `{imageId}`.
+### Estado de los issues abiertos contra upstream desde este proyecto
+
+| Issue | Estado | Fix |
+|---|---|---|
+| [#3638](https://github.com/getarcaneapp/arcane/issues/3638) — `HEAD /system/health` siempre 500 | abierto, sin respuesta | — |
+| [#3640](https://github.com/getarcaneapp/arcane/issues/3640) — batch de update check falla en imágenes locales | abierto, sin respuesta | — |
+| [#3645](https://github.com/getarcaneapp/arcane/issues/3645) — paginación sin `sort` | cerrado 2026-08-19 | [#3648](https://github.com/getarcaneapp/arcane/pull/3648), en `main` sin publicar |
+| [#3657](https://github.com/getarcaneapp/arcane/issues/3657) — no se percent-decodifican los `{imageId}` | cerrado 2026-08-20 | [#3682](https://github.com/getarcaneapp/arcane/pull/3682), en `main` sin publicar |
+| [#3685](https://github.com/getarcaneapp/arcane/issues/3685) — `hasBuildDirective` siempre `false` | abierto 2026-08-20 | — |
 
 ## Available Tools
 
@@ -157,7 +187,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | `arcane_volume_backup_create` | Create a backup of a Docker volume. | `environmentId?`, `environmentName?`, `volumeName` |
 | `arcane_volume_backup_list` | List backups of a Docker volume. Returns pagination; if the response says there are more pages, pass start to see the rest before drawing conclusions about what exists. | `environmentId?`, `environmentName?`, `volumeName`, `search?`, `sort?`, `order?`, `start?`, `limit?` |
 | `arcane_volume_backup_delete` | Delete a volume backup. | `environmentId?`, `environmentName?`, `backupId` |
-| `arcane_volume_backup_download` | Download a volume backup. Returns download URL or instructions. | `environmentId?`, `environmentName?`, `backupId` |
+| `arcane_volume_backup_download` | Look up a volume backup and get a starting-point curl command to download it. This tool cannot stream the binary backup file to an MCP client, so it does NOT return the file itself: it verifies the backup really exists (isError if not), returns its metadata, and builds a curl command from THIS SERVER's own view of the Arcane API base URL (e.g. an internal Docker hostname, or a placeholder in Cloudflare Workers mode) — not necessarily a URL reachable from the machine that will run the curl. The human may need to swap in a different host before running it. | `environmentId?`, `environmentName?`, `volumeName`, `backupId` |
 | `arcane_volume_backup_restore` | Restore a volume from a backup. | `environmentId?`, `environmentName?`, `volumeName`, `backupId` |
 
 ### Volume files (2)

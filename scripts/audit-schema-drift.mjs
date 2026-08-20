@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * Audita el drift entre las interfaces TypeScript de src/arcane-client.ts
+ * Audita el drift entre las interfaces TypeScript del cliente
+ * (src/arcane-client.ts y src/arcane-client/*.ts)
  * y los schemas del spec OpenAPI de Arcane (openapi.txt).
  *
  * Uso:
  *   node scripts/audit-schema-drift.mjs          # tabla Markdown
  *   node scripts/audit-schema-drift.mjs --json   # salida estructurada
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 import ts from "typescript";
 
 // Interfaz TS -> schema del spec. Solo los tipos que representan payloads
@@ -90,7 +91,54 @@ function tsInterfaceProps(file) {
   return out;
 }
 
-const iface = tsInterfaceProps("src/arcane-client.ts");
+/**
+ * Ficheros donde viven las interfaces del cliente.
+ *
+ * Desde que src/arcane-client.ts se partio por dominios, los tipos ya no estan
+ * todos en un fichero. Este auditor leia SOLO el fichero raiz y, tras la
+ * particion, reportaba las 24 interfaces como INTERFAZ-AUSENTE: no daba un
+ * numero equivocado, se quedaba CIEGO -habria dejado de cazar drift real-.
+ * Se descubren los ficheros en vez de listarlos para que anadir un dominio
+ * nuevo no vuelva a romperlo en silencio.
+ */
+function ficherosDelCliente() {
+  const ficheros = ["src/arcane-client.ts"];
+  const dir = "src/arcane-client";
+  if (existsSync(dir)) {
+    for (const f of readdirSync(dir).sort()) {
+      if (f.endsWith(".ts")) ficheros.push(`${dir}/${f}`);
+    }
+  }
+  return ficheros;
+}
+
+/**
+ * Fusiona las interfaces de todos los ficheros del cliente, pero a diferencia
+ * de un `Object.assign` liso, NO deja que un nombre duplicado gane en
+ * silencio ("gana el ultimo fichero leido"): si dos dominios declaran la
+ * misma interfaz, este auditor contrastaria contra la declaracion equivocada
+ * sin que nadie se entere. Revienta en vez de fusionar.
+ */
+function fusionaInterfaces(ficheros) {
+  const iface = {};
+  const origenDe = new Map();
+  for (const f of ficheros) {
+    for (const [nombre, miembros] of Object.entries(tsInterfaceProps(f))) {
+      const origenPrevio = origenDe.get(nombre);
+      if (origenPrevio) {
+        throw new Error(
+          `Interfaz \`${nombre}\` declarada en mas de un fichero: ${origenPrevio} y ${f}. ` +
+            `El auditor de drift no puede saber cual de las dos representa el tipo real; renombra una de las dos.`,
+        );
+      }
+      iface[nombre] = miembros;
+      origenDe.set(nombre, f);
+    }
+  }
+  return iface;
+}
+
+const iface = fusionaInterfaces(ficherosDelCliente());
 const spec = JSON.parse(readFileSync("openapi.txt", "utf8"));
 const schemas = spec.components.schemas;
 
