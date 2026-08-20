@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * Audita el drift entre las interfaces TypeScript de src/arcane-client.ts
+ * Audita el drift entre las interfaces TypeScript del cliente
+ * (src/arcane-client.ts y src/arcane-client/*.ts)
  * y los schemas del spec OpenAPI de Arcane (openapi.txt).
  *
  * Uso:
  *   node scripts/audit-schema-drift.mjs          # tabla Markdown
  *   node scripts/audit-schema-drift.mjs --json   # salida estructurada
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 import ts from "typescript";
 
 // Interfaz TS -> schema del spec. Solo los tipos que representan payloads
@@ -90,7 +91,29 @@ function tsInterfaceProps(file) {
   return out;
 }
 
-const iface = tsInterfaceProps("src/arcane-client.ts");
+/**
+ * Ficheros donde viven las interfaces del cliente.
+ *
+ * Desde que src/arcane-client.ts se partio por dominios, los tipos ya no estan
+ * todos en un fichero. Este auditor leia SOLO el fichero raiz y, tras la
+ * particion, reportaba las 24 interfaces como INTERFAZ-AUSENTE: no daba un
+ * numero equivocado, se quedaba CIEGO -habria dejado de cazar drift real-.
+ * Se descubren los ficheros en vez de listarlos para que anadir un dominio
+ * nuevo no vuelva a romperlo en silencio.
+ */
+function ficherosDelCliente() {
+  const ficheros = ["src/arcane-client.ts"];
+  const dir = "src/arcane-client";
+  if (existsSync(dir)) {
+    for (const f of readdirSync(dir).sort()) {
+      if (f.endsWith(".ts")) ficheros.push(`${dir}/${f}`);
+    }
+  }
+  return ficheros;
+}
+
+const iface = {};
+for (const f of ficherosDelCliente()) Object.assign(iface, tsInterfaceProps(f));
 const spec = JSON.parse(readFileSync("openapi.txt", "utf8"));
 const schemas = spec.components.schemas;
 
