@@ -41,8 +41,8 @@ El fix de los endpoints NDJSON se ha ofrecido al upstream como PR autocontenido.
 ## Pendiente al actualizar Arcane (v2.8.0 → siguiente release)
 
 La instancia de referencia corre **v2.8.0** deliberadamente: es la versión contra la que
-están verificadas las 98 combinaciones método+ruta y los comportamientos que describen las
-tools de este README.
+están verificadas las **113** combinaciones método+ruta y los comportamientos que describen
+las tools de este README. (Eran 98 al cerrar F4; la cifra se remidió al cerrar F5.)
 
 **v2.8.1** (2026-08-19) no aporta nada a este fork: no corrige ninguno de los issues
 abiertos desde aquí. **La siguiente release sí**. A fecha de 2026-08-20 hay dos fixes
@@ -59,6 +59,15 @@ la API. Cuando salga esa versión, el salto pasa a ser recomendable en lugar de 
   —hoy una imagen sin scan es indistinguible de una imagen limpia— pero la tool debe
   tratar ese 404 como "sin resultados de scan", no como error duro, igual que ya hace
   `arcane_vulnerability_scan_result`.
+
+  **Verificado el 2026-08-20 sobre una imagen real sin escanear**, para que conste cuál es
+  el punto de partida exacto: `.../vulnerabilities/summary` y `.../vulnerabilities` ya
+  devuelven **404** hoy; el que se sale es `.../vulnerabilities/list`, con **200** y página
+  vacía. Por eso la descripción de `arcane_vulnerability_image_list` advierte hoy de que
+  una lista vacía **no** significa imagen limpia, y remite a `image_summary`, que sí
+  distingue. **Al actualizar hay que remedir y reescribir esa advertencia**, no borrarla:
+  hay un test que la vigila (`image_list avisa de que una lista vacia NO significa imagen
+  limpia`, en `src/__tests__/tools.test.ts`).
 - **Los `{imageId}` percent-codificados dejan de fallar.** El mismo PR decodifica los
   parámetros de ruta en la capa de routing (`UnescapePathParamValues` en Echo), de modo
   que `sha256:…`, `sha256%3A…` y `%73ha256:…` resuelven a la misma imagen. El
@@ -311,7 +320,7 @@ parámetros son los que registra el código, no una copia mantenida a mano.
 | `arcane_vulnerability_list` | List vulnerabilities across all scanned images in an environment, paginated. Filter by severity (critical, high, medium, low, unknown) and/or by exact image name. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `severity?`, `imageName?` |
 | `arcane_vulnerability_image_options` | List the names of images that have vulnerability scan results, optionally only those with findings of a given severity. Useful to discover what has been scanned before drilling down. | `environmentId?`, `environmentName?`, `severity?` |
 | `arcane_vulnerability_scan_result` | Get the scan metadata for ONE image: status (scanning/completed/failed), scan time, scanner version, error if any, and the severity summary. The full CVE detail is deliberately NOT included — page through it with arcane_vulnerability_image_list. An error saying the scan was not found means there are no scan results for that image ID: either it was never scanned, or the ID is wrong — the error does not distinguish the two. Check the ID, then launch arcane_vulnerability_scan if you expect results. | `environmentId?`, `environmentName?`, `imageId` |
-| `arcane_vulnerability_image_list` | List the vulnerabilities of ONE image, paginated, with full CVE detail per item. Filter by severity. An error saying the scan was not found means there are no scan results for that image ID: either it was never scanned, or the ID is wrong — the error does not distinguish the two. Check the ID, then launch arcane_vulnerability_scan if you expect results. | `environmentId?`, `environmentName?`, `imageId`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `severity?` |
+| `arcane_vulnerability_image_list` | List the vulnerabilities of ONE image, paginated, with full CVE detail per item. Filter by severity. IMPORTANT: an EMPTY list from this tool does not mean the image is clean. Measured against Arcane 2.8.0: unlike the other vulnerability tools, which return a not-found error, this endpoint answers HTTP 200 with an empty page for an image that has no scan results at all, so 'never scanned' and 'scanned, nothing found' look identical here. Confirm with arcane_vulnerability_image_summary, which does distinguish them, before concluding an image is clean. | `environmentId?`, `environmentName?`, `imageId`, `search?`, `sort?`, `order?`, `start?`, `limit?`, `severity?` |
 | `arcane_vulnerability_image_summary` | Get the vulnerability summary of ONE image: scan status, scan time and CVE counts by severity. An error saying the scan was not found means there are no scan results for that image ID: either it was never scanned, or the ID is wrong — the error does not distinguish the two. Check the ID, then launch arcane_vulnerability_scan if you expect results. | `environmentId?`, `environmentName?`, `imageId` |
 | `arcane_vulnerability_image_summaries` | Get vulnerability scan summaries for a LIST of images in one call. The response map can omit some of the requested images, and the response does not say why — the tool flags this in prose when it happens. Use arcane_vulnerability_scan on the ones you expect to have results. | `environmentId?`, `environmentName?`, `imageIds` |
 | `arcane_vulnerability_ignored_list` | List the vulnerabilities that have been marked as ignored in an environment, paginated. Each record includes who ignored it, when, and the stated reason. Use the record id with arcane_vulnerability_unignore to reverse one. | `environmentId?`, `environmentName?`, `search?`, `sort?`, `order?`, `start?`, `limit?` |

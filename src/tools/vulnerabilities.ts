@@ -101,7 +101,7 @@ export function registerVulnerabilityTools(server: McpServer, client: ArcaneClie
 
   server.tool(
     "arcane_vulnerability_image_list",
-    "List the vulnerabilities of ONE image, paginated, with full CVE detail per item. Filter by severity. An error saying the scan was not found means there are no scan results for that image ID: either it was never scanned, or the ID is wrong — the error does not distinguish the two. Check the ID, then launch arcane_vulnerability_scan if you expect results.",
+    "List the vulnerabilities of ONE image, paginated, with full CVE detail per item. Filter by severity. IMPORTANT: an EMPTY list from this tool does not mean the image is clean. Measured against Arcane 2.8.0: unlike the other vulnerability tools, which return a not-found error, this endpoint answers HTTP 200 with an empty page for an image that has no scan results at all, so 'never scanned' and 'scanned, nothing found' look identical here. Confirm with arcane_vulnerability_image_summary, which does distinguish them, before concluding an image is clean.",
     {
       environmentId: z.string().optional().describe("Environment ID (use if known)"),
       environmentName: z.string().optional().describe("Environment name (alternative to ID)"),

@@ -2396,14 +2396,17 @@ describe("MCP Tools", () => {
       expect(out.content[0].text).toContain("Vulnerability scan not found");
     });
 
-    it("scan_result, image_list e image_summary NO inventan la causa del 404", () => {
+    it("scan_result e image_summary NO inventan la causa del 404", () => {
       // El 404 de "scan not found" no distingue entre imagen inexistente e imagen
       // no escaneada. Las descripciones deben decir lo observable: el error no
       // distingue las dos causas; nunca afirmar "significa X" cuando podría ser X o Y.
+      //
+      // image_list SALIO de esta lista el 2026-08-20 porque su endpoint no se
+      // comporta igual: ver el test siguiente.
       const server = createMockServer();
       registerVulnerabilityTools(server as any, createMockClient());
 
-      const toolsAauditar = ["arcane_vulnerability_scan_result", "arcane_vulnerability_image_list", "arcane_vulnerability_image_summary"];
+      const toolsAauditar = ["arcane_vulnerability_scan_result", "arcane_vulnerability_image_summary"];
 
       for (const toolName of toolsAauditar) {
         const call = (server.tool as any).mock.calls.find((c: any[]) => c[0] === toolName);
@@ -2412,6 +2415,29 @@ describe("MCP Tools", () => {
         expect(description, `${toolName}: no debe afirmar "means the image has never been scanned"`).not.toContain("means the image has never been scanned");
         expect(description, `${toolName}: debe decir "does not distinguish"`).toContain("does not distinguish");
       }
+    });
+
+    it("image_list avisa de que una lista vacia NO significa imagen limpia", () => {
+      // MEDIDO el 2026-08-20 contra Arcane 2.8.0, sobre una imagen real sin
+      // escanear: .../vulnerabilities/summary y .../vulnerabilities devuelven
+      // 404, pero .../vulnerabilities/list devuelve HTTP 200 con una pagina
+      // VACIA. O sea que en esta tool -y solo en esta- "nunca escaneada" y
+      // "escaneada y limpia" son indistinguibles, y un modelo que solo la mire
+      // concluira que la imagen esta limpia.
+      //
+      // Por eso su descripcion no puede limitarse al aviso del 404 que llevan
+      // las otras dos: tiene que advertir del vacio. El upstream va a cambiar
+      // este endpoint a 404 (getarcaneapp/arcane#3648 y siguientes, en `main`
+      // sin publicar); cuando la instancia se actualice, hay que REMEDIR y
+      // reescribir esta descripcion, no borrar el test.
+      const server = createMockServer();
+      registerVulnerabilityTools(server as any, createMockClient());
+      const call = (server.tool as any).mock.calls.find((c: any[]) => c[0] === "arcane_vulnerability_image_list");
+      expect(call, "arcane_vulnerability_image_list debería estar registrada").toBeDefined();
+      const description = call[1];
+      expect(description, "debe decir que una lista vacia no implica imagen limpia").toContain("does not mean the image is clean");
+      expect(description, "debe remitir a image_summary, que si distingue").toContain("arcane_vulnerability_image_summary");
+      expect(description, "no debe afirmar que el error distingue causas que no distingue").not.toContain("means the image has never been scanned");
     });
 
     it("registra las 3 tools mutantes", () => {
