@@ -1,12 +1,17 @@
 # Issue para el upstream: `hasBuildDirective` siempre es `false` en `GET /projects/{id}` y en el listado
 
 - **Fecha:** 2026-08-19
-- **Estado:** **redactado, sin publicar** — publicar en el repositorio de un tercero lo
-  decide el propietario de este proyecto, no quien lo investiga. El texto listo para
-  copiar está más abajo, entre las líneas `---`.
+- **Estado:** **publicado el 2026-08-20** como
+  [getarcaneapp/arcane#3685](https://github.com/getarcaneapp/arcane/issues/3685), con el
+  texto que aparece más abajo entre las líneas `---`. La decisión de publicar la tomó el
+  propietario del proyecto; hasta entonces el documento estuvo redactado y en espera.
 - **Repositorio destino:** [getarcaneapp/arcane](https://github.com/getarcaneapp/arcane)
-- **Sería el quinto issue** que este fork redacta contra el upstream, tras los cuatro de
-  F3/F4 enlazados desde [`docs/README.md`](../README.md).
+- **Es el quinto issue** que este fork abre contra el upstream, tras los cuatro de F3/F4
+  enlazados desde [`docs/README.md`](../README.md). De aquellos, dos ya están **cerrados
+  como resueltos**: [#3645](https://github.com/getarcaneapp/arcane/issues/3645)
+  (paginación sin `sort`) y
+  [#3657](https://github.com/getarcaneapp/arcane/issues/3657) (`{imageId}` sin
+  percent-decodificar), ambos con su PR en `main` y sin publicar todavía en una versión.
 
 ## Diagnóstico (en español, para este repositorio)
 
@@ -96,8 +101,8 @@ build.
 ---
 
 El texto de abajo, entre las líneas `---`, está en inglés (idioma del repositorio
-upstream) y listo para copiar y pegar tal cual en un issue nuevo de GitHub. Nadie de
-este trabajo lo ha publicado ni ha abierto el issue.
+upstream) y es **exactamente el que se publicó** en el issue #3685, salvo el prefijo
+`🐞 Bug:` que se añadió al título para seguir la convención de los cuatro anteriores.
 
 ---
 

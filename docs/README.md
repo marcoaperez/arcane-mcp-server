@@ -70,6 +70,14 @@ enlaza desde aquí.
 
 ### Issues publicados en el upstream
 
+- [`hasBuildDirective` siempre es `false` (2026-08-19)](auditorias/2026-08-19-has-build-directive-upstream.md)
+  — cuatro proyectos con `build:` de servicio verificado en el fichero que la propia API
+  declara como su `composeFileName`, y los cuatro con el campo a `false`; ninguno de los
+  22 proyectos de los seis entornos lo tiene a `true`. Causa raíz confirmada contra el
+  código de Arcane 2.8.0. Publicado como
+  [#3685](https://github.com/getarcaneapp/arcane/issues/3685). Es el motivo de que la
+  descripción de `arcane_project_build` diga explícitamente que no se filtre por él.
+
 - [Paginación sin `sort` pierde elementos (2026-08-17)](auditorias/2026-08-17-paginacion-sin-sort-upstream.md)
   — recorrer una colección con `start` sin orden explícito devuelve un conjunto
   incompleto y no determinista. Es el motivo de que `collectAllPages` exija `sort`.
