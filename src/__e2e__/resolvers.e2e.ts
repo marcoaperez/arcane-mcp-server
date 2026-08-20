@@ -47,21 +47,45 @@ describe("e2e: resolvers nombre->id contra Arcane real", () => {
     expect(resolved).toBe(esperado!.id);
   });
 
-  it("resolveContainerId resuelve 'terminus-worker-1', el ultimo contenedor una vez ordenado por nombre", async () => {
-    // No se afirma un recuento concreto de contenedores (cambiaria con el
-    // tiempo): se comprueba el invariante real, medido a mano por el revisor,
-    // de que 'terminus-worker-1' queda en la ULTIMA posicion tras ordenar por
-    // nombre asc, cualquiera que sea el total en cada momento.
+  it("resolveContainerId resuelve el ULTIMO contenedor ordenado por nombre", async () => {
+    // El nombre esperado se DERIVA del mismo listado, no se cablea.
+    //
+    // Este test cableaba 'terminus-worker-1', medido a mano cuando se escribio.
+    // Fallaba ~2 de cada 12 corridas, y la investigacion del 2026-08-20 dio con
+    // el motivo: el invariante "X es el ultimo contenedor" no es una propiedad
+    // del resolver, es una propiedad del inventario del host, y ese inventario
+    // lo mutan TRES actores independientes -esta misma suite, que redespliega
+    // ical-bridge en stack-lifecycle.e2e.ts; el sync de GitOps, cada 5 minutos;
+    // y el auto-updater-. Medido: en reposo el invariante se cumple en 949 de
+    // 949 muestras, pero un redespliegue real sube el recuento de 16 a 17.
+    //
+    // El mecanismo concreto, cazado el 2026-08-20: ese contenedor de mas lleva
+    // un nombre ALEATORIO de Docker (adjetivo_cientifico). Se observo uno,
+    // 'compassionate_faraday'. Los que empiezan por u-z -vigilant_turing,
+    // zealous_curie, wonderful_bohr...- ordenan DESPUES de terminus-worker-1 y
+    // le roban la ultima posicion. Son ~5% de la lista de adjetivos de Docker,
+    // que con varios contenedores efimeros por corrida da la tasa observada de
+    // ~2 fallos por cada 12 corridas.
+    //
+    // Se conserva la intencion original -ejercitar el ULTIMO elemento, no el
+    // primero, para que un resolver que solo mirase la primera pagina cayera-
+    // sin depender de que el host tenga hoy los contenedores de entonces.
     const pagina = await client.containers.list(envId, { start: 0, limit: 200, sort: "name" });
     const items = pagina.data ?? [];
     expect(items.length).toBeGreaterThan(0);
 
     const ultimo = items[items.length - 1];
-    const nombresUltimo = ultimo.names ?? [];
-    expect(nombresUltimo.some((n) => n === "terminus-worker-1" || n === "/terminus-worker-1")).toBe(true);
+    const nombre = (ultimo.names ?? [])[0]?.replace(/^\//, "");
+    // Si la API devolviera un contenedor sin nombres, el fallo tiene que decir
+    // ESO y no un "expected false to be true" que no orienta a nadie.
+    expect(nombre, `el ultimo contenedor no trae nombre: ${JSON.stringify(ultimo)}`).toBeTruthy();
 
-    const resolved = await resolveContainerId(client, envId, undefined, "terminus-worker-1");
-    expect(resolved).toBe(ultimo.id);
+    const resolved = await resolveContainerId(client, envId, undefined, nombre!);
+    expect(
+      resolved,
+      `resolveContainerId('${nombre}') deberia dar el id del ultimo contenedor del listado ` +
+        `(${items.length} contenedores: ${items.map((c) => (c.names ?? ["?"])[0]).join(", ")})`,
+    ).toBe(ultimo.id);
   });
 
   it("resolveGitOpsSyncId resuelve 'arcane' al mismo id que devuelve el listado", async () => {
