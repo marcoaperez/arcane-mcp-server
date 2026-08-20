@@ -114,9 +114,8 @@ describe("arcane_volume_backup_download (e2e, Arcane 2.8.0)", () => {
     // Metadatos reales, no el texto fijo que devolvía antes del arreglo.
     expect(result.content[0].text).toContain(backupId);
     expect(result.content[0].text).toContain("Metadata");
-    // Comando accionable contra la MISMA ruta que usaba
-    // ArcaneClient.volumeBackups.download() (envId + backupId, sin
-    // volumeName en el path).
+    // Comando accionable contra la ruta que declara openapi.txt:
+    // envId + backupId, sin volumeName en el path.
     expect(result.content[0].text).toContain(
       `/environments/${envId}/volumes/backups/${backupId}/download`,
     );

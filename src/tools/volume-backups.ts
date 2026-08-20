@@ -104,8 +104,10 @@ export function registerVolumeBackupTools(server: McpServer, client: ArcaneClien
         };
       }
 
-      // Mismo endpoint que usa ArcaneClient.volumeBackups.download(): sin
-      // volumeName en la ruta, solo envId + backupId.
+      // La ruta la declara openapi.txt como
+      // GET /environments/{id}/volumes/backups/{backupId}/download: NO lleva
+      // volumeName, solo envId + backupId, aunque la tool si lo pida para
+      // poder localizar el backup en el listado.
       const downloadUrl = `${client.getBaseUrl()}/environments/${encodeURIComponent(envId)}/volumes/backups/${encodeURIComponent(backupId)}/download`;
       const command = `curl -H "X-API-Key: $ARCANE_API_KEY" -o "${volumeName}-${backupId}.backup" "${downloadUrl}"`;
 
